@@ -591,7 +591,7 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         return;
     }
 
-    jo_printf(12, 6, "SELECT CHARACTER");
+    jo_printf(12, 7, "SELECT CHARACTER");
 
     for (idx = 0; idx < UiCharacterCount; ++idx)
     {
@@ -616,12 +616,12 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
             sprite_id = menu_shadow_jump_sprite_id;
 
         {
-            int name_x = item_x[idx] / 8;
+            int name_x = (item_x[idx] / 8) - 2;
             if (idx == UiCharacterKnuckles)
                 --name_x;
             else if (idx == UiCharacterShadow)
                 ++name_x;
-            jo_printf(name_x, MENU_NAME_Y, "%s", character_names[idx]);
+            jo_printf(name_x, 9, "%s", character_names[idx]);
         }
         if (sprite_id >= 0)
         {
@@ -630,7 +630,7 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
                 jo_sprite_enable_half_transparency();
                 jo_sprite_enable_shadow_filter();
             }
-            jo_sprite_draw3D2(sprite_id, item_x[idx], MENU_SPRITE_Y, 420);
+            jo_sprite_draw3D2(sprite_id, item_x[idx]-16, MENU_SPRITE_Y, 420);
             if (is_locked)
             {
                 jo_sprite_disable_shadow_filter();
