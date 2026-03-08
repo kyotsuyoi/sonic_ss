@@ -1,0 +1,123 @@
+#ifndef UI_CONTROL_H
+#define UI_CONTROL_H
+
+#include <jo/jo.h>
+
+typedef enum
+{
+    UiGameStateMenu,
+    UiGameStateLoading,
+    UiGameStatePlaying
+} ui_game_state_t;
+
+typedef enum
+{
+    UiCharacterSonic = 0,
+    UiCharacterAmy,
+    UiCharacterTails,
+    UiCharacterKnuckles,
+    UiCharacterShadow,
+    UiCharacterCount
+} ui_character_choice_t;
+
+typedef enum
+{
+    UiPauseOptionContinue = 0,
+    UiPauseOptionResetFight,
+    UiPauseOptionCharacterSelect,
+    UiPauseOptionCount
+} ui_pause_option_t;
+
+typedef enum
+{
+    UiDebugModeOff = 0,
+    UiDebugModeHardware,
+    UiDebugModePlayer,
+    UiDebugModeCount
+} ui_debug_mode_t;
+
+typedef enum
+{
+    UiMenuScreenMain = 0,
+    UiMenuScreenModeSelect,
+    UiMenuScreenBattleModeSelect,
+    UiMenuScreenMultiplayerModeSelect,
+    UiMenuScreenCharacterSelect,
+    UiMenuScreenOptions,
+    UiMenuScreenConfigControls,
+    UiMenuScreenSongTest
+} ui_menu_screen_t;
+
+typedef struct
+{
+    ui_game_state_t current_game_state;
+    ui_character_choice_t menu_selected_character;
+    ui_character_choice_t menu_selected_bot_character;
+    ui_character_choice_t menu_selected_player2_character;
+    ui_character_choice_t menu_cursor_character;
+    ui_character_choice_t menu_cursor_bot_character;
+    ui_character_choice_t menu_cursor_player2_character;
+    bool menu_selecting_bot_character;
+    bool menu_selecting_player2_character;
+    bool menu_player1_confirmed;
+    bool menu_player2_confirmed;
+    bool menu_multiplayer_versus;
+    int menu_multiplayer_selected_option;
+    int menu_bot_count;
+    bool menu_up_released;
+    bool menu_down_released;
+    bool menu_left_released;
+    bool menu_right_released;
+    bool menu_a_released;
+    bool menu_b_released;
+    bool menu_c_released;
+    bool menu_p2_left_released;
+    bool menu_p2_right_released;
+    bool menu_p2_up_released;
+    bool menu_p2_down_released;
+    bool menu_p2_a_released;
+    bool menu_p2_b_released;
+    ui_menu_screen_t menu_screen;
+    int menu_main_selected_option;
+    int menu_mode_selected_option;
+    int menu_battle_selected_option;
+    int menu_options_selected_option;
+    bool menu_remap_mode;
+    bool menu_remap_waiting_key;
+    bool menu_remap_wait_release;
+    int menu_remap_selected_player;
+    int menu_remap_selected_action;
+    int menu_pad2_warning_timer;
+    int song_test_selected_line;
+    int song_test_bgm_track;
+    int song_test_sfx_index;
+    bool game_paused;
+    bool debug_enabled;
+    ui_debug_mode_t debug_mode;
+    ui_pause_option_t pause_selected_option;
+    bool pause_up_released;
+    bool pause_down_released;
+    bool pause_a_released;
+    bool pause_start_released;
+    bool pause_lr_released;
+} ui_control_state_t;
+
+typedef void (*ui_control_start_game_fn)(ui_character_choice_t selected_character,
+                                         ui_character_choice_t selected_bot_character,
+                                         void *user_data);
+typedef void (*ui_control_action_fn)(void *user_data);
+
+void ui_control_init(ui_control_state_t *state);
+void ui_control_clear_text_layer(void);
+void ui_control_draw_character_menu(const ui_control_state_t *state);
+void ui_control_draw_loading(void);
+void ui_control_draw_pause_menu(const ui_control_state_t *state);
+void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_game_fn on_start_game, void *user_data);
+void ui_control_handle_pause_input(ui_control_state_t *state,
+                                   ui_control_action_fn on_reset_fight,
+                                   ui_control_action_fn on_character_select,
+                                   void *user_data);
+void ui_control_handle_start_toggle(ui_control_state_t *state);
+void ui_control_reset_menu_bgm_state(void);
+
+#endif

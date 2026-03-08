@@ -1,0 +1,41 @@
+# Build outputs
+/build/
+/game_build/
+
+# Generated build files at project root (legacy/temporary)
+/game.bin
+/game.elf
+/game.iso
+/game.map
+/game.raw
+/game.cue
+/game_bin.cue
+
+# Generated CD binary
+/cd/0.bin
+
+# Build and debug logs
+/Build Log (Copilot)/
+*.log
+
+# Compiler/object temp files
+*.o
+*.obj
+*.lst
+*.out
+
+# IDE/editor local files
+/.vs/
+/.vscode/
+/.idea/
+*.suo
+*.user
+*.userosscache
+*.swp
+
+# NetBeans private user config
+/nbproject/private/
+
+# OS noise files
+Thumbs.db
+.DS_Store
