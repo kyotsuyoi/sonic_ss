@@ -26,12 +26,6 @@ Personagens disponiveis:
 ### 2. Character Select
 ![Character Select](readme_src/slc_chr.png)
 
-### 3. Sonic Run
-![Sonic Run](readme_src/snc_run.png)
-
-### 4. Tails Run
-![Tails Run](readme_src/tls_run.png)
-
-### 5. Battlefield
-![Battlefield](readme_src/btl_fld01.png)
+### 3. Battlefield
 ![Battlefield](readme_src/btl_fld01.gif)
+![Battlefield](readme_src/btl_fld02.gif)
