@@ -34,3 +34,4 @@ Personagens disponiveis:
 
 ### 5. Battlefield
 ![Battlefield](readme_src/btl_fld01.png)
+![Battlefield](readme_src/btl_fld01.gif)
