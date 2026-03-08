@@ -1,22 +1,27 @@
-# Sonic SS 
+# Sonic SS
 
-Projeto do Sonic para Sega Saturn usando Jo Engine.
-Este jogo é compativel com emuladores, CD físico e também com SAROO.
+Sonic project for the Sega Saturn using Jo Engine.
 
-Recursos disponiveis:
+Compatible with:
 
-- Batalha contra bots (até 3 vs 3, com personagens clones por causa do limite de sprites)
-- Batalha Player vs Player (também até 3 vs 3 com clones)
-- Menu de teste de áudio
-- Menu de mapeamento de joystick
+- Emulators (tested on Ymir, Yabause and YabaSanshiro).
+- CD-R via a disc drive.
+- SAROO.
 
-Personagens disponiveis:
+Available features:
+
+- Battles against bots (up to 3 vs 3, characters may be cloned due to sprite limits)
+- Player vs Player battles (also up to 3 vs 3 with clones)
+- Audio test menu
+- Joystick mapping menu
+
+Available characters:
 
 - Sonic — OK
 - Amy — OK
 - Tails — OK
-- Knuckles — Não OK
-- Shadows — Não OK
+- Knuckles — Not OK
+- Shadow — Not OK
 
 ## Screenshots
 
