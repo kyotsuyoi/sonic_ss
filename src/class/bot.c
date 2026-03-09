@@ -26,6 +26,9 @@
 #define BOT_TAIL_FRAME_DURATION 5
 #define BOT_TAIL_OFFSET_X 14
 #define BOT_TAIL_Z CHARACTER_SPRITE_Z
+#define KNUCKLES_KICK_PART3_INDEX 3
+#define KNUCKLES_KICK_PART4_INDEX 2
+#define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
 
 #define SONIC_BOT_KNOCKBACK_PUNCH1 1.8f
 #define SONIC_BOT_KNOCKBACK_PUNCH2 2.3f
@@ -35,6 +38,11 @@
 #define AMY_BOT_KNOCKBACK_PUNCH2 2.3f
 #define AMY_BOT_KNOCKBACK_KICK1 1.8f
 #define AMY_BOT_KNOCKBACK_KICK2 2.6f
+#define KNUCKLES_BOT_KNOCKBACK_PUNCH1 1.8f
+#define KNUCKLES_BOT_KNOCKBACK_PUNCH2 2.3f
+#define KNUCKLES_BOT_KNOCKBACK_KICK1 2.4f
+#define KNUCKLES_BOT_KNOCKBACK_KICK2 3.6f
+#define KNUCKLES_BOT_CHARGED_HOLD_FRAMES 60
 #define TAILS_BOT_KNOCKBACK_PUNCH1 1.8f
 #define TAILS_BOT_KNOCKBACK_PUNCH2 2.3f
 #define TAILS_BOT_KNOCKBACK_KICK1 1.8f
@@ -48,6 +56,7 @@ typedef enum
     BotCharacterSonic = 0,
     BotCharacterAmy,
     BotCharacterTails,
+    BotCharacterKnuckles,
     BotCharacterCount
 } bot_character_t;
 
@@ -75,6 +84,7 @@ struct bot_instance
     int bot_kick_anim_id;
     int bot_punch_frame_count;
     int bot_kick_frame_count;
+    int bot_stand_frame_count;
     int bot_punch_combo2_start_frame;
     int bot_kick_combo2_start_frame;
     int bot_jump_sprite_id;
@@ -127,6 +137,7 @@ typedef struct
     int defeated_sprite_id;
     int tail_base_id;
     int move_count;
+    int stand_count;
     int punch_count;
     int kick_count;
     int punch_combo2_start_frame;
@@ -170,6 +181,7 @@ static jo_sidescroller_physics_params *target_player_physics_ctx = &physics;
 #define bot_kick_anim_id (ctx->bot_kick_anim_id)
 #define bot_punch_frame_count (ctx->bot_punch_frame_count)
 #define bot_kick_frame_count (ctx->bot_kick_frame_count)
+#define bot_stand_frame_count (ctx->bot_stand_frame_count)
 #define bot_punch_combo2_start_frame (ctx->bot_punch_combo2_start_frame)
 #define bot_kick_combo2_start_frame (ctx->bot_kick_combo2_start_frame)
 #define bot_jump_sprite_id (ctx->bot_jump_sprite_id)
@@ -221,11 +233,27 @@ static const jo_tile TailsMoveTiles[] =
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
 };
 
+static const jo_tile KnucklesTiles4[] =
+{
+    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+};
+
 static const jo_tile StandTiles[] =
 {
     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+};
+
+static const jo_tile StandTiles4[] =
+{
+    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
 };
 
 static const jo_tile PunchTiles[] =
@@ -285,6 +313,22 @@ static const jo_tile KickTiles1[] =
     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
 };
 
+static const jo_tile PunchTiles4[] =
+{
+    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+};
+
+static const jo_tile KickTiles4[] =
+{
+    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+};
+
 static const jo_tile TailsTailTiles[] =
 {
     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
@@ -305,6 +349,68 @@ static int bot_punch_combo2_start_frame_for_count(int frame_count)
     if (frame_count >= 5)
         return 0;
     return -1;
+}
+
+static int bot_last_frame_for_player_attack(const character_t *player_ref, int attack_kind)
+{
+    int cid = player_ref->character_id;
+
+    if (attack_kind == 0)
+    {
+        if (cid == CHARACTER_ID_KNUCKLES)
+            return 2;
+        return 3;
+    }
+    if (attack_kind == 1)
+    {
+        if (cid == CHARACTER_ID_KNUCKLES)
+            return 3;
+        if (cid == CHARACTER_ID_TAILS)
+            return 4;
+        return 9;
+    }
+    if (attack_kind == 2)
+    {
+        if (cid == CHARACTER_ID_KNUCKLES)
+            return -1;
+        if (cid == CHARACTER_ID_TAILS)
+            return 0;
+        if (cid == CHARACTER_ID_AMY)
+            return 3;
+        return 5;
+    }
+
+    if (cid == CHARACTER_ID_KNUCKLES)
+    {
+        if (player_ref->charged_kick_active)
+            return 2;
+        return 3;
+    }
+    if (cid == CHARACTER_ID_TAILS)
+        return 0;
+    if (cid == CHARACTER_ID_AMY)
+        return 7;
+    return 12;
+}
+
+static bool bot_player_attack_reached_hit_frame(const character_t *player_ref, int attack_kind)
+{
+    int anim_id;
+    int last_frame;
+
+    if (attack_kind == 0 || attack_kind == 1)
+        anim_id = player_ref->punch_anim_id;
+    else
+        anim_id = player_ref->kick_anim_id;
+
+    if (anim_id < 0)
+        return false;
+
+    last_frame = bot_last_frame_for_player_attack(player_ref, attack_kind);
+    if (last_frame < 0)
+        return false;
+
+    return jo_get_sprite_anim_frame(anim_id) >= last_frame;
 }
 
 static int bot_kick_combo2_start_frame_for_count(int frame_count)
@@ -477,24 +583,35 @@ static void bot_rollback_anim_set(void)
 static bool bot_bind_shared_player_assets(int character)
 {
     int move_count;
+    int stand_count;
     int punch_count;
     int kick_count;
 
     if (character == BotCharacterTails)
     {
         move_count = JO_TILE_COUNT(TailsMoveTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(TailsPunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles1);
     }
     else if (character == BotCharacterAmy)
     {
         move_count = JO_TILE_COUNT(WalkTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(PunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles8);
+    }
+    else if (character == BotCharacterKnuckles)
+    {
+        move_count = JO_TILE_COUNT(KnucklesTiles4);
+        stand_count = JO_TILE_COUNT(StandTiles4);
+        punch_count = JO_TILE_COUNT(PunchTiles4);
+        kick_count = JO_TILE_COUNT(KickTiles4);
     }
     else
     {
         move_count = JO_TILE_COUNT(WalkTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(PunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles13);
     }
@@ -514,7 +631,7 @@ static bool bot_bind_shared_player_assets(int character)
     bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, move_count, 4);
     bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, move_count, 4);
     bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, move_count, 4);
-    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, JO_TILE_COUNT(StandTiles), 4);
+    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, stand_count, 4);
     bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, punch_count, 4);
     bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, kick_count, 4);
 
@@ -526,6 +643,7 @@ static bool bot_bind_shared_player_assets(int character)
 
     bot_punch_frame_count = punch_count;
     bot_kick_frame_count = kick_count;
+    bot_stand_frame_count = stand_count;
     bot_punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
     bot_kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
     bot_uses_shared_player_sprites = true;
@@ -769,10 +887,18 @@ static void bot_start_attack(ai_bot_attack_t attack, bool request_combo)
     }
     else if (attack == AiBotAttackKick1)
     {
+        bool knuckles_charge = (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled);
         bot_attack_timer = BOT_KICK1_ATTACK_TIME;
-        bot_combo_requested = request_combo;
+        bot_combo_requested = knuckles_charge ? false : request_combo;
         bot.kick = true;
         bot.kick2 = false;
+        bot.charged_kick_hold_ms = 0;
+        bot.charged_kick_ready = false;
+        bot.charged_kick_active = false;
+        bot.charged_kick_phase = 0;
+        bot.charged_kick_phase_timer = 0;
+        if (knuckles_charge)
+            bot_attack_timer = KNUCKLES_BOT_CHARGED_HOLD_FRAMES;
         game_audio_play_sfx_next_channel(game_audio_get_punch_sfx());
         if (bot_character != BotCharacterTails)
         {
@@ -785,6 +911,13 @@ static void bot_start_attack(ai_bot_attack_t attack, bool request_combo)
         bot_attack_timer = BOT_KICK2_ATTACK_TIME;
         bot.kick = false;
         bot.kick2 = true;
+        if (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled)
+        {
+            bot.charged_kick_active = true;
+            bot.charged_kick_ready = true;
+            bot.charged_kick_phase = 2;
+            bot.charged_kick_phase_timer = 0;
+        }
         game_audio_play_sfx_next_channel(game_audio_get_kick_sfx());
         if (bot_character != BotCharacterTails)
         {
@@ -818,9 +951,11 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     const char *pnc;
     const char *kck;
     const jo_tile *move_tiles;
+    const jo_tile *stand_tiles;
     const jo_tile *punch_tiles;
     const jo_tile *kick_tiles;
     int move_count;
+    int stand_count;
     int punch_count;
     int kick_count;
 
@@ -840,9 +975,11 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         pnc = "SNC_PNC.TGA";
         kck = "SNC_KCK.TGA";
         move_tiles = WalkTiles;
+        stand_tiles = StandTiles;
         punch_tiles = PunchTiles;
         kick_tiles = KickTiles13;
         move_count = JO_TILE_COUNT(WalkTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(PunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles13);
     }
@@ -859,11 +996,34 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         pnc = "AMY_PNC.TGA";
         kck = "AMY_KCK.TGA";
         move_tiles = WalkTiles;
+        stand_tiles = StandTiles;
         punch_tiles = PunchTiles;
         kick_tiles = KickTiles8;
         move_count = JO_TILE_COUNT(WalkTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(PunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles8);
+    }
+    else if (character == BotCharacterKnuckles)
+    {
+        wlk = "KNK_WLK.TGA";
+        run1 = "KNK_RUN1.TGA";
+        run2 = "KNK_RUN1.TGA";
+        std = "KNK_STD.TGA";
+        jmp = "KNK_JMP.TGA";
+        spn = "KNK_SPN.TGA";
+        dmg = "KNK_DMG.TGA";
+        dft = "KNK_DFT.TGA";
+        pnc = "KNK_PNC.TGA";
+        kck = "KNK_KCK.TGA";
+        move_tiles = KnucklesTiles4;
+        stand_tiles = StandTiles4;
+        punch_tiles = PunchTiles4;
+        kick_tiles = KickTiles4;
+        move_count = JO_TILE_COUNT(KnucklesTiles4);
+        stand_count = JO_TILE_COUNT(StandTiles4);
+        punch_count = JO_TILE_COUNT(PunchTiles4);
+        kick_count = JO_TILE_COUNT(KickTiles4);
     }
     else
     {
@@ -878,9 +1038,11 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         pnc = "TLS_PNC.TGA";
         kck = "TLS_KCK.TGA";
         move_tiles = TailsMoveTiles;
+        stand_tiles = StandTiles;
         punch_tiles = TailsPunchTiles;
         kick_tiles = KickTiles1;
         move_count = JO_TILE_COUNT(TailsMoveTiles);
+        stand_count = JO_TILE_COUNT(StandTiles);
         punch_count = JO_TILE_COUNT(TailsPunchTiles);
         kick_count = JO_TILE_COUNT(KickTiles1);
     }
@@ -888,12 +1050,12 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     assets->walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, wlk, JO_COLOR_Green, move_tiles, move_count);
     assets->running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, run1, JO_COLOR_Green, move_tiles, move_count);
 
-    if (character == BotCharacterTails)
+    if (character == BotCharacterTails || character == BotCharacterKnuckles)
         assets->running2_base_id = assets->running1_base_id;
     else
         assets->running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, run2, JO_COLOR_Green, move_tiles, move_count);
 
-    assets->stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, std, JO_COLOR_Green, StandTiles, JO_TILE_COUNT(StandTiles));
+    assets->stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, std, JO_COLOR_Green, stand_tiles, stand_count);
 
     assets->jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, jmp, JO_COLOR_Green);
     assets->spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, spn, JO_COLOR_Green);
@@ -904,6 +1066,7 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     assets->kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, kck, JO_COLOR_Green, kick_tiles, kick_count);
 
     assets->move_count = move_count;
+    assets->stand_count = stand_count;
     assets->punch_count = punch_count;
     assets->kick_count = kick_count;
     assets->punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
@@ -934,7 +1097,7 @@ static bool bot_bind_character_assets_to_instance(bot_character_assets_t *assets
     bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, assets->move_count, 4);
     bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, assets->move_count, 4);
     bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, assets->move_count, 4);
-    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, JO_TILE_COUNT(StandTiles), 4);
+    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, assets->stand_count, 4);
     bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, assets->punch_count, 4);
     bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, assets->kick_count, 4);
 
@@ -946,6 +1109,7 @@ static bool bot_bind_character_assets_to_instance(bot_character_assets_t *assets
 
     bot_punch_frame_count = assets->punch_count;
     bot_kick_frame_count = assets->kick_count;
+    bot_stand_frame_count = assets->stand_count;
     bot_punch_combo2_start_frame = assets->punch_combo2_start_frame;
     bot_kick_combo2_start_frame = assets->kick_combo2_start_frame;
 
@@ -1019,6 +1183,15 @@ static void apply_hit_effect_to_character(character_t *player_ref,
     player_ref->kick2 = false;
     player_ref->kick2_requested = false;
     player_ref->perform_kick2 = false;
+    player_ref->charged_kick_hold_ms = 0;
+    player_ref->charged_kick_ready = false;
+    player_ref->charged_kick_active = false;
+    player_ref->charged_kick_phase = 0;
+    player_ref->charged_kick_phase_timer = 0;
+    player_ref->hit_done_punch1 = false;
+    player_ref->hit_done_punch2 = false;
+    player_ref->hit_done_kick1 = false;
+    player_ref->hit_done_kick2 = false;
 }
 
 static void apply_hit_effect_to_player(character_t *player_ref, bool attacker_flip, float knockback_force, int stun_frames)
@@ -1051,8 +1224,19 @@ static void process_player_hits(character_t *player_ref,
     if (bot_defeated)
         return;
 
-    if (player_ref->punch && !(*prev_punch) && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_punch1))
+    if (!player_ref->punch)
+        player_ref->hit_done_punch1 = false;
+    if (!player_ref->punch2)
+        player_ref->hit_done_punch2 = false;
+    if (!player_ref->kick)
+        player_ref->hit_done_kick1 = false;
+    if (!player_ref->kick2)
+        player_ref->hit_done_kick2 = false;
+
+    if (player_ref->punch && !player_ref->hit_done_punch1 && bot_player_attack_reached_hit_frame(player_ref, 0)
+        && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_punch1))
     {
+        player_ref->hit_done_punch1 = true;
         if (bot.spin)
         {
             apply_spin_knockback_to_bot(player_ref->flip, player_knockback_punch1 * 2.0f);
@@ -1068,8 +1252,10 @@ static void process_player_hits(character_t *player_ref,
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
     }
 
-    if (player_ref->punch2 && !(*prev_punch2) && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_punch2))
+    if (player_ref->punch2 && !player_ref->hit_done_punch2 && bot_player_attack_reached_hit_frame(player_ref, 1)
+        && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_punch2))
     {
+        player_ref->hit_done_punch2 = true;
         if (bot.spin)
         {
             apply_spin_knockback_to_bot(player_ref->flip, player_knockback_punch2 * 2.0f);
@@ -1085,8 +1271,11 @@ static void process_player_hits(character_t *player_ref,
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
     }
 
-    if (player_ref->kick && !(*prev_kick) && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_kick1))
+    if (player_ref->kick && player_ref->character_id != CHARACTER_ID_KNUCKLES
+        && !player_ref->hit_done_kick1 && bot_player_attack_reached_hit_frame(player_ref, 2)
+        && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_kick1))
     {
+        player_ref->hit_done_kick1 = true;
         if (bot.spin)
         {
             apply_spin_knockback_to_bot(player_ref->flip, player_knockback_kick1 * 2.0f);
@@ -1102,21 +1291,33 @@ static void process_player_hits(character_t *player_ref,
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
     }
 
-    if (player_ref->kick2 && !(*prev_kick2) && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_kick2))
+    if (player_ref->kick2
+        && (player_ref->character_id != CHARACTER_ID_KNUCKLES
+            || player_ref->charged_kick_active
+            || player_physics->is_in_air)
+        && !player_ref->hit_done_kick2 && bot_player_attack_reached_hit_frame(player_ref, 3)
+        && is_attack_in_range(player_world_x, player_world_y, player_ref->flip, (int)bot_world_x, (int)bot_world_y, player_hit_range_kick2))
     {
+        player_ref->hit_done_kick2 = true;
+        bool charged_kick = player_ref->charged_kick_enabled && player_ref->charged_kick_active;
+        float kick2_knockback = charged_kick ? (player_knockback_kick2 * 1.70f) : player_knockback_kick2;
+        int kick2_stun = charged_kick ? (BOT_TAKEN_STUN_HEAVY_FRAMES + 14) : BOT_TAKEN_STUN_HEAVY_FRAMES;
+        int kick2_damage = charged_kick ? 10 : 5;
+
         if (bot.spin)
         {
-            apply_spin_knockback_to_bot(player_ref->flip, player_knockback_kick2 * 2.0f);
-            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, player_knockback_kick2, COUNTER_STUN_FRAMES);
+            apply_spin_knockback_to_bot(player_ref->flip, kick2_knockback * 2.0f);
+            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, kick2_knockback, COUNTER_STUN_FRAMES);
             damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             return;
         }
 
-        apply_damage_to_bot(5);
-        apply_hit_effect_to_bot(player_ref->flip, player_knockback_kick2, BOT_TAKEN_STUN_HEAVY_FRAMES);
+        apply_damage_to_bot(kick2_damage);
+        apply_hit_effect_to_bot(player_ref->flip, kick2_knockback, kick2_stun);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
+        player_ref->charged_kick_active = false;
     }
 }
 
@@ -1126,10 +1327,11 @@ static void remember_player_attack_states(const character_t *player_ref,
                                           bool *prev_kick,
                                           bool *prev_kick2)
 {
-    *prev_punch = player_ref->punch;
-    *prev_punch2 = player_ref->punch2;
-    *prev_kick = player_ref->kick;
-    *prev_kick2 = player_ref->kick2;
+    (void)player_ref;
+    *prev_punch = false;
+    *prev_punch2 = false;
+    *prev_kick = false;
+    *prev_kick2 = false;
 }
 
 #undef bot
@@ -1347,13 +1549,29 @@ void bot_instance_init(bot_instance_t *instance,
         bot.knockback_kick1 = AMY_BOT_KNOCKBACK_KICK1;
         bot.knockback_kick2 = AMY_BOT_KNOCKBACK_KICK2;
     }
+    else if (bot_character == BotCharacterKnuckles)
+    {
+        bot.knockback_punch1 = KNUCKLES_BOT_KNOCKBACK_PUNCH1;
+        bot.knockback_punch2 = KNUCKLES_BOT_KNOCKBACK_PUNCH2;
+        bot.knockback_kick1 = KNUCKLES_BOT_KNOCKBACK_KICK1;
+        bot.knockback_kick2 = KNUCKLES_BOT_KNOCKBACK_KICK2;
+        bot.charged_kick_enabled = true;
+        bot.character_id = CHARACTER_ID_KNUCKLES;
+    }
     else
     {
         bot.knockback_punch1 = TAILS_BOT_KNOCKBACK_PUNCH1;
         bot.knockback_punch2 = TAILS_BOT_KNOCKBACK_PUNCH2;
         bot.knockback_kick1 = TAILS_BOT_KNOCKBACK_KICK1;
         bot.knockback_kick2 = TAILS_BOT_KNOCKBACK_KICK2;
+        bot.charged_kick_enabled = false;
+        bot.character_id = CHARACTER_ID_TAILS;
     }
+
+    if (bot_character == BotCharacterSonic)
+        bot.character_id = CHARACTER_ID_SONIC;
+    else if (bot_character == BotCharacterAmy)
+        bot.character_id = CHARACTER_ID_AMY;
 
     bot_defeated = false;
     world_physics_init_character(&bot_physics);
@@ -1667,6 +1885,32 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
                 kick_angle = -kick_angle;
 
             jo_sprite_draw3D_and_rotate2(bot_kick_base_id, bot.x, bot.y, CHARACTER_SPRITE_Z, kick_angle);
+        }
+        else if (bot_character == BotCharacterKnuckles)
+        {
+            int base_id = (bot.kick_anim_id >= 0) ? (jo_get_anim_sprite(bot.kick_anim_id) - jo_get_sprite_anim_frame(bot.kick_anim_id)) : -1;
+
+            if (base_id >= 0)
+            {
+                if (bot.kick && !bot.kick2)
+                {
+                    jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                }
+                else if (bot.kick2)
+                {
+                    int front_offset = bot.flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
+                    if (bot.charged_kick_active && bot.charged_kick_phase <= 1)
+                        jo_sprite_draw3D2(base_id + 1, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                    else
+                    {
+                        jo_sprite_draw3D2(base_id + KNUCKLES_KICK_PART4_INDEX, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                        jo_sprite_draw3D2(base_id + KNUCKLES_KICK_PART3_INDEX,
+                                          bot.x + front_offset,
+                                          bot.y,
+                                          CHARACTER_SPRITE_Z);
+                    }
+                }
+            }
         }
         else
         {

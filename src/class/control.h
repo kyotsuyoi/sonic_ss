@@ -13,6 +13,7 @@ typedef struct
     bool b_pressed;
     bool b_down;
     bool c_down;
+    bool c_hold;
 } control_input_t;
 
 void control_handle_character_commands(jo_sidescroller_physics_params *physics,

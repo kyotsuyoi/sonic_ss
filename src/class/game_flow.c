@@ -8,6 +8,7 @@
 #include "world_physics.h"
 #include "damage_fx.h"
 #include "world_background.h"
+#include "game_loop.h"
 
 static character_handlers_t active_handlers;
 static ui_character_choice_t active_character = UiCharacterSonic;
@@ -112,6 +113,7 @@ static void select_active_character(ui_character_choice_t selected_character)
 static void setup_player2_character(ui_character_choice_t selected_character)
 {
     int move_count = 8;
+    int stand_count = 3;
     int punch_count = 10;
     int kick_count = 13;
     int walking_base_id;
@@ -144,6 +146,13 @@ static void setup_player2_character(ui_character_choice_t selected_character)
         punch_count = 5;
         kick_count = 1;
     }
+    else if (selected_character == UiCharacterKnuckles)
+    {
+        move_count = 4;
+        stand_count = 4;
+        punch_count = 4;
+        kick_count = 4;
+    }
 
     walking_base_id = game_flow_anim_base_id_from_anim(player.walking_anim_id);
     running1_base_id = game_flow_anim_base_id_from_anim(player.running1_anim_id);
@@ -157,7 +166,7 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.walking_anim_id = jo_create_sprite_anim(walking_base_id, move_count, 4);
     player2.running1_anim_id = jo_create_sprite_anim(running1_base_id, move_count, 4);
     player2.running2_anim_id = jo_create_sprite_anim(running2_base_id, move_count, 4);
-    player2.stand_sprite_id = jo_create_sprite_anim(stand_base_id, 3, 4);
+    player2.stand_sprite_id = jo_create_sprite_anim(stand_base_id, stand_count, 4);
     player2.punch_anim_id = jo_create_sprite_anim(punch_base_id, punch_count, 4);
     player2.kick_anim_id = jo_create_sprite_anim(kick_base_id, kick_count, 4);
     player2_runtime_anims_created = true;
@@ -176,6 +185,17 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.knockback_punch2 = player.knockback_punch2;
     player2.knockback_kick1 = player.knockback_kick1;
     player2.knockback_kick2 = player.knockback_kick2;
+    player2.charged_kick_enabled = player.charged_kick_enabled;
+    player2.charged_kick_hold_ms = 0;
+    player2.charged_kick_ready = false;
+    player2.charged_kick_active = false;
+    player2.charged_kick_phase = 0;
+    player2.charged_kick_phase_timer = 0;
+    player2.character_id = player.character_id;
+    player2.hit_done_punch1 = false;
+    player2.hit_done_punch2 = false;
+    player2.hit_done_kick1 = false;
+    player2.hit_done_kick2 = false;
     player2.walk = false;
     player2.run = 0;
     player2.flip = true;
@@ -336,6 +356,23 @@ void game_flow_reset_fight(void *user_data)
     if (ctx->ui_state->menu_multiplayer_versus)
         setup_player2_character(ctx->ui_state->menu_selected_player2_character);
     reset_fight(ctx->map_pos_x, ctx->map_pos_y);
+    if (ctx->ui_state->menu_multiplayer_versus)
+    {
+        player2.x = player.x + 96;
+        player2.y = player.y;
+        player2.flip = true;
+        player2.can_jump = true;
+        player2.life = 50;
+        player2.walk = false;
+        player2.run = 0;
+        player2.spin = false;
+        player2.jump = false;
+        player2.punch = false;
+        player2.punch2 = false;
+        player2.kick = false;
+        player2.kick2 = false;
+        game_loop_reset_player2_runtime();
+    }
     damage_fx_reset();
     *ctx->player_defeated = false;
     bot_count = ctx->ui_state->menu_bot_count;

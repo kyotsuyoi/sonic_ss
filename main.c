@@ -26,7 +26,7 @@ static bool splash_track_playing = false;
 static bool splash_start_released = true;
 static int sprite_anim_bootstrap_id = -1;
 
-#define GAME_VERSION_TEXT "ver. 0.1.12"
+#define GAME_VERSION_TEXT "ver. 0.1.18a"
 #define GAME_VERSION_TEXT_X 28
 #define GAME_VERSION_TEXT_Y 28
 

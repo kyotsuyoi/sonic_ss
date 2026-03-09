@@ -8,6 +8,7 @@
 #define CONTROL_FRAME_MS (17)
 #define VARIABLE_JUMP_MAX_HOLD_MS (170)
 #define VARIABLE_JUMP_MIN_SPEED_FACTOR (0.40f)
+#define CHARGED_KICK_HOLD_MS (1000)
 
 static inline float control_get_attack_forward_impulse_light(const character_t *controlled_player)
 {
@@ -105,6 +106,7 @@ static void control_input_punch(character_t *controlled_player,
     if (!controlled_player->punch && !controlled_player->punch2 && !controlled_player->kick && !controlled_player->kick2 && !physics->is_in_air && controlled_player->attack_cooldown == 0 && a_down)
     {
         controlled_player->punch = true;
+        controlled_player->hit_done_punch1 = false;
         control_apply_attack_forward_impulse(physics, controlled_player, control_get_attack_forward_impulse_light(controlled_player));
         if (punch_sfx != JO_NULL)
             game_audio_play_sfx_next_channel(punch_sfx);
@@ -112,6 +114,7 @@ static void control_input_punch(character_t *controlled_player,
     else if (controlled_player->punch && !controlled_player->punch2 && a_down)
     {
         controlled_player->punch2_requested = true;
+        controlled_player->hit_done_punch2 = false;
     }
 
     if (controlled_player->punch2 && controlled_player->perform_punch2)
@@ -127,12 +130,91 @@ static void control_input_kick(character_t *controlled_player,
                                jo_sidescroller_physics_params *physics,
                                jo_sound *punch_sfx,
                                jo_sound *kick_sfx,
-                               bool c_down)
+                               bool c_down,
+                               bool c_hold)
 {
+    if (controlled_player->charged_kick_enabled && !physics->is_in_air)
+    {
+        if (c_hold
+            && !controlled_player->kick2
+            && !controlled_player->punch
+            && !controlled_player->punch2
+            && controlled_player->attack_cooldown == 0)
+        {
+            if (!controlled_player->kick)
+            {
+                controlled_player->kick = true;
+                controlled_player->hit_done_kick1 = false;
+                controlled_player->kick2 = false;
+                controlled_player->kick2_requested = false;
+                controlled_player->perform_kick2 = false;
+                controlled_player->charged_kick_hold_ms = 0;
+                controlled_player->charged_kick_ready = false;
+                controlled_player->charged_kick_active = false;
+                controlled_player->charged_kick_phase = 0;
+                controlled_player->charged_kick_phase_timer = 0;
+                if (punch_sfx != JO_NULL)
+                    game_audio_play_sfx_next_channel(punch_sfx);
+            }
+
+            /* Keep hold state alive even if another system briefly clears kick. */
+            controlled_player->kick = true;
+
+            if (controlled_player->charged_kick_hold_ms < CHARGED_KICK_HOLD_MS)
+            {
+                controlled_player->charged_kick_hold_ms += CONTROL_FRAME_MS;
+                if (controlled_player->charged_kick_hold_ms > CHARGED_KICK_HOLD_MS)
+                    controlled_player->charged_kick_hold_ms = CHARGED_KICK_HOLD_MS;
+            }
+            controlled_player->charged_kick_ready = (controlled_player->charged_kick_hold_ms >= CHARGED_KICK_HOLD_MS);
+            return;
+        }
+
+        if (controlled_player->kick && !controlled_player->kick2)
+        {
+            controlled_player->kick2_requested = false;
+
+            if (controlled_player->charged_kick_ready)
+            {
+                controlled_player->kick = false;
+                controlled_player->kick2 = true;
+                controlled_player->hit_done_kick2 = false;
+                controlled_player->kick2_requested = false;
+                controlled_player->perform_kick2 = true;
+                controlled_player->charged_kick_active = true;
+                controlled_player->charged_kick_phase = 1;
+                controlled_player->charged_kick_phase_timer = 0;
+            }
+            else
+            {
+                controlled_player->kick = false;
+                controlled_player->kick2 = false;
+                controlled_player->kick2_requested = false;
+                controlled_player->perform_kick2 = false;
+                controlled_player->charged_kick_hold_ms = 0;
+                controlled_player->charged_kick_ready = false;
+                controlled_player->charged_kick_active = false;
+                controlled_player->charged_kick_phase = 0;
+                controlled_player->charged_kick_phase_timer = 0;
+            }
+            return;
+        }
+
+        if (controlled_player->kick2 && controlled_player->perform_kick2)
+        {
+            controlled_player->perform_kick2 = false;
+            control_apply_attack_forward_impulse(physics, controlled_player, control_get_attack_forward_impulse_heavy(controlled_player));
+            if (kick_sfx != JO_NULL)
+                game_audio_play_sfx_next_channel(kick_sfx);
+            return;
+        }
+    }
+
     if (physics->is_in_air && c_down && !controlled_player->air_kick_used && !controlled_player->kick && !controlled_player->kick2 && !controlled_player->punch && !controlled_player->punch2)
     {
         controlled_player->kick = false;
         controlled_player->kick2 = true;
+        controlled_player->hit_done_kick2 = false;
         controlled_player->kick2_requested = false;
         controlled_player->perform_kick2 = true;
         controlled_player->air_kick_used = true;
@@ -142,13 +224,15 @@ static void control_input_kick(character_t *controlled_player,
     if (!controlled_player->kick && !controlled_player->kick2 && !controlled_player->punch && !controlled_player->punch2 && !physics->is_in_air && controlled_player->attack_cooldown == 0 && c_down)
     {
         controlled_player->kick = true;
+        controlled_player->hit_done_kick1 = false;
         control_apply_attack_forward_impulse(physics, controlled_player, control_get_attack_forward_impulse_light(controlled_player));
         if (punch_sfx != JO_NULL)
             game_audio_play_sfx_next_channel(punch_sfx);
     }
-    else if (controlled_player->kick && !controlled_player->kick2 && c_down)
+    else if (controlled_player->kick && !controlled_player->kick2 && c_down && !controlled_player->charged_kick_enabled)
     {
         controlled_player->kick2_requested = true;
+        controlled_player->hit_done_kick2 = false;
     }
 
     if (controlled_player->kick2 && controlled_player->perform_kick2)
@@ -239,7 +323,7 @@ void control_handle_character_commands(jo_sidescroller_physics_params *physics,
     control_update_variable_jump(physics, input, jump_hold_ms, jump_cut_applied);
 
     control_input_punch(controlled_player, physics, punch_sfx, kick_sfx, input->a_down);
-    control_input_kick(controlled_player, physics, punch_sfx, kick_sfx, input->c_down);
+    control_input_kick(controlled_player, physics, punch_sfx, kick_sfx, input->c_down, input->c_hold);
 
     if (controlled_player->spin && spin_sfx != JO_NULL)
     {

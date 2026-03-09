@@ -87,6 +87,7 @@ void input_mapping_read_player1(control_input_t *out_input)
     out_input->b_pressed = jo_is_pad1_key_down(player1_mapping.jump_key);
     out_input->b_down = jo_is_pad1_key_pressed(player1_mapping.jump_key);
     out_input->c_down = jo_is_pad1_key_down(player1_mapping.kick_key);
+    out_input->c_hold = jo_is_pad1_key_pressed(player1_mapping.kick_key);
 }
 
 void input_mapping_set_player2(const input_mapping_config_t *config)
@@ -122,6 +123,7 @@ void input_mapping_read_player2(control_input_t *out_input)
         out_input->b_pressed = false;
         out_input->b_down = false;
         out_input->c_down = false;
+        out_input->c_hold = false;
         return;
     }
 
@@ -132,4 +134,5 @@ void input_mapping_read_player2(control_input_t *out_input)
     out_input->b_pressed = jo_is_input_key_down(port, player2_mapping.jump_key);
     out_input->b_down = jo_is_input_key_pressed(port, player2_mapping.jump_key);
     out_input->c_down = jo_is_input_key_down(port, player2_mapping.kick_key);
+    out_input->c_hold = jo_is_input_key_pressed(port, player2_mapping.kick_key);
 }

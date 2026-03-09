@@ -34,3 +34,12 @@ Available characters:
 ### 3. Battlefield
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
+
+
+To fix:
+
+- Knuckles bot misses the range of the aerial attack and the super punch.
+- Reduce the number of Sonic and Amy sprites.
+- Fix Tails's punch combo sequence.
+- Fix Amy's kick cooldown timing.
+- Create Shadow classes and sprites.

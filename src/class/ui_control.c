@@ -277,7 +277,7 @@ static void ui_control_load_menu_sprites(void)
 
 static bool ui_control_character_is_locked(ui_character_choice_t choice)
 {
-    return choice == UiCharacterKnuckles || choice == UiCharacterShadow;
+    return choice == UiCharacterShadow;
 }
 
 static bool ui_control_is_multiplayer_versus(const ui_control_state_t *state)

@@ -399,6 +399,17 @@ void load_sonic(void)
     character_ref.knockback_punch2 = SONIC_KNOCKBACK_PUNCH2;
     character_ref.knockback_kick1 = SONIC_KNOCKBACK_KICK1;
     character_ref.knockback_kick2 = SONIC_KNOCKBACK_KICK2;
+    character_ref.charged_kick_enabled = false;
+    character_ref.charged_kick_hold_ms = 0;
+    character_ref.charged_kick_ready = false;
+    character_ref.charged_kick_active = false;
+    character_ref.charged_kick_phase = 0;
+    character_ref.charged_kick_phase_timer = 0;
+    character_ref.character_id = CHARACTER_ID_SONIC;
+    character_ref.hit_done_punch1 = false;
+    character_ref.hit_done_punch2 = false;
+    character_ref.hit_done_kick1 = false;
+    character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
 
     // Inicializa vida

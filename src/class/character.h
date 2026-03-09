@@ -7,6 +7,12 @@
 #define ATTACK_COOLDOWN_PUNCH2_FRAMES (21)
 #define ATTACK_COOLDOWN_KICK2_FRAMES (23)
 
+#define CHARACTER_ID_SONIC 0
+#define CHARACTER_ID_AMY 1
+#define CHARACTER_ID_TAILS 2
+#define CHARACTER_ID_KNUCKLES 3
+#define CHARACTER_ID_SHADOW 4
+
 typedef struct
 {
     int stand_sprite_id;
@@ -35,6 +41,17 @@ typedef struct
     bool kick2;
     bool kick2_requested;
     bool perform_kick2;
+    bool charged_kick_enabled;
+    int charged_kick_hold_ms;
+    bool charged_kick_ready;
+    bool charged_kick_active;
+    int charged_kick_phase;
+    int charged_kick_phase_timer;
+    int character_id;
+    bool hit_done_punch1;
+    bool hit_done_punch2;
+    bool hit_done_kick1;
+    bool hit_done_kick2;
     bool air_kick_used;
     int hit_range_punch1;
     int hit_range_punch2;

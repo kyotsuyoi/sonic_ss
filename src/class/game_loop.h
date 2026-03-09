@@ -22,6 +22,7 @@ void game_loop_init(game_loop_context_t *ctx);
 void game_loop_draw(void);
 void game_loop_input(void);
 void game_loop_update(void);
+void game_loop_reset_player2_runtime(void);
 void game_loop_debug_frame(void);
 bool game_loop_debug_get_player2_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot);
 

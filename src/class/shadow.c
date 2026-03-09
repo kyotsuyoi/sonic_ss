@@ -14,6 +14,7 @@ void display_shadow(void)
 void load_shadow(void)
 {
     load_sonic();
+    player.character_id = CHARACTER_ID_SHADOW;
 }
 
 void unload_shadow(void)
