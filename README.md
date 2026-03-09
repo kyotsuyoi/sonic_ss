@@ -39,6 +39,7 @@ Available characters:
 To fix:
 
 - Knuckles bot misses the range of the aerial attack and the super punch.
+- Knuckles incorrectly allows jumping while holding the super punch.
 - Reduce the number of Sonic and Amy sprites.
 - Fix Tails's punch combo sequence.
 - Fix Amy's kick cooldown timing.
