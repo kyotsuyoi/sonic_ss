@@ -20,7 +20,7 @@ Available characters:
 - Sonic — OK
 - Amy — OK
 - Tails — OK
-- Knuckles — Not OK
+- Knuckles — OK
 - Shadow — Not OK
 
 ## Screenshots
