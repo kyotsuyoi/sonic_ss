@@ -4,15 +4,9 @@
 #include "game_audio.h"
 #include "damage_fx.h"
 #include "game_constants.h"
+#include "character_registry.h"
 
-#define BOT_HIT_RANGE_PUNCH1 8
-#define BOT_HIT_RANGE_PUNCH2 8
-#define BOT_HIT_RANGE_KICK1 8
-#define BOT_HIT_RANGE_KICK2 9
 #define BOT_ENGAGE_RANGE 9
-#define BOT_COMBO_PUNCH2_RANGE 8
-#define BOT_COMBO_KICK2_RANGE 9
-#define BOT_PUNCH_START_RANGE 8
 #define BOT_APPROACH_DISTANCE 16
 #define BOT_JUMP_MIN_VERTICAL_GAP 18
 #define BOT_JUMP_MAX_VERTICAL_GAP 180
@@ -50,10 +44,12 @@
 #define BOT_JUMP_RETRY_COOLDOWN_MIN 8
 #define BOT_JUMP_RETRY_COOLDOWN_MAX 18
 #define BOT_AIR_KICK_TRIGGER_CHANCE 48
-#define BOT_KNUCKLES_CHARGED_RANGE_BONUS 4
-#define BOT_KNUCKLES_CHARGED_DAMAGE 10
-#define BOT_KNUCKLES_CHARGED_STUN_BONUS 14
-#define BOT_KNUCKLES_CHARGED_KNOCKBACK_MULT 1.70f
+#define BOT_AIR_KICK_ANTICIPATION_FRAMES 10
+#define BOT_AIR_KICK_ANTICIPATION_RANGE_BONUS 6
+#define BOT_ATTACK_STYLE_LONG_CHANCE 50
+#define BOT_ENGAGE_TOLERANCE_SHORT 2
+#define BOT_ENGAGE_TOLERANCE_LONG 4
+#define BOT_KNUCKLES_CHARGED_MAX_BUFFER 3
 #define BOT_NAV_MIN_VERTICAL_GAP 24
 #define BOT_NAV_MAX_VERTICAL_GAP 220
 #define BOT_NAV_SCAN_STEP 12
@@ -131,8 +127,30 @@ static int bot_nav_find_jump_target_x(int bot_world_x, int bot_world_y, int play
     return best_x;
 }
 
+static bool ai_attack_likely_in_range_soon(ai_bot_context_t *ctx, int range, int frames_ahead)
+{
+    int predicted_bot_x;
+    int predicted_player_x;
+
+    if (ctx == JO_NULL)
+        return false;
+
+    predicted_bot_x = (int)*ctx->bot_world_x_ref + (int)(*ctx->bot_speed_x_ref * (float)frames_ahead);
+    predicted_player_x = ctx->player_world_x;
+    if (ctx->player_physics != JO_NULL)
+        predicted_player_x += (int)(ctx->player_physics->speed * (float)frames_ahead);
+
+    return ctx->is_attack_in_range(predicted_bot_x,
+                                   (int)*ctx->bot_world_y_ref,
+                                   ctx->bot_ref->flip,
+                                   predicted_player_x,
+                                   ctx->player_world_y,
+                                   range);
+}
+
 void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
 {
+    character_combat_profile_t combat_profile;
     int distance_x;
     int distance_abs;
     int vertical_gap;
@@ -142,7 +160,15 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
     int nav_target_x;
     bool nav_mode;
     bool should_hold_jump;
+    int short_attack_range;
+    int long_attack_range;
+    int desired_min_distance;
+    int desired_max_distance;
+    bool prefer_long_attack;
+    int style_noise;
     control_input_t input = {0};
+
+    combat_profile = character_registry_get_combat_profile_by_character_id(ctx->bot_ref->character_id);
 
     if (*ctx->player_defeated || ctx->bot_defeated_flag)
         return;
@@ -153,13 +179,44 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
     if (ctx->bot_ref->stun_timer > 0)
     {
         --ctx->bot_ref->stun_timer;
-        *ctx->bot_speed_x_ref *= 0.82f;
-        if (JO_ABS(*ctx->bot_speed_x_ref) < 0.05f)
-            *ctx->bot_speed_x_ref = 0.0f;
+        /* While stunned, skip AI input so hit knockback is not immediately
+           canceled by movement/friction logic in control handling. */
+        return;
     }
 
     distance_x = ctx->player_world_x - (int)*ctx->bot_world_x_ref;
     distance_abs = JO_ABS(distance_x);
+    short_attack_range = combat_profile.hit_range_punch1;
+    long_attack_range = combat_profile.hit_range_kick2;
+    if (ctx->bot_ref->charged_kick_enabled)
+        long_attack_range += combat_profile.charged_kick_range_bonus;
+
+    style_noise = JO_ABS((ctx->player_world_x * 13)
+        + (ctx->player_world_y * 7)
+        + ((int)*ctx->bot_world_x_ref * 5)
+        + ((int)*ctx->bot_world_y_ref * 3)
+        + (*ctx->bot_attack_step_ref * 17)) % 100;
+    prefer_long_attack = (style_noise < BOT_ATTACK_STYLE_LONG_CHANCE);
+    if (ctx->bot_ref->charged_kick_enabled && style_noise < 65)
+        prefer_long_attack = true;
+
+    if (prefer_long_attack)
+    {
+        desired_min_distance = long_attack_range - BOT_ENGAGE_TOLERANCE_LONG;
+        desired_max_distance = long_attack_range + BOT_ENGAGE_TOLERANCE_LONG;
+        if (ctx->bot_ref->charged_kick_enabled)
+        {
+            desired_min_distance = long_attack_range;
+            desired_max_distance = long_attack_range + BOT_KNUCKLES_CHARGED_MAX_BUFFER;
+        }
+    }
+    else
+    {
+        desired_min_distance = short_attack_range - BOT_ENGAGE_TOLERANCE_SHORT;
+        desired_max_distance = short_attack_range + BOT_ENGAGE_TOLERANCE_SHORT;
+    }
+    if (desired_min_distance < 1)
+        desired_min_distance = 1;
     vertical_gap = (int)*ctx->bot_world_y_ref - ctx->player_world_y;
     allow_advanced = ctx->warmup_frames_left <= 0;
     player_airborne = ctx->player->jump || ctx->player->falling;
@@ -196,19 +253,42 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
 
         if (nav_mode)
         {
-            if ((int)*ctx->bot_world_x_ref < nav_target_x - BOT_NAV_LANE_TOLERANCE)
-                input.right_pressed = true;
-            else if ((int)*ctx->bot_world_x_ref > nav_target_x + BOT_NAV_LANE_TOLERANCE)
-                input.left_pressed = true;
-            else if (distance_x > BOT_APPROACH_DISTANCE)
-                input.right_pressed = true;
-            else if (distance_x < -BOT_APPROACH_DISTANCE)
-                input.left_pressed = true;
+            if (distance_abs > desired_max_distance)
+            {
+                if ((int)*ctx->bot_world_x_ref < nav_target_x - BOT_NAV_LANE_TOLERANCE)
+                    input.right_pressed = true;
+                else if ((int)*ctx->bot_world_x_ref > nav_target_x + BOT_NAV_LANE_TOLERANCE)
+                    input.left_pressed = true;
+                else if (distance_x > 0)
+                    input.right_pressed = true;
+                else if (distance_x < 0)
+                    input.left_pressed = true;
+            }
+            else if (distance_abs < desired_min_distance)
+            {
+                if (distance_x > 0)
+                    input.left_pressed = true;
+                else if (distance_x < 0)
+                    input.right_pressed = true;
+            }
         }
-        else if (distance_x > BOT_APPROACH_DISTANCE)
-            input.right_pressed = true;
-        else if (distance_x < -BOT_APPROACH_DISTANCE)
-            input.left_pressed = true;
+        else
+        {
+            if (distance_abs > desired_max_distance)
+            {
+                if (distance_x > 0)
+                    input.right_pressed = true;
+                else if (distance_x < 0)
+                    input.left_pressed = true;
+            }
+            else if (distance_abs < desired_min_distance)
+            {
+                if (distance_x > 0)
+                    input.left_pressed = true;
+                else if (distance_x < 0)
+                    input.right_pressed = true;
+            }
+        }
 
         if (ctx->bot_ref->can_jump && *ctx->bot_jump_cooldown_ref == 0 && !ctx->bot_in_air_flag)
         {
@@ -225,48 +305,45 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                 {
                     *ctx->bot_jump_cooldown_ref = BOT_JUMP_RETRY_COOLDOWN_MAX;
                 }
-                else
-                {
-                if (!has_headroom_current)
+                else if (!has_headroom_current)
                 {
                     *ctx->bot_jump_cooldown_ref = BOT_JUMP_RETRY_COOLDOWN_MAX;
                 }
                 else
                 {
-                distance_bonus = (BOT_JUMP_MAX_HORIZONTAL_GAP - distance_abs) / BOT_JUMP_DISTANCE_BONUS_DIV;
-                chance = BOT_JUMP_BASE_CHANCE_PROFILE + (vertical_gap / BOT_JUMP_VERTICAL_BONUS_DIV) + distance_bonus;
-                if (chance > BOT_JUMP_CHANCE_MAX_PROFILE)
-                    chance = BOT_JUMP_CHANCE_MAX_PROFILE;
+                    distance_bonus = (BOT_JUMP_MAX_HORIZONTAL_GAP - distance_abs) / BOT_JUMP_DISTANCE_BONUS_DIV;
+                    chance = BOT_JUMP_BASE_CHANCE_PROFILE + (vertical_gap / BOT_JUMP_VERTICAL_BONUS_DIV) + distance_bonus;
+                    if (chance > BOT_JUMP_CHANCE_MAX_PROFILE)
+                        chance = BOT_JUMP_CHANCE_MAX_PROFILE;
 
-                noise = JO_ABS((ctx->player_world_x * 3)
-                    + (ctx->player_world_y * 5)
-                    + ((int)*ctx->bot_world_x_ref * 7)
-                    + ((int)*ctx->bot_world_y_ref * 11)
-                    + (*ctx->bot_attack_step_ref * 13)) % 100;
+                    noise = JO_ABS((ctx->player_world_x * 3)
+                        + (ctx->player_world_y * 5)
+                        + ((int)*ctx->bot_world_x_ref * 7)
+                        + ((int)*ctx->bot_world_y_ref * 11)
+                        + (*ctx->bot_attack_step_ref * 13)) % 100;
 
-                if (noise < chance)
-                {
-                    int vertical_hold_bonus = (vertical_gap * BOT_JUMP_HOLD_VERTICAL_BONUS_MAX_PROFILE) / BOT_JUMP_MAX_VERTICAL_GAP;
-                    int distance_hold_bonus = ((BOT_JUMP_MAX_HORIZONTAL_GAP - distance_abs) * BOT_JUMP_HOLD_DISTANCE_BONUS_MAX_PROFILE) / BOT_JUMP_MAX_HORIZONTAL_GAP;
-                    int hold_target_ms = BOT_JUMP_MIN_HOLD_MS_PROFILE + vertical_hold_bonus + distance_hold_bonus;
+                    if (noise < chance)
+                    {
+                        int vertical_hold_bonus = (vertical_gap * BOT_JUMP_HOLD_VERTICAL_BONUS_MAX_PROFILE) / BOT_JUMP_MAX_VERTICAL_GAP;
+                        int distance_hold_bonus = ((BOT_JUMP_MAX_HORIZONTAL_GAP - distance_abs) * BOT_JUMP_HOLD_DISTANCE_BONUS_MAX_PROFILE) / BOT_JUMP_MAX_HORIZONTAL_GAP;
+                        int hold_target_ms = BOT_JUMP_MIN_HOLD_MS_PROFILE + vertical_hold_bonus + distance_hold_bonus;
 
-                    if (hold_target_ms > BOT_JUMP_MAX_HOLD_MS_PROFILE)
-                        hold_target_ms = BOT_JUMP_MAX_HOLD_MS_PROFILE;
-                    if (hold_target_ms < BOT_JUMP_MIN_HOLD_MS_PROFILE)
-                        hold_target_ms = BOT_JUMP_MIN_HOLD_MS_PROFILE;
+                        if (hold_target_ms > BOT_JUMP_MAX_HOLD_MS_PROFILE)
+                            hold_target_ms = BOT_JUMP_MAX_HOLD_MS_PROFILE;
+                        if (hold_target_ms < BOT_JUMP_MIN_HOLD_MS_PROFILE)
+                            hold_target_ms = BOT_JUMP_MIN_HOLD_MS_PROFILE;
 
-                    if (ctx->bot_jump_hold_target_ms_ref != JO_NULL)
-                        *ctx->bot_jump_hold_target_ms_ref = hold_target_ms;
+                        if (ctx->bot_jump_hold_target_ms_ref != JO_NULL)
+                            *ctx->bot_jump_hold_target_ms_ref = hold_target_ms;
 
-                    input.b_pressed = true;
-                    input.b_down = true;
-                }
-                else
-                {
-                    *ctx->bot_jump_cooldown_ref = BOT_JUMP_RETRY_COOLDOWN_MIN
-                        + (noise % (BOT_JUMP_RETRY_COOLDOWN_MAX - BOT_JUMP_RETRY_COOLDOWN_MIN + 1));
-                }
-                }
+                        input.b_pressed = true;
+                        input.b_down = true;
+                    }
+                    else
+                    {
+                        *ctx->bot_jump_cooldown_ref = BOT_JUMP_RETRY_COOLDOWN_MIN
+                            + (noise % (BOT_JUMP_RETRY_COOLDOWN_MAX - BOT_JUMP_RETRY_COOLDOWN_MIN + 1));
+                    }
                 }
             }
         }
@@ -292,12 +369,9 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         && *ctx->bot_current_attack_ref == AiBotAttackNone
         && *ctx->bot_attack_cooldown_ref == 0
         && player_airborne
-        && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
-                                   (int)*ctx->bot_world_y_ref,
-                                   ctx->bot_ref->flip,
-                                   ctx->player_world_x,
-                                   ctx->player_world_y,
-                                   BOT_HIT_RANGE_KICK2))
+        && ai_attack_likely_in_range_soon(ctx,
+                                   combat_profile.hit_range_kick2 + BOT_AIR_KICK_ANTICIPATION_RANGE_BONUS,
+                                   BOT_AIR_KICK_ANTICIPATION_FRAMES))
     {
         int air_noise = JO_ABS((ctx->player_world_x * 17)
             + (ctx->player_world_y * 9)
@@ -313,45 +387,62 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
 
     if (*ctx->bot_current_attack_ref != AiBotAttackNone)
     {
+        if (ctx->bot_ref->charged_kick_enabled && *ctx->bot_current_attack_ref == AiBotAttackKick1)
+        {
+            bool desired_flip = (ctx->player_world_x < (int)*ctx->bot_world_x_ref);
+            ctx->bot_ref->flip = desired_flip;
+
+            /* Freeze drift while charging so release doesn't slide past target. */
+            *ctx->bot_speed_x_ref *= 0.55f;
+            if (JO_ABS(*ctx->bot_speed_x_ref) < 0.10f)
+                *ctx->bot_speed_x_ref = 0.0f;
+        }
+
         bool knuckles_charge_attack = (ctx->bot_ref->charged_kick_enabled
             && *ctx->bot_current_attack_ref == AiBotAttackKick2);
         int attack_damage = 0;
         int attack_trigger = 0;
-        int attack_range = BOT_HIT_RANGE_PUNCH1;
+        int attack_range = combat_profile.hit_range_punch1;
         float attack_knockback = ctx->bot_ref->knockback_punch1;
         int attack_stun = STUN_LIGHT_FRAMES;
 
         if (*ctx->bot_current_attack_ref == AiBotAttackPunch1)
         {
-            attack_damage = 1;
+            attack_damage = combat_profile.damage_punch1;
             attack_trigger = 1;
-            attack_range = BOT_HIT_RANGE_PUNCH1;
+            attack_range = combat_profile.hit_range_punch1;
             attack_knockback = ctx->bot_ref->knockback_punch1;
             attack_stun = STUN_LIGHT_FRAMES;
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackPunch2)
         {
-            attack_damage = 3;
+            attack_damage = combat_profile.damage_punch2;
             attack_trigger = 1;
-            attack_range = BOT_HIT_RANGE_PUNCH2;
+            attack_range = combat_profile.hit_range_punch2;
             attack_knockback = ctx->bot_ref->knockback_punch2;
             attack_stun = STUN_HEAVY_FRAMES;
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick1)
         {
-            attack_damage = ctx->bot_ref->charged_kick_enabled ? 0 : 2;
+            attack_damage = ctx->bot_ref->charged_kick_enabled ? 0 : combat_profile.damage_kick1;
             attack_trigger = ctx->bot_ref->charged_kick_enabled ? 0 : 1;
-            attack_range = BOT_HIT_RANGE_KICK1;
+            attack_range = combat_profile.hit_range_kick1;
             attack_knockback = ctx->bot_ref->knockback_kick1;
             attack_stun = STUN_LIGHT_FRAMES;
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick2)
         {
-            attack_damage = knuckles_charge_attack ? BOT_KNUCKLES_CHARGED_DAMAGE : 5;
+            attack_damage = knuckles_charge_attack ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
             attack_trigger = 1;
-            attack_range = knuckles_charge_attack ? (BOT_HIT_RANGE_KICK2 + BOT_KNUCKLES_CHARGED_RANGE_BONUS) : BOT_HIT_RANGE_KICK2;
-            attack_knockback = knuckles_charge_attack ? (ctx->bot_ref->knockback_kick2 * BOT_KNUCKLES_CHARGED_KNOCKBACK_MULT) : ctx->bot_ref->knockback_kick2;
-            attack_stun = knuckles_charge_attack ? (STUN_HEAVY_FRAMES + BOT_KNUCKLES_CHARGED_STUN_BONUS) : STUN_HEAVY_FRAMES;
+            attack_range = knuckles_charge_attack
+                ? (combat_profile.hit_range_kick2 + combat_profile.charged_kick_range_bonus)
+                : combat_profile.hit_range_kick2;
+            attack_knockback = knuckles_charge_attack
+                ? (ctx->bot_ref->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
+                : ctx->bot_ref->knockback_kick2;
+            attack_stun = knuckles_charge_attack
+                ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus)
+                : STUN_HEAVY_FRAMES;
         }
 
         if (!*ctx->bot_attack_damage_done_ref && *ctx->bot_attack_timer_ref == attack_trigger && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, attack_range))
@@ -408,11 +499,46 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         {
             if (*ctx->bot_current_attack_ref == AiBotAttackKick1 && ctx->bot_ref->charged_kick_enabled)
             {
-                ctx->start_attack(AiBotAttackKick2, false);
+                bool desired_flip = (ctx->player_world_x < (int)*ctx->bot_world_x_ref);
+                int charged_range = combat_profile.hit_range_kick2 + combat_profile.charged_kick_range_bonus;
+                bool can_hit_current;
+                bool can_hit_flipped;
+
+                can_hit_current = ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
+                                                          (int)*ctx->bot_world_y_ref,
+                                                          ctx->bot_ref->flip,
+                                                          ctx->player_world_x,
+                                                          ctx->player_world_y,
+                                                          charged_range);
+
+                can_hit_flipped = ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
+                                                          (int)*ctx->bot_world_y_ref,
+                                                          desired_flip,
+                                                          ctx->player_world_x,
+                                                          ctx->player_world_y,
+                                                          charged_range);
+
+                if (can_hit_flipped)
+                    ctx->bot_ref->flip = desired_flip;
+
+                if (can_hit_current || can_hit_flipped)
+                {
+                    ctx->start_attack(AiBotAttackKick2, false);
+                }
+                else
+                {
+                    /* Out of range after charge: cancel by releasing attack. */
+                    *ctx->bot_current_attack_ref = AiBotAttackNone;
+                    *ctx->bot_attack_timer_ref = 0;
+                    *ctx->bot_combo_requested_ref = false;
+                    ctx->bot_ref->kick = false;
+                    ctx->bot_ref->kick2 = false;
+                    *ctx->bot_attack_cooldown_ref = ATTACK_COOLDOWN_FRAMES;
+                }
             }
             else
             {
-            if (*ctx->bot_current_attack_ref == AiBotAttackPunch1 && *ctx->bot_combo_requested_ref && !ctx->bot_in_air_flag && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, BOT_COMBO_PUNCH2_RANGE))
+            if (*ctx->bot_current_attack_ref == AiBotAttackPunch1 && *ctx->bot_combo_requested_ref && !ctx->bot_in_air_flag && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, combat_profile.hit_range_punch2))
             {
                 ctx->start_attack(AiBotAttackPunch2, false);
             }
@@ -420,7 +546,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                      && *ctx->bot_combo_requested_ref
                      && !ctx->bot_ref->charged_kick_enabled
                      && !ctx->bot_in_air_flag
-                     && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, BOT_COMBO_KICK2_RANGE))
+                     && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, combat_profile.hit_range_kick2))
             {
                 ctx->start_attack(AiBotAttackKick2, false);
             }
@@ -449,14 +575,49 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
     {
         --(*ctx->bot_attack_cooldown_ref);
     }
-    else if (ctx->bot_ref->stun_timer == 0 && *ctx->bot_current_attack_ref == AiBotAttackNone && !ctx->bot_in_air_flag && ctx->is_close_enough(ctx->player_world_x, ctx->player_world_y, (int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, BOT_ENGAGE_RANGE))
+    else if (ctx->bot_ref->stun_timer == 0 && *ctx->bot_current_attack_ref == AiBotAttackNone && !ctx->bot_in_air_flag)
     {
+        bool short_in_range = ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
+                                                      (int)*ctx->bot_world_y_ref,
+                                                      ctx->bot_ref->flip,
+                                                      ctx->player_world_x,
+                                                      ctx->player_world_y,
+                                                      short_attack_range);
+        bool long_in_range = ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
+                                                     (int)*ctx->bot_world_y_ref,
+                                                     ctx->bot_ref->flip,
+                                                     ctx->player_world_x,
+                                                     ctx->player_world_y,
+                                                     long_attack_range);
         bool request_combo = ((*ctx->bot_attack_step_ref / 2) % 2) == 0;
-        if (distance_abs <= BOT_PUNCH_START_RANGE)
-            ctx->start_attack(AiBotAttackPunch1, request_combo);
-        else
-            ctx->start_attack(AiBotAttackKick1, request_combo);
 
-        ++(*ctx->bot_attack_step_ref);
+        if (short_in_range && long_in_range)
+        {
+            if (prefer_long_attack)
+                ctx->start_attack(AiBotAttackKick1, request_combo);
+            else
+                ctx->start_attack(AiBotAttackPunch1, request_combo);
+            ++(*ctx->bot_attack_step_ref);
+            return;
+        }
+        if (long_in_range)
+        {
+            ctx->start_attack(AiBotAttackKick1, request_combo);
+            ++(*ctx->bot_attack_step_ref);
+            return;
+        }
+        if (short_in_range)
+        {
+            ctx->start_attack(AiBotAttackPunch1, request_combo);
+            ++(*ctx->bot_attack_step_ref);
+            return;
+        }
+
+        if (ctx->is_close_enough(ctx->player_world_x,
+                                 ctx->player_world_y,
+                                 (int)*ctx->bot_world_x_ref,
+                                 (int)*ctx->bot_world_y_ref,
+                                 BOT_ENGAGE_RANGE))
+            ++(*ctx->bot_attack_step_ref);
     }
 }

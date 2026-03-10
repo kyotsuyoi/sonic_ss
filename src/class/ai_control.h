@@ -22,6 +22,7 @@ typedef struct
 {
     character_t *player;
     bool *player_defeated;
+    jo_sidescroller_physics_params *player_physics;
     character_t *bot_ref;
     bool bot_defeated_flag;
     bool bot_in_air_flag;

@@ -16,7 +16,10 @@ bool jo_audio_is_channel_playing_ext(const unsigned char channel)
     if (channel >= JO_SOUND_MAX_CHANNEL)
         return false;
 
-    /* Reuse slPCMStat behavior; interpret result similarly to engine original. */
-    const unsigned char status = slPCMStat(channel);
-    return (status & 0x01u) != 0;
+    /* Reuse slPCMStat behavior; call it with a PCM struct pointer as
+       declared in the SGL prototypes. Fill only the channel field. */
+    PCM pcm = {0};
+    pcm.channel = channel;
+    int status = slPCMStat(&pcm);
+    return (status & 0x01) != 0;
 }

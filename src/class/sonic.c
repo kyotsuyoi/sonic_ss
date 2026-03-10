@@ -1,21 +1,12 @@
 #include <jo/jo.h>
 #include "sonic.h"
+#include "character_registry.h"
 
 #define character_ref player
 extern jo_sidescroller_physics_params physics;
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
 #define DEFEATED_SPRITE_HEIGHT 32
-#define SONIC_HIT_RANGE_PUNCH1 10
-#define SONIC_HIT_RANGE_PUNCH2 11
-#define SONIC_HIT_RANGE_KICK1 11
-#define SONIC_HIT_RANGE_KICK2 12
-#define SONIC_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
-#define SONIC_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
-#define SONIC_KNOCKBACK_PUNCH1 1.8f
-#define SONIC_KNOCKBACK_PUNCH2 2.3f
-#define SONIC_KNOCKBACK_KICK1 1.8f
-#define SONIC_KNOCKBACK_KICK2 2.6f
 
 static bool sonic_loaded = false;
 static int sonic_walking_base_id;
@@ -389,23 +380,12 @@ void load_sonic(void)
     character_ref.defeated_sprite_id = sonic_defeated_sprite_id;
     character_ref.punch_anim_id = sonic_punch_anim_id;
     character_ref.kick_anim_id = sonic_kick_anim_id;
-    character_ref.hit_range_punch1 = SONIC_HIT_RANGE_PUNCH1;
-    character_ref.hit_range_punch2 = SONIC_HIT_RANGE_PUNCH2;
-    character_ref.hit_range_kick1 = SONIC_HIT_RANGE_KICK1;
-    character_ref.hit_range_kick2 = SONIC_HIT_RANGE_KICK2;
-    character_ref.attack_forward_impulse_light = SONIC_ATTACK_FORWARD_IMPULSE_LIGHT;
-    character_ref.attack_forward_impulse_heavy = SONIC_ATTACK_FORWARD_IMPULSE_HEAVY;
-    character_ref.knockback_punch1 = SONIC_KNOCKBACK_PUNCH1;
-    character_ref.knockback_punch2 = SONIC_KNOCKBACK_PUNCH2;
-    character_ref.knockback_kick1 = SONIC_KNOCKBACK_KICK1;
-    character_ref.knockback_kick2 = SONIC_KNOCKBACK_KICK2;
-    character_ref.charged_kick_enabled = false;
+    character_registry_apply_combat_profile(&character_ref, UiCharacterSonic);
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
     character_ref.charged_kick_phase = 0;
     character_ref.charged_kick_phase_timer = 0;
-    character_ref.character_id = CHARACTER_ID_SONIC;
     character_ref.hit_done_punch1 = false;
     character_ref.hit_done_punch2 = false;
     character_ref.hit_done_kick1 = false;

@@ -14,6 +14,7 @@
 #include "debug.h"
 #include "game_loop.h"
 #include "damage_fx.h"
+#include "character_registry.h"
 
 static game_loop_context_t *g_ctx;
 static jo_sidescroller_physics_params g_player2_physics;
@@ -61,6 +62,8 @@ static bool g_dbg_pvp_available = false;
 #define TAILS_TAIL_OFFSET_X 14
 #define KNUCKLES_CHARGED_KICK_PHASE1_FRAMES 6
 #define KNUCKLES_CHARGED_KICK_PHASE2_FRAMES 10
+#define KNUCKLES_PUNCH_COMBO2_START_FRAME 2
+#define KNUCKLES_PUNCH_LAST_FRAME 3
 #define KNUCKLES_KICK_PART3_INDEX 3
 #define KNUCKLES_KICK_PART4_INDEX 2
 #define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
@@ -81,14 +84,16 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return 2;
+        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
+            return 2;
         return 3;
     }
     if (attack_kind == 1)
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return 3;
-        if (cid == CHARACTER_ID_TAILS)
-            return 4;
+        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
+            return 3;
         return 9;
     }
     if (attack_kind == 2)
@@ -104,7 +109,7 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
 
     if (cid == CHARACTER_ID_KNUCKLES)
     {
-        if (attacker->charged_kick_active)
+        if (attacker->charged_kick_active || attacker->charged_kick_phase > 0)
             return 2;
         return 3;
     }
@@ -271,6 +276,7 @@ static void game_loop_process_player_attack(character_t *attacker,
                                             bool *prev_kick,
                                             bool *prev_kick2)
 {
+    character_combat_profile_t combat_profile;
     (void)prev_punch;
     (void)prev_punch2;
     (void)prev_kick;
@@ -289,6 +295,8 @@ static void game_loop_process_player_attack(character_t *attacker,
         attacker->hit_done_kick1 = false;
     if (!attacker->kick2)
         attacker->hit_done_kick2 = false;
+
+    combat_profile = character_registry_get_combat_profile_by_character_id(attacker->character_id);
 
     if (attacker->punch
         && !attacker->hit_done_punch1
@@ -310,7 +318,7 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
         else
         {
-            target->life -= 1;
+            target->life -= combat_profile.damage_punch1;
             game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch1, STUN_LIGHT_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -337,7 +345,7 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
         else
         {
-            target->life -= 3;
+            target->life -= combat_profile.damage_punch2;
             game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch2, STUN_HEAVY_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -365,7 +373,7 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
         else
         {
-            target->life -= 2;
+            target->life -= combat_profile.damage_kick1;
             game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1, STUN_LIGHT_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -375,6 +383,7 @@ static void game_loop_process_player_attack(character_t *attacker,
     if (attacker->kick2
         && (attacker->character_id != CHARACTER_ID_KNUCKLES
             || attacker->charged_kick_active
+            || attacker->charged_kick_phase > 0
             || attacker_physics->is_in_air)
         && !attacker->hit_done_kick2
         && game_loop_attack_reached_hit_frame(attacker, 3)
@@ -386,10 +395,13 @@ static void game_loop_process_player_attack(character_t *attacker,
                                         attacker->hit_range_kick2))
     {
         attacker->hit_done_kick2 = true;
-        bool charged_kick = attacker->charged_kick_enabled && attacker->charged_kick_active;
-        float kick2_knockback = charged_kick ? (attacker->knockback_kick2 * 1.70f) : attacker->knockback_kick2;
-        int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + 14) : STUN_HEAVY_FRAMES;
-        int kick2_damage = charged_kick ? 10 : 5;
+        bool charged_kick = combat_profile.charged_kick_enabled
+            && (attacker->charged_kick_active || attacker->charged_kick_phase > 0);
+        float kick2_knockback = charged_kick
+            ? (attacker->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
+            : attacker->knockback_kick2;
+        int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus) : STUN_HEAVY_FRAMES;
+        int kick2_damage = charged_kick ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
 
         if (target->spin)
         {
@@ -584,13 +596,8 @@ static void game_loop_update_player2_animation(void)
     ui_character_choice_t p2_character;
     bool is_tails;
     bool is_knuckles;
-    bool has_punch2_stage;
     int speed_step;
     int anim_frame;
-    int punch_frame_count;
-    int punch_stage1_last_frame;
-    int punch_stage2_start_frame;
-    int punch_stage2_last_frame;
     int kick_stage1_last_frame;
     int kick_stage2_start_frame;
     int kick_stage2_last_frame;
@@ -601,11 +608,6 @@ static void game_loop_update_player2_animation(void)
     p2_character = game_loop_get_player2_character();
     is_tails = (p2_character == UiCharacterTails);
     is_knuckles = (p2_character == UiCharacterKnuckles);
-    punch_frame_count = is_tails ? 5 : 10;
-    has_punch2_stage = (punch_frame_count >= 5);
-    punch_stage1_last_frame = (punch_frame_count >= 5) ? 4 : (punch_frame_count - 1);
-    punch_stage2_start_frame = is_tails ? 0 : 5;
-    punch_stage2_last_frame = is_tails ? punch_stage1_last_frame : 9;
 
     if (is_tails)
         game_loop_update_player2_tail_loop();
@@ -724,50 +726,56 @@ static void game_loop_update_player2_animation(void)
         }
     }
 
-    if (player2.punch)
+    if (is_knuckles)
     {
-        anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
-        if (anim_frame > punch_stage1_last_frame || jo_is_sprite_anim_stopped(player2.punch_anim_id))
+        if (player2.punch)
         {
-            jo_set_sprite_anim_frame(player2.punch_anim_id, 0);
-            jo_start_sprite_anim(player2.punch_anim_id);
-            anim_frame = 0;
-        }
-
-        if (anim_frame >= punch_stage1_last_frame)
-        {
-            if (player2.punch2_requested && has_punch2_stage)
+            anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
+            if (anim_frame > KNUCKLES_PUNCH_LAST_FRAME || jo_is_sprite_anim_stopped(player2.punch_anim_id))
             {
-                player2.punch = false;
-                player2.punch2 = true;
-                player2.punch2_requested = false;
-                player2.perform_punch2 = true;
-                jo_set_sprite_anim_frame(player2.punch_anim_id, punch_stage2_start_frame);
+                jo_set_sprite_anim_frame(player2.punch_anim_id, 0);
+                jo_start_sprite_anim(player2.punch_anim_id);
+                anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
+            }
+
+            if (anim_frame >= KNUCKLES_PUNCH_COMBO2_START_FRAME)
+            {
+                if (player2.punch2_requested)
+                {
+                    player2.punch = false;
+                    player2.punch2 = true;
+                    player2.punch2_requested = false;
+                    player2.perform_punch2 = true;
+                    jo_set_sprite_anim_frame(player2.punch_anim_id, KNUCKLES_PUNCH_COMBO2_START_FRAME);
+                    jo_start_sprite_anim(player2.punch_anim_id);
+                }
+                else if (anim_frame >= KNUCKLES_PUNCH_LAST_FRAME)
+                {
+                    player2.punch = false;
+                    player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+                    jo_reset_sprite_anim(player2.punch_anim_id);
+                }
+            }
+        }
+        else if (player2.punch2)
+        {
+            anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
+            if (anim_frame < KNUCKLES_PUNCH_COMBO2_START_FRAME)
+            {
+                jo_set_sprite_anim_frame(player2.punch_anim_id, KNUCKLES_PUNCH_COMBO2_START_FRAME);
                 jo_start_sprite_anim(player2.punch_anim_id);
             }
-            else
+            if (anim_frame >= KNUCKLES_PUNCH_LAST_FRAME && jo_is_sprite_anim_stopped(player2.punch_anim_id))
             {
-                player2.punch = false;
-                player2.punch2_requested = false;
-                player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+                player2.punch2 = false;
+                player2.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
                 jo_reset_sprite_anim(player2.punch_anim_id);
             }
         }
     }
-    else if (player2.punch2)
+    else
     {
-        anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
-        if (anim_frame < punch_stage2_start_frame)
-        {
-            jo_set_sprite_anim_frame(player2.punch_anim_id, punch_stage2_start_frame);
-            jo_start_sprite_anim(player2.punch_anim_id);
-        }
-        if (anim_frame >= punch_stage2_last_frame && jo_is_sprite_anim_stopped(player2.punch_anim_id))
-        {
-            player2.punch2 = false;
-            player2.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-            jo_reset_sprite_anim(player2.punch_anim_id);
-        }
+        player_update_punch_state_for_character(&player2);
     }
 
     if (is_tails)

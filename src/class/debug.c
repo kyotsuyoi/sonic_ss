@@ -88,11 +88,13 @@ static void debug_draw_hardware(void)
 {
     print_debug_valu("FPS______", fps,".", 0 + DEBUG_SAFE_TOP_LINES); // frames per second
     jo_printf(0, 1 + DEBUG_SAFE_TOP_LINES, "SPR_MEM_U: %d%% ", jo_sprite_usage_percent()); // percentage of sprite memory currently in use
-    print_debug_valu("SPRT_CONT", jo_sprite_count(), "sprt",  2 + DEBUG_SAFE_TOP_LINES); // number of sprites currently in use
-    debug_scsp_memory(3 + DEBUG_SAFE_TOP_LINES, 4 + DEBUG_SAFE_TOP_LINES); // SCSP PCM memory usage in kB and percentage
-    debug_scsp(5 + DEBUG_SAFE_TOP_LINES); // number of active SCSP voices
-    debug_vdp1(6 + DEBUG_SAFE_TOP_LINES); // VDP1 status register
-    debug_stack_usage(7 + DEBUG_SAFE_TOP_LINES); // stack usage in bytes
+    print_debug_valu("SPRT_CONT", jo_sprite_count(), "sprt",  3 + DEBUG_SAFE_TOP_LINES); // number of sprites currently in use    
+    debug_scsp_memory(4 + DEBUG_SAFE_TOP_LINES, 5 + DEBUG_SAFE_TOP_LINES); // SCSP PCM memory usage in kB and percentage
+    debug_scsp(6 + DEBUG_SAFE_TOP_LINES); // number of active SCSP voices
+    debug_vdp1(7 + DEBUG_SAFE_TOP_LINES); // VDP1 status register
+    debug_stack_usage(8 + DEBUG_SAFE_TOP_LINES); // stack usage in bytes    
+    jo_printf(0, 2 + DEBUG_SAFE_TOP_LINES, "DIN_MEM_U: %d%%", jo_memory_usage_percent()); // percentage of dynamic memory currently in use
+    
 }
 
 static void debug_draw_player(void)

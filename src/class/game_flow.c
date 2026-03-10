@@ -112,10 +112,11 @@ static void select_active_character(ui_character_choice_t selected_character)
 
 static void setup_player2_character(ui_character_choice_t selected_character)
 {
-    int move_count = 8;
-    int stand_count = 3;
-    int punch_count = 10;
-    int kick_count = 13;
+    character_animation_profile_t anim_profile;
+    int move_count;
+    int stand_count;
+    int punch_count;
+    int kick_count;
     int walking_base_id;
     int running1_base_id;
     int running2_base_id;
@@ -136,23 +137,11 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2_character_loaded = true;
     player2_active_character = selected_character;
 
-    if (selected_character == UiCharacterAmy)
-    {
-        kick_count = 8;
-    }
-    else if (selected_character == UiCharacterTails)
-    {
-        move_count = 4;
-        punch_count = 5;
-        kick_count = 1;
-    }
-    else if (selected_character == UiCharacterKnuckles)
-    {
-        move_count = 4;
-        stand_count = 4;
-        punch_count = 4;
-        kick_count = 4;
-    }
+    anim_profile = character_registry_get_animation_profile(selected_character);
+    move_count = anim_profile.move_count;
+    stand_count = anim_profile.stand_count;
+    punch_count = anim_profile.punch_count;
+    kick_count = anim_profile.kick_count;
 
     walking_base_id = game_flow_anim_base_id_from_anim(player.walking_anim_id);
     running1_base_id = game_flow_anim_base_id_from_anim(player.running1_anim_id);

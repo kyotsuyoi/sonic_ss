@@ -1,22 +1,14 @@
 #include <jo/jo.h>
 #include "sonic.h"
 #include "amy.h"
+#include "player.h"
+#include "character_registry.h"
 
 #define character_ref player
 extern jo_sidescroller_physics_params physics;
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
 #define DEFEATED_SPRITE_HEIGHT 32
-#define AMY_HIT_RANGE_PUNCH1 10
-#define AMY_HIT_RANGE_PUNCH2 11
-#define AMY_HIT_RANGE_KICK1 11
-#define AMY_HIT_RANGE_KICK2 12
-#define AMY_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
-#define AMY_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
-#define AMY_KNOCKBACK_PUNCH1 1.8f
-#define AMY_KNOCKBACK_PUNCH2 2.3f
-#define AMY_KNOCKBACK_KICK1 1.8f
-#define AMY_KNOCKBACK_KICK2 2.6f
 
 static bool amy_loaded = false;
 static int amy_walking_base_id;
@@ -85,12 +77,6 @@ static const jo_tile AmyPunchTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyKickTiles[] =
@@ -206,38 +192,7 @@ void amy_running_animation_handling(void)
         }
     }
 
-    if (character_ref.punch) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame > 4 || jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, 0);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        if (anim_frame >= 4) {
-            if (character_ref.punch2_requested) {
-                character_ref.punch = false;
-                character_ref.punch2 = true;
-                character_ref.punch2_requested = false;
-                character_ref.perform_punch2 = true;
-                jo_set_sprite_anim_frame(character_ref.punch_anim_id, 5);
-                jo_start_sprite_anim(character_ref.punch_anim_id);
-            } else {
-                character_ref.punch = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                jo_reset_sprite_anim(character_ref.punch_anim_id);
-            }
-        }
-    } else if (character_ref.punch2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame < 5) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, 5);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        if (anim_frame >= 9 && jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            character_ref.punch2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-            jo_reset_sprite_anim(character_ref.punch_anim_id);
-        }
-    }
+    player_update_punch_state_for_character(&character_ref);
 
     if(character_ref.kick){
         int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
@@ -384,23 +339,12 @@ void load_amy(void)
     character_ref.defeated_sprite_id = amy_defeated_sprite_id;
     character_ref.punch_anim_id = amy_punch_anim_id;
     character_ref.kick_anim_id = amy_kick_anim_id;
-    character_ref.hit_range_punch1 = AMY_HIT_RANGE_PUNCH1;
-    character_ref.hit_range_punch2 = AMY_HIT_RANGE_PUNCH2;
-    character_ref.hit_range_kick1 = AMY_HIT_RANGE_KICK1;
-    character_ref.hit_range_kick2 = AMY_HIT_RANGE_KICK2;
-    character_ref.attack_forward_impulse_light = AMY_ATTACK_FORWARD_IMPULSE_LIGHT;
-    character_ref.attack_forward_impulse_heavy = AMY_ATTACK_FORWARD_IMPULSE_HEAVY;
-    character_ref.knockback_punch1 = AMY_KNOCKBACK_PUNCH1;
-    character_ref.knockback_punch2 = AMY_KNOCKBACK_PUNCH2;
-    character_ref.knockback_kick1 = AMY_KNOCKBACK_KICK1;
-    character_ref.knockback_kick2 = AMY_KNOCKBACK_KICK2;
-    character_ref.charged_kick_enabled = false;
+    character_registry_apply_combat_profile(&character_ref, UiCharacterAmy);
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
     character_ref.charged_kick_phase = 0;
     character_ref.charged_kick_phase_timer = 0;
-    character_ref.character_id = CHARACTER_ID_AMY;
     character_ref.hit_done_punch1 = false;
     character_ref.hit_done_punch2 = false;
     character_ref.hit_done_kick1 = false;

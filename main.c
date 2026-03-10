@@ -13,6 +13,7 @@
 #include "src/class/game_loop.h"
 #include "src/class/debug.h"
 #include "src/class/damage_fx.h"
+#include "src/class/ram_cart.h"
 
 static ui_control_state_t ui_state;
 static game_flow_context_t game_flow_ctx;
@@ -24,11 +25,16 @@ static jo_img ini_screen_img;
 static bool ini_screen_loaded = false;
 static bool splash_track_playing = false;
 static bool splash_start_released = true;
+static bool show_ram_cart_screen = true;
+static bool ram_cart_start_released = true;
+static ram_cart_status_t ram_cart_status = RamCartStatusNotDetected;
 static int sprite_anim_bootstrap_id = -1;
 
 #define GAME_VERSION_TEXT "ver. 0.1.18a"
 #define GAME_VERSION_TEXT_X 28
 #define GAME_VERSION_TEXT_Y 28
+#define RAM_CART_TEXT_X 7
+#define RAM_CART_TEXT_Y 12
 
 /*
 ** SPECIAL NOTE: It's not the Sonic that I'm working on, but you can now write your own :)
@@ -68,8 +74,31 @@ static void perform_startup_initialization(void)
     game_audio_setup();
     damage_fx_setup();
     world_map_load();
+    ram_cart_status = ram_cart_detect();
 
     show_boot_loading = false;
+}
+
+static void display_ram_cart_screen(void)
+{
+    ui_control_clear_text_layer();
+
+    if (ram_cart_status == RamCartStatus4MB)
+    {
+        jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y, "4MB RAM Cartridge - OK");
+    }
+    else if (ram_cart_status == RamCartStatus1MB)
+    {
+        jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y, "1MB RAM Cartridge - Not OK");
+        jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y + 1, "Required 4MB RAM Cartridge");
+    }
+    else
+    {
+        jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y, "RAM Cartridge Not Detected");
+        jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y + 1, "Required 4MB RAM Cartridge");
+    }
+
+    jo_printf(RAM_CART_TEXT_X, RAM_CART_TEXT_Y + 3, "Press Start to Continue");
 }
 
 static void reset_to_splash_screen(void)
@@ -84,6 +113,7 @@ static void reset_to_splash_screen(void)
     jump_cooldown = 0;
     total_pcm = 0;
     player_defeated = false;
+    show_ram_cart_screen = false;
     show_initial_screen = true;
     splash_track_playing = false;
     splash_start_released = false;
@@ -152,6 +182,12 @@ void main_draw_callback(void)
         return;
     }
 
+    if (show_ram_cart_screen)
+    {
+        display_ram_cart_screen();
+        return;
+    }
+
     if (show_initial_screen)
     {
         display_initial_screen();
@@ -170,6 +206,24 @@ void main_input_callback(void)
     if (handle_global_reset_combo())
         return;
 
+    if (show_ram_cart_screen)
+    {
+        if (jo_is_pad1_key_down(JO_KEY_START))
+        {
+            if (ram_cart_start_released)
+            {
+                show_ram_cart_screen = false;
+                ram_cart_start_released = false;
+                ui_control_clear_text_layer();
+            }
+        }
+        else
+        {
+            ram_cart_start_released = true;
+        }
+        return;
+    }
+
     if (show_initial_screen)
         return;
 
@@ -183,6 +237,9 @@ void main_update_callback(void)
         perform_startup_initialization();
         return;
     }
+
+    if (show_ram_cart_screen)
+        return;
 
     if (show_initial_screen)
         return;

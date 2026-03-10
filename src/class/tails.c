@@ -1,22 +1,14 @@
 #include <jo/jo.h>
 #include "sonic.h"
 #include "tails.h"
+#include "player.h"
+#include "character_registry.h"
 
 #define character_ref player
 extern jo_sidescroller_physics_params physics;
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
 #define DEFEATED_SPRITE_HEIGHT 32
-#define TAILS_HIT_RANGE_PUNCH1 10
-#define TAILS_HIT_RANGE_PUNCH2 11
-#define TAILS_HIT_RANGE_KICK1 11
-#define TAILS_HIT_RANGE_KICK2 12
-#define TAILS_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
-#define TAILS_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
-#define TAILS_KNOCKBACK_PUNCH1 1.8f
-#define TAILS_KNOCKBACK_PUNCH2 2.3f
-#define TAILS_KNOCKBACK_KICK1 1.8f
-#define TAILS_KNOCKBACK_KICK2 2.6f
 #define TAILS_KICK1_ROTATION_TIME 16
 #define TAILS_KICK2_ROTATION_TIME 32
 #define TAILS_TAIL_FRAME_COUNT 4
@@ -98,8 +90,7 @@ static const jo_tile TailsPunchTiles[] =
     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
 };
 
 static const jo_tile TailsKickTiles[] =
@@ -264,60 +255,7 @@ void tails_running_animation_handling(void)
         }
     }
 
-    {
-        const int punch_frame_count = JO_TILE_COUNT(TailsPunchTiles);
-        const bool has_punch2_stage = (punch_frame_count >= 5);
-        const int punch1_last_frame = (punch_frame_count >= 5) ? 4 : (punch_frame_count - 1);
-        const int punch2_start_frame = has_punch2_stage ? 0 : -1;
-        const int punch2_last_frame = punch1_last_frame;
-
-        if (character_ref.punch) {
-            int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-            bool anim_stopped = jo_is_sprite_anim_stopped(character_ref.punch_anim_id);
-
-            if (anim_frame > punch1_last_frame || anim_stopped) {
-                jo_set_sprite_anim_frame(character_ref.punch_anim_id, 0);
-                jo_start_sprite_anim(character_ref.punch_anim_id);
-                anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-                anim_stopped = false;
-            }
-
-            if (anim_frame >= punch1_last_frame) {
-                if (character_ref.punch2_requested && has_punch2_stage) {
-                    character_ref.punch = false;
-                    character_ref.punch2 = true;
-                    character_ref.punch2_requested = false;
-                    character_ref.perform_punch2 = true;
-                    jo_set_sprite_anim_frame(character_ref.punch_anim_id, punch2_start_frame);
-                    jo_start_sprite_anim(character_ref.punch_anim_id);
-                } else if (anim_stopped) {
-                    character_ref.punch = false;
-                    character_ref.punch2_requested = false;
-                    character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                    jo_reset_sprite_anim(character_ref.punch_anim_id);
-                }
-            }
-        } else if (character_ref.punch2) {
-            int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-
-            if (!has_punch2_stage) {
-                character_ref.punch2 = false;
-                character_ref.punch2_requested = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-                jo_reset_sprite_anim(character_ref.punch_anim_id);
-            } else {
-                if (anim_frame < punch2_start_frame) {
-                    jo_set_sprite_anim_frame(character_ref.punch_anim_id, punch2_start_frame);
-                    jo_start_sprite_anim(character_ref.punch_anim_id);
-                }
-                if (anim_frame >= punch2_last_frame && jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-                    character_ref.punch2 = false;
-                    character_ref.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-                    jo_reset_sprite_anim(character_ref.punch_anim_id);
-                }
-            }
-        }
-    }
+    player_update_punch_state_for_character(&character_ref);
 
     if (character_ref.kick)
     {
@@ -511,23 +449,12 @@ void load_tails(void)
     character_ref.defeated_sprite_id = tails_defeated_sprite_id;
     character_ref.punch_anim_id = tails_punch_anim_id;
     character_ref.kick_anim_id = tails_kick_anim_id;
-    character_ref.hit_range_punch1 = TAILS_HIT_RANGE_PUNCH1;
-    character_ref.hit_range_punch2 = TAILS_HIT_RANGE_PUNCH2;
-    character_ref.hit_range_kick1 = TAILS_HIT_RANGE_KICK1;
-    character_ref.hit_range_kick2 = TAILS_HIT_RANGE_KICK2;
-    character_ref.attack_forward_impulse_light = TAILS_ATTACK_FORWARD_IMPULSE_LIGHT;
-    character_ref.attack_forward_impulse_heavy = TAILS_ATTACK_FORWARD_IMPULSE_HEAVY;
-    character_ref.knockback_punch1 = TAILS_KNOCKBACK_PUNCH1;
-    character_ref.knockback_punch2 = TAILS_KNOCKBACK_PUNCH2;
-    character_ref.knockback_kick1 = TAILS_KNOCKBACK_KICK1;
-    character_ref.knockback_kick2 = TAILS_KNOCKBACK_KICK2;
-    character_ref.charged_kick_enabled = false;
+    character_registry_apply_combat_profile(&character_ref, UiCharacterTails);
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
     character_ref.charged_kick_phase = 0;
     character_ref.charged_kick_phase_timer = 0;
-    character_ref.character_id = CHARACTER_ID_TAILS;
     character_ref.hit_done_punch1 = false;
     character_ref.hit_done_punch2 = false;
     character_ref.hit_done_kick1 = false;
