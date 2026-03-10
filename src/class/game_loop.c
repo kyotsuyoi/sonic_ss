@@ -70,9 +70,6 @@ static int g_p2_airborne_time_ms = 0;
 #define KNUCKLES_KICK_PART4_INDEX 2
 #define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
 #define DEFEATED_SPRITE_HEIGHT 32
-#define JUMP_SPRITE_AIRBORNE_DELAY_MS 800
-#define JUMP_SPRITE_FALL_SPEED_THRESHOLD 4.2f
-#define GAME_LOOP_FRAME_MS 17
 
 static bool game_loop_is_attack_in_range(int attacker_x,
                                          int attacker_y,
@@ -983,12 +980,12 @@ static void game_loop_update_player2_runtime(void)
     {
         bool show_jump_sprite = false;
 
-        g_p2_airborne_time_ms += GAME_LOOP_FRAME_MS;
+        g_p2_airborne_time_ms += GAME_FRAME_MS;
         if (g_player2_physics.speed_y < 0.0f)
             show_jump_sprite = true;
-        else if (g_player2_physics.speed_y >= JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+        else if (g_player2_physics.speed_y >= AIRBORNE_FALL_SPEED_THRESHOLD)
             show_jump_sprite = true;
-        else if (g_p2_airborne_time_ms >= JUMP_SPRITE_AIRBORNE_DELAY_MS)
+        else if (g_p2_airborne_time_ms >= AIRBORNE_SPRITE_DELAY_MS)
             show_jump_sprite = true;
 
         player2.jump = show_jump_sprite;
@@ -1272,12 +1269,12 @@ void game_loop_draw(void)
     {
         bool show_jump_sprite = false;
 
-        g_p1_airborne_time_ms += GAME_LOOP_FRAME_MS;
+        g_p1_airborne_time_ms += GAME_FRAME_MS;
         if (g_ctx->physics->speed_y < 0.0f)
             show_jump_sprite = true;
-        else if (g_ctx->physics->speed_y >= JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+        else if (g_ctx->physics->speed_y >= AIRBORNE_FALL_SPEED_THRESHOLD)
             show_jump_sprite = true;
-        else if (g_p1_airborne_time_ms >= JUMP_SPRITE_AIRBORNE_DELAY_MS)
+        else if (g_p1_airborne_time_ms >= AIRBORNE_SPRITE_DELAY_MS)
             show_jump_sprite = true;
 
         player.jump = show_jump_sprite;

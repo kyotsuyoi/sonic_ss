@@ -34,9 +34,6 @@
 
 #define KNUCKLES_BOT_CHARGED_HOLD_FRAMES 60
 #define BOT_AI_WARMUP_FRAMES 60
-#define BOT_JUMP_SPRITE_AIRBORNE_DELAY_MS 800
-#define BOT_JUMP_SPRITE_FALL_SPEED_THRESHOLD 4.2f
-#define BOT_FRAME_MS 17
 
 extern jo_sidescroller_physics_params physics;
 
@@ -723,12 +720,12 @@ static void bot_apply_physics(int map_pos_x, int map_pos_y)
 
     if (bot_physics.is_in_air)
     {
-        bot_airborne_time_ms += BOT_FRAME_MS;
+        bot_airborne_time_ms += GAME_FRAME_MS;
         if (bot_physics.speed_y < 0.0f)
             bot_show_jump_sprite = true;
-        else if (bot_physics.speed_y >= BOT_JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+        else if (bot_physics.speed_y >= AIRBORNE_FALL_SPEED_THRESHOLD)
             bot_show_jump_sprite = true;
-        else if (bot_airborne_time_ms >= BOT_JUMP_SPRITE_AIRBORNE_DELAY_MS)
+        else if (bot_airborne_time_ms >= AIRBORNE_SPRITE_DELAY_MS)
             bot_show_jump_sprite = true;
         else
             bot_show_jump_sprite = false;

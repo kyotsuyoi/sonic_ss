@@ -22,6 +22,11 @@
 #define CHARACTER_SPIN_SPEED (20)
 #define CHARACTER_JUMP_PER_PIXEL_TOLERANCE (20)
 
+/* Airborne visual smoothing shared by player and bots */
+#define AIRBORNE_SPRITE_DELAY_MS (800)
+#define AIRBORNE_FALL_SPEED_THRESHOLD (4.2f)
+#define GAME_FRAME_MS (17)
+
 #define CHARACTER_SPRITE_Z (450)
 #define DAMAGE_FX_SPRITE_Z (430)
 
