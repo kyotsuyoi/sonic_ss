@@ -54,6 +54,8 @@ static bool g_dbg_pvp_hit_punch2 = false;
 static bool g_dbg_pvp_hit_k1 = false;
 static bool g_dbg_pvp_hit_k2 = false;
 static bool g_dbg_pvp_available = false;
+static int g_p1_airborne_time_ms = 0;
+static int g_p2_airborne_time_ms = 0;
 
 #define TAILS_KICK1_ROTATION_TIME 16
 #define TAILS_KICK2_ROTATION_TIME 32
@@ -68,6 +70,9 @@ static bool g_dbg_pvp_available = false;
 #define KNUCKLES_KICK_PART4_INDEX 2
 #define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
 #define DEFEATED_SPRITE_HEIGHT 32
+#define JUMP_SPRITE_AIRBORNE_DELAY_MS 800
+#define JUMP_SPRITE_FALL_SPEED_THRESHOLD 4.2f
+#define GAME_LOOP_FRAME_MS 17
 
 static bool game_loop_is_attack_in_range(int attacker_x,
                                          int attacker_y,
@@ -546,6 +551,7 @@ static void game_loop_sync_player2_mode(void)
         g_player2_active = false;
         g_player2_initialized = false;
         g_player2_defeated = false;
+        g_p2_airborne_time_ms = 0;
         g_prev_p1_punch = false;
         g_prev_p1_punch2 = false;
         g_prev_p1_kick = false;
@@ -975,11 +981,22 @@ static void game_loop_update_player2_runtime(void)
 
     if (g_player2_physics.is_in_air)
     {
-        player2.jump = true;
-        player2.falling = (g_player2_physics.speed_y > 0.0f);
+        bool show_jump_sprite = false;
+
+        g_p2_airborne_time_ms += GAME_LOOP_FRAME_MS;
+        if (g_player2_physics.speed_y < 0.0f)
+            show_jump_sprite = true;
+        else if (g_player2_physics.speed_y >= JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+            show_jump_sprite = true;
+        else if (g_p2_airborne_time_ms >= JUMP_SPRITE_AIRBORNE_DELAY_MS)
+            show_jump_sprite = true;
+
+        player2.jump = show_jump_sprite;
+        player2.falling = (show_jump_sprite && g_player2_physics.speed_y > 0.0f);
     }
     else
     {
+        g_p2_airborne_time_ms = 0;
         player2.jump = false;
         player2.falling = false;
     }
@@ -1176,6 +1193,7 @@ void game_loop_reset_player2_runtime(void)
     g_player2_jump_cooldown = 0;
     g_p2_jump_hold_ms = 0;
     g_p2_jump_cut_applied = false;
+    g_p2_airborne_time_ms = 0;
     g_player2_tails_kick_timer = 0;
     g_player2_tails_kick_duration = 0;
     g_player2_tails_kick_total_degrees = 0;
@@ -1252,15 +1270,22 @@ void game_loop_draw(void)
 
     if (g_ctx->physics->is_in_air)
     {
-        if (g_ctx->physics->speed_y > 0)
-            player.falling = true;
-        else
-            player.falling = false;
+        bool show_jump_sprite = false;
 
-        player.jump = true;
+        g_p1_airborne_time_ms += GAME_LOOP_FRAME_MS;
+        if (g_ctx->physics->speed_y < 0.0f)
+            show_jump_sprite = true;
+        else if (g_ctx->physics->speed_y >= JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+            show_jump_sprite = true;
+        else if (g_p1_airborne_time_ms >= JUMP_SPRITE_AIRBORNE_DELAY_MS)
+            show_jump_sprite = true;
+
+        player.jump = show_jump_sprite;
+        player.falling = (show_jump_sprite && g_ctx->physics->speed_y > 0.0f);
     }
     else
     {
+        g_p1_airborne_time_ms = 0;
         player.jump = false;
         player.falling = false;
     }

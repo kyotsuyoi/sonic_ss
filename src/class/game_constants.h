@@ -5,7 +5,16 @@
 #define WORLD_DEFAULT_X (540)
 #define WORLD_DEFAULT_Y (120)
 
+/* World coordinates for camera centering on player at start */
+#define WORLD_CAMERA_TARGET_X (210)
+#define WORLD_CAMERA_TARGET_Y (1200)
+
+/* Solid/block tile: horizontal + vertical collision */
 #define MAP_TILE_BLOCK_ATTR (1)
+/* Floor/platform tile: allows standing on top (vertical collision only) */
+#define MAP_TILE_PLATFORM_ATTR (2)
+/* No interaction tile: use attr 0 or omit the attribute in MAP */
+#define MAP_TILE_NO_INTERACTION_ATTR (0)
 
 #define CHARACTER_WIDTH (32)
 #define CHARACTER_WIDTH_2 (24)

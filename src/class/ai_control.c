@@ -75,11 +75,14 @@ static bool bot_nav_has_headroom_at_x(int world_x, int world_y)
         BOT_NAV_PROBE_WIDTH,
         BOT_NAV_PROBE_HEIGHT);
 
-    return attr == JO_MAP_NO_COLLISION;
+    return attr != MAP_TILE_BLOCK_ATTR;
 }
 
 static bool bot_nav_is_ground_reachable_at_x(int candidate_x, int bot_world_y)
 {
+    int attr;
+    int foot_probe_x = candidate_x + 1;
+    int foot_probe_y = bot_world_y + CHARACTER_HEIGHT - 1;
     int dist = jo_map_per_pixel_vertical_collision(
         WORLD_MAP_ID,
         candidate_x + CHARACTER_WIDTH_2,
@@ -89,7 +92,16 @@ static bool bot_nav_is_ground_reachable_at_x(int candidate_x, int bot_world_y)
     if (candidate_x < 0 || bot_world_y < 0)
         return false;
 
+    attr = jo_map_hitbox_detection_custom_boundaries(
+        WORLD_MAP_ID,
+        foot_probe_x,
+        foot_probe_y,
+        CHARACTER_WIDTH - 2,
+        2);
+
     if (dist == JO_MAP_NO_COLLISION)
+        return false;
+    if (attr != MAP_TILE_BLOCK_ATTR && attr != MAP_TILE_PLATFORM_ATTR)
         return false;
     return dist >= -BOT_NAV_MAX_GROUND_DELTA && dist <= BOT_NAV_MAX_GROUND_DELTA;
 }

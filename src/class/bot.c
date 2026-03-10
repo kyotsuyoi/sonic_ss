@@ -34,6 +34,9 @@
 
 #define KNUCKLES_BOT_CHARGED_HOLD_FRAMES 60
 #define BOT_AI_WARMUP_FRAMES 60
+#define BOT_JUMP_SPRITE_AIRBORNE_DELAY_MS 800
+#define BOT_JUMP_SPRITE_FALL_SPEED_THRESHOLD 4.2f
+#define BOT_FRAME_MS 17
 
 extern jo_sidescroller_physics_params physics;
 
@@ -101,6 +104,8 @@ struct bot_instance
     bool prev_player2_kick2;
     bool bot_uses_shared_player_sprites;
     bool bot_is_ally;
+    int bot_airborne_time_ms;
+    bool bot_show_jump_sprite;
 };
 
 static bot_instance_t default_bot_instances[BOT_MAX_DEFAULT_COUNT] = {0};
@@ -198,6 +203,8 @@ static jo_sidescroller_physics_params *target_player_physics_ctx = &physics;
 #define prev_player2_kick2 (ctx->prev_player2_kick2)
 #define bot_uses_shared_player_sprites (ctx->bot_uses_shared_player_sprites)
 #define bot_is_ally_flag (ctx->bot_is_ally)
+#define bot_airborne_time_ms (ctx->bot_airborne_time_ms)
+#define bot_show_jump_sprite (ctx->bot_show_jump_sprite)
 
 static const jo_tile WalkTiles[] =
 {
@@ -714,6 +721,24 @@ static void bot_apply_physics(int map_pos_x, int map_pos_y)
 
     world_handle_character_collision(&bot_physics, &bot, &bot_map_pos_x, map_pos_y);
 
+    if (bot_physics.is_in_air)
+    {
+        bot_airborne_time_ms += BOT_FRAME_MS;
+        if (bot_physics.speed_y < 0.0f)
+            bot_show_jump_sprite = true;
+        else if (bot_physics.speed_y >= BOT_JUMP_SPRITE_FALL_SPEED_THRESHOLD)
+            bot_show_jump_sprite = true;
+        else if (bot_airborne_time_ms >= BOT_JUMP_SPRITE_AIRBORNE_DELAY_MS)
+            bot_show_jump_sprite = true;
+        else
+            bot_show_jump_sprite = false;
+    }
+    else
+    {
+        bot_airborne_time_ms = 0;
+        bot_show_jump_sprite = false;
+    }
+
     bot_world_x = (float)(bot_map_pos_x + bot.x);
     bot_world_y = (float)(map_pos_y + bot.y);
 }
@@ -746,7 +771,7 @@ static void bot_update_animation(void)
 {
     int speed_step;
 
-    if (bot_physics.is_in_air)
+    if (bot_physics.is_in_air && bot_show_jump_sprite)
     {
         reset_non_attack_anims();
 
@@ -1534,6 +1559,8 @@ void bot_instance_init(bot_instance_t *instance,
     bot_jump_hold_ms = 0;
     bot_jump_hold_target_ms = 0;
     bot_jump_cut_applied = false;
+    bot_airborne_time_ms = 0;
+    bot_show_jump_sprite = false;
     bot_warmup_frames = BOT_AI_WARMUP_FRAMES;
     bot_end_attack();
 
@@ -1870,7 +1897,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
                 jo_sprite_draw3D2(anim_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
         }
     }
-    else if (bot_physics.is_in_air)
+    else if (bot_physics.is_in_air && bot_show_jump_sprite)
     {
         bot_reset_animation_lists_except(-1);
         jo_sprite_draw3D2(bot.jump_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);

@@ -2,13 +2,20 @@
 #include "world_collision.h"
 #include "game_constants.h"
 
+#define PLATFORM_GROUNDED_SNAP_MAX_PIXELS (4)
+
 static bool has_vertical_collision(jo_sidescroller_physics_params *physics,
                                    character_t *controlled_character,
                                    int map_pos_x,
                                    int map_pos_y)
 {
     int dist;
+    int attr;
+    bool was_in_air;
+    int foot_x;
+    int foot_y;
 
+    was_in_air = physics->is_in_air;
     controlled_character->can_jump = false;
     if (physics->speed_y < 0.0f)
     {
@@ -16,11 +23,53 @@ static bool has_vertical_collision(jo_sidescroller_physics_params *physics,
         return false;
     }
 
+    foot_x = map_pos_x + controlled_character->x + CHARACTER_WIDTH_2;
+    foot_y = map_pos_y + controlled_character->y + CHARACTER_HEIGHT - 1;
+
     dist = jo_map_per_pixel_vertical_collision(
         WORLD_MAP_ID,
-        map_pos_x + controlled_character->x + CHARACTER_WIDTH_2,
+        foot_x,
         map_pos_y + controlled_character->y + CHARACTER_HEIGHT,
         JO_NULL);
+
+    /* Determine interaction type from the tile directly under character center feet. */
+    attr = jo_map_hitbox_detection_custom_boundaries(
+        WORLD_MAP_ID,
+        foot_x,
+        foot_y,
+        1,
+        1);
+
+    /* Only block attr and platform attr can be used as ground.
+       Attr 0 / omitted attribute are treated as no interaction. */
+    if (attr != MAP_TILE_BLOCK_ATTR && attr != MAP_TILE_PLATFORM_ATTR)
+    {
+        physics->is_in_air = true;
+        return false;
+    }
+
+    /* One-way platform behavior: attr 2 should not grab from the side while airborne. */
+    if (attr == MAP_TILE_PLATFORM_ATTR)
+    {
+        if (was_in_air)
+        {
+            /* While airborne, platform accepts only downward contact from above. */
+            if (physics->speed_y <= 0.0f || dist < -CHARACTER_JUMP_PER_PIXEL_TOLERANCE)
+            {
+                physics->is_in_air = true;
+                return false;
+            }
+        }
+        else
+        {
+            /* When already grounded, avoid large side-contact snap to platform top. */
+            if (dist < -PLATFORM_GROUNDED_SNAP_MAX_PIXELS)
+            {
+                physics->is_in_air = true;
+                return false;
+            }
+        }
+    }
 
     if (dist == JO_MAP_NO_COLLISION || dist > 0)
     {
@@ -30,8 +79,16 @@ static bool has_vertical_collision(jo_sidescroller_physics_params *physics,
         return false;
     }
 
-    if (dist < 0 && jo_is_float_equals_zero(physics->speed_y))
-        controlled_character->y += dist;
+    if (dist < 0)
+    {
+        if (attr == MAP_TILE_PLATFORM_ATTR)
+        {
+            if (was_in_air || dist >= -PLATFORM_GROUNDED_SNAP_MAX_PIXELS)
+                controlled_character->y += dist;
+        }
+        else if (jo_is_float_equals_zero(physics->speed_y))
+            controlled_character->y += dist;
+    }
 
     controlled_character->can_jump = true;
     physics->is_in_air = false;
@@ -60,11 +117,10 @@ static bool has_horizontal_collision(jo_sidescroller_physics_params *physics,
         2,
         20);
 
+    /* Only block attribute should block horizontal movement. */
     if (attr == JO_MAP_NO_COLLISION)
         return false;
-    if (attr != MAP_TILE_BLOCK_ATTR)
-        return false;
-    return true;
+    return (attr == MAP_TILE_BLOCK_ATTR);
 }
 
 void world_handle_character_collision(jo_sidescroller_physics_params *physics,

@@ -94,8 +94,7 @@ static void unload_battle_assets(void)
 
 static void reset_fight(int *map_pos_x, int *map_pos_y)
 {
-    *map_pos_x = WORLD_DEFAULT_X;
-    *map_pos_y = WORLD_DEFAULT_Y;
+    /* Player screen position (where the player is drawn on-screen) */
     player.x = 160 - CHARACTER_WIDTH / 2;
     player.y = 70;
     player.angle = 0;
@@ -103,6 +102,10 @@ static void reset_fight(int *map_pos_x, int *map_pos_y)
     player.spin = false;
     player.can_jump = true;
     player.life = 50;
+
+     /* Center camera on configured world coordinate where the player should appear. */
+     *map_pos_x = WORLD_CAMERA_TARGET_X - player.x;
+     *map_pos_y = WORLD_CAMERA_TARGET_Y - player.y;
 }
 
 static void select_active_character(ui_character_choice_t selected_character)
