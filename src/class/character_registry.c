@@ -78,7 +78,7 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
     {
     case UiCharacterAmy:
         profile.punch_count = 4;
-        profile.kick_count = 8;
+        profile.kick_count = 4;
         break;
     case UiCharacterTails:
         profile.move_count = 4;

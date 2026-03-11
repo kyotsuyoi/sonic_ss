@@ -7,6 +7,8 @@
 #define VARIABLE_JUMP_MAX_HOLD_MS (170)
 #define VARIABLE_JUMP_MIN_SPEED_FACTOR (0.40f)
 #define CHARGED_KICK_HOLD_MS (1000)
+#define GROUND_NO_WALK_BRAKE_FACTOR (0.65f)
+#define GROUND_NO_WALK_STOP_EPSILON (0.20f)
 
 character_t player;
 character_t player2;
@@ -344,6 +346,14 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 
 	player_input_punch(controlled_player, physics, punch_sfx, kick_sfx, a_down);
 	player_input_kick(controlled_player, physics, punch_sfx, kick_sfx, c_down, c_hold);
+
+	/* Global anti-slide: when no walk input on ground, bleed horizontal speed fast. */
+	if (!physics->is_in_air && !controlled_player->walk)
+	{
+		physics->speed *= GROUND_NO_WALK_BRAKE_FACTOR;
+		if (JO_ABS(physics->speed) < GROUND_NO_WALK_STOP_EPSILON)
+			physics->speed = 0.0f;
+	}
 
 	if (controlled_player->spin && spin_sfx != JO_NULL)
 	{

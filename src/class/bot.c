@@ -614,12 +614,12 @@ static bool bot_bind_shared_player_assets(int character)
     bot_defeated_sprite_id = player.defeated_sprite_id;
     bot_tail_base_id = (character == BotCharacterTails) ? tails_get_tail_base_id() : -1;
 
-    bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, move_count, 4);
-    bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, move_count, 4);
-    bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, move_count, 4);
-    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, stand_count, 4);
-    bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, punch_count, 4);
-    bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, kick_count, 4);
+    bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, stand_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, punch_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, kick_count, DEFAULT_SPRITE_FRAME_DURATION);
 
     if (!bot_validate_anim_set())
     {
@@ -1089,12 +1089,12 @@ static bool bot_bind_character_assets_to_instance(bot_character_assets_t *assets
     bot_defeated_sprite_id = assets->defeated_sprite_id;
     bot_tail_base_id = assets->tail_base_id;
 
-    bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, assets->move_count, 4);
-    bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, assets->move_count, 4);
-    bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, assets->move_count, 4);
-    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, assets->stand_count, 4);
-    bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, assets->punch_count, 4);
-    bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, assets->kick_count, 4);
+    bot_walking_anim_id = jo_create_sprite_anim(bot_walking_base_id, assets->move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_running1_anim_id = jo_create_sprite_anim(bot_running1_base_id, assets->move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_running2_anim_id = jo_create_sprite_anim(bot_running2_base_id, assets->move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_stand_anim_id = jo_create_sprite_anim(bot_stand_base_id, assets->stand_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_punch_anim_id = jo_create_sprite_anim(bot_punch_base_id, assets->punch_count, DEFAULT_SPRITE_FRAME_DURATION);
+    bot_kick_anim_id = jo_create_sprite_anim(bot_kick_base_id, assets->kick_count, DEFAULT_SPRITE_FRAME_DURATION);
 
     if (!bot_validate_anim_set())
     {
@@ -1810,6 +1810,19 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
 
     bot_draw_tail();
 
+    /* If bot is Knuckles and actively holding Kick1 for charged kick, always show charged sprite part1. */
+    if (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled && bot_current_attack == AiBotAttackKick1 && bot_attack_timer > 0)
+    {
+        int base_id = (bot.kick_anim_id >= 0) ? (jo_get_anim_sprite(bot.kick_anim_id) - jo_get_sprite_anim_frame(bot.kick_anim_id)) : -1;
+        if (base_id >= 0)
+        {
+            jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+            if (bot.flip)
+                jo_sprite_disable_horizontal_flip();
+            return;
+        }
+    }
+
     if (bot.spin && bot.spin_sprite_id >= 0)
     {
         bot_reset_animation_lists_except(-1);
@@ -1869,13 +1882,18 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
             {
                 if (bot.kick && !bot.kick2)
                 {
-                    jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                    /* Show charged sprite when the bot is actively in the Kick1 attack period
+                       (use bot_current_attack for robustness against animation resets). */
+                    if (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled && bot_current_attack == AiBotAttackKick1 && bot_attack_timer > 0)
+                        jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                    else
+                        jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
                 }
                 else if (bot.kick2)
                 {
                     int front_offset = bot.flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
                     if (bot.charged_kick_active && bot.charged_kick_phase <= 1)
-                        jo_sprite_draw3D2(base_id + 1, bot.x, bot.y, CHARACTER_SPRITE_Z);
+                        jo_sprite_draw3D2(base_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
                     else
                     {
                         jo_sprite_draw3D2(base_id + KNUCKLES_KICK_PART4_INDEX, bot.x, bot.y, CHARACTER_SPRITE_Z);
@@ -1891,7 +1909,16 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         {
             anim_sprite_id = (bot.kick_anim_id >= 0) ? jo_get_anim_sprite(bot.kick_anim_id) : -1;
             if (anim_sprite_id >= 0)
+            {
                 jo_sprite_draw3D2(anim_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+            }
+            else if (bot.kick2)
+            {
+                int base_id = (bot.kick_anim_id >= 0) ? (jo_get_anim_sprite(bot.kick_anim_id) - jo_get_sprite_anim_frame(bot.kick_anim_id)) : -1;
+                int desired_frame = (bot_kick_combo2_start_frame >= 0 && bot_kick_combo2_start_frame < bot_kick_frame_count) ? bot_kick_combo2_start_frame : (bot_kick_frame_count > 0 ? (bot_kick_frame_count - 1) : 0);
+                if (base_id >= 0)
+                    jo_sprite_draw3D2(base_id + desired_frame, bot.x, bot.y, CHARACTER_SPRITE_Z);
+            }
         }
     }
     else if (bot_physics.is_in_air && bot_show_jump_sprite)

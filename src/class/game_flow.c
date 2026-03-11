@@ -155,12 +155,12 @@ static void setup_player2_character(ui_character_choice_t selected_character)
 
     game_flow_remove_player2_runtime_anims();
 
-    player2.walking_anim_id = jo_create_sprite_anim(walking_base_id, move_count, 4);
-    player2.running1_anim_id = jo_create_sprite_anim(running1_base_id, move_count, 4);
-    player2.running2_anim_id = jo_create_sprite_anim(running2_base_id, move_count, 4);
-    player2.stand_sprite_id = jo_create_sprite_anim(stand_base_id, stand_count, 4);
-    player2.punch_anim_id = jo_create_sprite_anim(punch_base_id, punch_count, 4);
-    player2.kick_anim_id = jo_create_sprite_anim(kick_base_id, kick_count, 4);
+    player2.walking_anim_id = jo_create_sprite_anim(walking_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.running1_anim_id = jo_create_sprite_anim(running1_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.running2_anim_id = jo_create_sprite_anim(running2_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.stand_sprite_id = jo_create_sprite_anim(stand_base_id, stand_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.punch_anim_id = jo_create_sprite_anim(punch_base_id, punch_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.kick_anim_id = jo_create_sprite_anim(kick_base_id, kick_count, DEFAULT_SPRITE_FRAME_DURATION);
     player2_runtime_anims_created = true;
 
     player2.spin_sprite_id = player.spin_sprite_id;

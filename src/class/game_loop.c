@@ -1,4 +1,6 @@
 #include <jo/jo.h>
+#include <stdlib.h>
+#include <time.h>
 #include "player.h"
 #include "game_constants.h"
 #include "bot.h"
@@ -1143,6 +1145,8 @@ static void game_loop_draw_player2(void)
 void game_loop_init(game_loop_context_t *ctx)
 {
     g_ctx = ctx;
+    /* Seed RNG for AI randomness. */
+    srand((unsigned)time(NULL));
 }
 
 void game_loop_update(void)

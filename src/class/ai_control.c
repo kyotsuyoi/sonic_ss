@@ -5,6 +5,7 @@
 #include "damage_fx.h"
 #include "game_constants.h"
 #include "character_registry.h"
+#include <stdlib.h>
 
 #define BOT_ENGAGE_RANGE 9
 #define BOT_APPROACH_DISTANCE 16
@@ -58,6 +59,83 @@
 #define BOT_NAV_PROBE_HEIGHT 72
 #define BOT_NAV_LANE_TOLERANCE 8
 #define BOT_NAV_MAX_GROUND_DELTA 20
+
+static ui_character_choice_t ai_choice_from_character_id(int character_id)
+{
+    switch (character_id)
+    {
+    case CHARACTER_ID_AMY:
+        return UiCharacterAmy;
+    case CHARACTER_ID_TAILS:
+        return UiCharacterTails;
+    case CHARACTER_ID_KNUCKLES:
+        return UiCharacterKnuckles;
+    case CHARACTER_ID_SHADOW:
+        return UiCharacterShadow;
+    case CHARACTER_ID_SONIC:
+    default:
+        return UiCharacterSonic;
+    }
+}
+
+static int ai_bot_last_frame_for_attack(const character_t *attacker, int attack_kind)
+{
+    int cid = attacker->character_id;
+    character_animation_profile_t profile = character_registry_get_animation_profile(ai_choice_from_character_id(cid));
+    int punch_last = profile.punch_count - 1;
+    int kick_last = profile.kick_count - 1;
+
+    if (attack_kind == 0)
+    {
+        return JO_MAX(0, JO_MIN(punch_last, 2));
+    }
+    if (attack_kind == 1)
+    {
+        return JO_MAX(0, JO_MIN(punch_last, 3));
+    }
+    if (attack_kind == 2)
+    {
+        if (cid == CHARACTER_ID_KNUCKLES)
+            return -1;
+        if (cid == CHARACTER_ID_TAILS)
+            return 0;
+        if (cid == CHARACTER_ID_AMY)
+            return JO_MAX(0, JO_MIN(kick_last, 3));
+        return JO_MAX(0, JO_MIN(kick_last, 5));
+    }
+
+    if (cid == CHARACTER_ID_KNUCKLES)
+    {
+        if (attacker->charged_kick_active || attacker->charged_kick_phase > 0)
+            return JO_MAX(0, JO_MIN(kick_last, 2));
+        return JO_MAX(0, JO_MIN(kick_last, 3));
+    }
+    if (cid == CHARACTER_ID_TAILS)
+        return 0;
+    if (cid == CHARACTER_ID_AMY)
+        return JO_MAX(0, JO_MIN(kick_last, 7));
+    return JO_MAX(0, kick_last);
+}
+
+static bool ai_bot_attack_reached_hit_frame(const character_t *attacker, int attack_kind)
+{
+    int anim_id;
+    int last_frame;
+
+    if (attack_kind == 0 || attack_kind == 1)
+        anim_id = attacker->punch_anim_id;
+    else
+        anim_id = attacker->kick_anim_id;
+
+    if (anim_id < 0)
+        return false;
+
+    last_frame = ai_bot_last_frame_for_attack(attacker, attack_kind);
+    if (last_frame < 0)
+        return false;
+
+    return jo_get_sprite_anim_frame(anim_id) >= last_frame;
+}
 
 static bool bot_nav_has_headroom_at_x(int world_x, int world_y)
 {
@@ -203,14 +281,17 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
     if (ctx->bot_ref->charged_kick_enabled)
         long_attack_range += combat_profile.charged_kick_range_bonus;
 
-    style_noise = JO_ABS((ctx->player_world_x * 13)
-        + (ctx->player_world_y * 7)
-        + ((int)*ctx->bot_world_x_ref * 5)
-        + ((int)*ctx->bot_world_y_ref * 3)
-        + (*ctx->bot_attack_step_ref * 17)) % 100;
-    prefer_long_attack = (style_noise < BOT_ATTACK_STYLE_LONG_CHANCE);
-    if (ctx->bot_ref->charged_kick_enabled && style_noise < 65)
+    /* Prefer punches (combo). If Knuckles can charged-kick, only try long attack ~20% of the time. */
+    int long_chance = BOT_ATTACK_STYLE_LONG_CHANCE;
+    if (ctx->bot_ref->charged_kick_enabled)
+        long_chance = 20; /* attempt long attack ~20% for charged-kick characters */
+
+    if (long_chance <= 0)
+        prefer_long_attack = false;
+    else if (long_chance >= 100)
         prefer_long_attack = true;
+    else
+        prefer_long_attack = (rand() % 100) < long_chance;
 
     if (prefer_long_attack)
     {
@@ -413,7 +494,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         bool knuckles_charge_attack = (ctx->bot_ref->charged_kick_enabled
             && *ctx->bot_current_attack_ref == AiBotAttackKick2);
         int attack_damage = 0;
-        int attack_trigger = 0;
+        int attack_kind = -1;
         int attack_range = combat_profile.hit_range_punch1;
         float attack_knockback = ctx->bot_ref->knockback_punch1;
         int attack_stun = STUN_LIGHT_FRAMES;
@@ -421,7 +502,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         if (*ctx->bot_current_attack_ref == AiBotAttackPunch1)
         {
             attack_damage = combat_profile.damage_punch1;
-            attack_trigger = 1;
+            attack_kind = 0;
             attack_range = combat_profile.hit_range_punch1;
             attack_knockback = ctx->bot_ref->knockback_punch1;
             attack_stun = STUN_LIGHT_FRAMES;
@@ -429,7 +510,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         else if (*ctx->bot_current_attack_ref == AiBotAttackPunch2)
         {
             attack_damage = combat_profile.damage_punch2;
-            attack_trigger = 1;
+            attack_kind = 1;
             attack_range = combat_profile.hit_range_punch2;
             attack_knockback = ctx->bot_ref->knockback_punch2;
             attack_stun = STUN_HEAVY_FRAMES;
@@ -437,7 +518,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick1)
         {
             attack_damage = ctx->bot_ref->charged_kick_enabled ? 0 : combat_profile.damage_kick1;
-            attack_trigger = ctx->bot_ref->charged_kick_enabled ? 0 : 1;
+            attack_kind = ctx->bot_ref->charged_kick_enabled ? -1 : 2;
             attack_range = combat_profile.hit_range_kick1;
             attack_knockback = ctx->bot_ref->knockback_kick1;
             attack_stun = STUN_LIGHT_FRAMES;
@@ -445,7 +526,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick2)
         {
             attack_damage = knuckles_charge_attack ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
-            attack_trigger = 1;
+            attack_kind = 3;
             attack_range = knuckles_charge_attack
                 ? (combat_profile.hit_range_kick2 + combat_profile.charged_kick_range_bonus)
                 : combat_profile.hit_range_kick2;
@@ -457,7 +538,15 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                 : STUN_HEAVY_FRAMES;
         }
 
-        if (!*ctx->bot_attack_damage_done_ref && *ctx->bot_attack_timer_ref == attack_trigger && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref, (int)*ctx->bot_world_y_ref, ctx->bot_ref->flip, ctx->player_world_x, ctx->player_world_y, attack_range))
+        if (!*ctx->bot_attack_damage_done_ref
+            && attack_kind >= 0
+            && ai_bot_attack_reached_hit_frame(ctx->bot_ref, attack_kind)
+            && ctx->is_attack_in_range((int)*ctx->bot_world_x_ref,
+                                       (int)*ctx->bot_world_y_ref,
+                                       ctx->bot_ref->flip,
+                                       ctx->player_world_x,
+                                       ctx->player_world_y,
+                                       attack_range))
         {
             *ctx->bot_attack_damage_done_ref = true;
 
@@ -605,7 +694,8 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
 
         if (short_in_range && long_in_range)
         {
-            if (prefer_long_attack)
+            /* Prefer long attack but allow randomness to occasionally choose punch. */
+            if (prefer_long_attack && (rand() % 100) < 70)
                 ctx->start_attack(AiBotAttackKick1, request_combo);
             else
                 ctx->start_attack(AiBotAttackPunch1, request_combo);
@@ -614,9 +704,22 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         }
         if (long_in_range)
         {
-            ctx->start_attack(AiBotAttackKick1, request_combo);
-            ++(*ctx->bot_attack_step_ref);
-            return;
+            /* If punch also in range that case handled earlier. Here long only.
+               Prefer to approach and try to get punch range; only kick ~20% of the time. */
+            if ((rand() % 100) < 1)
+            {
+                ctx->start_attack(AiBotAttackKick1, request_combo);
+                ++(*ctx->bot_attack_step_ref);
+                return;
+            }
+            else
+            {
+                /* Move toward player to prefer punch/combo next frame. */
+                if (distance_x > 0)
+                    input.right_pressed = true;
+                else if (distance_x < 0)
+                    input.left_pressed = true;
+            }
         }
         if (short_in_range)
         {

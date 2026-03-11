@@ -6,8 +6,8 @@
 #define WORLD_DEFAULT_Y (120)
 
 /* World coordinates for camera centering on player at start */
-#define WORLD_CAMERA_TARGET_X (210)
-#define WORLD_CAMERA_TARGET_Y (1200)
+#define WORLD_CAMERA_TARGET_X (100)
+#define WORLD_CAMERA_TARGET_Y (800)
 
 /* Solid/block tile: horizontal + vertical collision */
 #define MAP_TILE_BLOCK_ATTR (1)
@@ -33,5 +33,8 @@
 #define STUN_LIGHT_FRAMES (18)
 #define STUN_HEAVY_FRAMES (24)
 #define COUNTER_STUN_FRAMES (120)
+
+/* Default sprite frame duration used when creating animations. Change to slow/faster global animation speed */
+#define DEFAULT_SPRITE_FRAME_DURATION (6)
 
 #endif

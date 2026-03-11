@@ -34,10 +34,6 @@ static const jo_tile AmyWalkingTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyRunning1Tiles[] =
@@ -85,15 +81,6 @@ static const jo_tile AmyKickTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 10, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 11, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 12, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyDefeatedTile[] =
@@ -194,19 +181,20 @@ void amy_running_animation_handling(void)
 
     player_update_punch_state_for_character(&character_ref);
 
-    if(character_ref.kick){
+    if (character_ref.kick) {
         int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame > 4 || jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
+        int kick_last_frame = JO_TILE_COUNT(AmyKickTiles) - 1;
+        if (anim_frame > kick_last_frame || jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
             jo_set_sprite_anim_frame(character_ref.kick_anim_id, 0);
             jo_start_sprite_anim(character_ref.kick_anim_id);
         }
-        if (anim_frame >= 4) {
+        if (anim_frame >= kick_last_frame) {
             if (character_ref.kick2_requested) {
                 character_ref.kick = false;
                 character_ref.kick2 = true;
                 character_ref.kick2_requested = false;
                 character_ref.perform_kick2 = true;
-                jo_set_sprite_anim_frame(character_ref.kick_anim_id, 5);
+                jo_set_sprite_anim_frame(character_ref.kick_anim_id, kick_last_frame);
                 jo_start_sprite_anim(character_ref.kick_anim_id);
             } else {
                 character_ref.kick = false;
@@ -216,11 +204,12 @@ void amy_running_animation_handling(void)
         }
     } else if (character_ref.kick2) {
         int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame < 5) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 5);
+        int kick_last_frame = JO_TILE_COUNT(AmyKickTiles) - 1;
+        if (anim_frame < kick_last_frame) {
+            jo_set_sprite_anim_frame(character_ref.kick_anim_id, kick_last_frame);
             jo_start_sprite_anim(character_ref.kick_anim_id);
         }
-        if (anim_frame >= 7 && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
+        if (anim_frame >= kick_last_frame && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
             character_ref.kick2 = false;
             character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
             jo_reset_sprite_anim(character_ref.kick_anim_id);
@@ -304,16 +293,16 @@ void load_amy(void)
     if (!amy_loaded)
     {
         amy_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_WLK.TGA", JO_COLOR_Green, AmyWalkingTiles, JO_TILE_COUNT(AmyWalkingTiles));
-        amy_walking_anim_id = jo_create_sprite_anim(amy_walking_base_id, JO_TILE_COUNT(AmyWalkingTiles), 4);
+        amy_walking_anim_id = jo_create_sprite_anim(amy_walking_base_id, JO_TILE_COUNT(AmyWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_RUN1.TGA", JO_COLOR_Green, AmyRunning1Tiles, JO_TILE_COUNT(AmyRunning1Tiles));
-        amy_running1_anim_id = jo_create_sprite_anim(amy_running1_base_id, JO_TILE_COUNT(AmyRunning1Tiles), 4);
+        amy_running1_anim_id = jo_create_sprite_anim(amy_running1_base_id, JO_TILE_COUNT(AmyRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_RUN2.TGA", JO_COLOR_Green, AmyRunning2Tiles, JO_TILE_COUNT(AmyRunning2Tiles));
-        amy_running2_anim_id = jo_create_sprite_anim(amy_running2_base_id, JO_TILE_COUNT(AmyRunning2Tiles), 4);
+        amy_running2_anim_id = jo_create_sprite_anim(amy_running2_base_id, JO_TILE_COUNT(AmyRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_STD.TGA", JO_COLOR_Green, AmyStandTiles, JO_TILE_COUNT(AmyStandTiles));
-        amy_stand_anim_id = jo_create_sprite_anim(amy_stand_base_id, JO_TILE_COUNT(AmyStandTiles), 4);
+        amy_stand_anim_id = jo_create_sprite_anim(amy_stand_base_id, JO_TILE_COUNT(AmyStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "AMY_SPN.TGA", JO_COLOR_Green);
         amy_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "AMY_JMP.TGA", JO_COLOR_Green);
@@ -321,10 +310,10 @@ void load_amy(void)
         amy_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_DFT.TGA", JO_COLOR_Green, AmyDefeatedTile, JO_TILE_COUNT(AmyDefeatedTile));
 
         amy_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_PNC.TGA", JO_COLOR_Green, AmyPunchTiles, JO_TILE_COUNT(AmyPunchTiles));
-        amy_punch_anim_id = jo_create_sprite_anim(amy_punch_base_id, JO_TILE_COUNT(AmyPunchTiles), 4);
+        amy_punch_anim_id = jo_create_sprite_anim(amy_punch_base_id, JO_TILE_COUNT(AmyPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_KCK.TGA", JO_COLOR_Green, AmyKickTiles, JO_TILE_COUNT(AmyKickTiles));
-        amy_kick_anim_id = jo_create_sprite_anim(amy_kick_base_id, JO_TILE_COUNT(AmyKickTiles), 4);
+        amy_kick_anim_id = jo_create_sprite_anim(amy_kick_base_id, JO_TILE_COUNT(AmyKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_loaded = true;
     }

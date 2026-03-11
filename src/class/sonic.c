@@ -345,16 +345,17 @@ void load_sonic(void)
     if (!sonic_loaded)
     {
         sonic_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_WLK.TGA", JO_COLOR_Green, SonicWalkingTiles, JO_TILE_COUNT(SonicWalkingTiles));
-        sonic_walking_anim_id = jo_create_sprite_anim(sonic_walking_base_id, JO_TILE_COUNT(SonicWalkingTiles), 4);
+
+        sonic_walking_anim_id = jo_create_sprite_anim(sonic_walking_base_id, JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_RUN1.TGA", JO_COLOR_Green, SonicRunning1Tiles, JO_TILE_COUNT(SonicRunning1Tiles));
-        sonic_running1_anim_id = jo_create_sprite_anim(sonic_running1_base_id, JO_TILE_COUNT(SonicRunning1Tiles), 4);
+        sonic_running1_anim_id = jo_create_sprite_anim(sonic_running1_base_id, JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_RUN2.TGA", JO_COLOR_Green, SonicRunning2Tiles, JO_TILE_COUNT(SonicRunning2Tiles));
-        sonic_running2_anim_id = jo_create_sprite_anim(sonic_running2_base_id, JO_TILE_COUNT(SonicRunning2Tiles), 4);
+        sonic_running2_anim_id = jo_create_sprite_anim(sonic_running2_base_id, JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_STD.TGA", JO_COLOR_Green, SonicStandTiles, JO_TILE_COUNT(SonicStandTiles));
-        sonic_stand_anim_id = jo_create_sprite_anim(sonic_stand_base_id, JO_TILE_COUNT(SonicStandTiles), 4);
+        sonic_stand_anim_id = jo_create_sprite_anim(sonic_stand_base_id, JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "SNC_SPN.TGA", JO_COLOR_Green);
         sonic_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "SNC_JMP.TGA", JO_COLOR_Green);
@@ -362,10 +363,10 @@ void load_sonic(void)
         sonic_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_DFT.TGA", JO_COLOR_Green, SonicDefeatedTile, JO_TILE_COUNT(SonicDefeatedTile));
 
         sonic_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_PNC.TGA", JO_COLOR_Green, SonicPunchTiles, JO_TILE_COUNT(SonicPunchTiles));
-        sonic_punch_anim_id = jo_create_sprite_anim(sonic_punch_base_id, JO_TILE_COUNT(SonicPunchTiles), 4);
+        sonic_punch_anim_id = jo_create_sprite_anim(sonic_punch_base_id, JO_TILE_COUNT(SonicPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_KCK.TGA", JO_COLOR_Green, SonicKickTiles, JO_TILE_COUNT(SonicKickTiles));
-        sonic_kick_anim_id = jo_create_sprite_anim(sonic_kick_base_id, JO_TILE_COUNT(SonicKickTiles), 4);
+        sonic_kick_anim_id = jo_create_sprite_anim(sonic_kick_base_id, JO_TILE_COUNT(SonicKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         sonic_loaded = true;
     }

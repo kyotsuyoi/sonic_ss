@@ -379,16 +379,16 @@ void load_knuckles(void)
     if (!knuckles_loaded)
     {
         knuckles_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_WLK.TGA", JO_COLOR_Green, KnucklesWalkingTiles, JO_TILE_COUNT(KnucklesWalkingTiles));
-        knuckles_walking_anim_id = jo_create_sprite_anim(knuckles_walking_base_id, JO_TILE_COUNT(KnucklesWalkingTiles), 4);
+            knuckles_walking_anim_id = jo_create_sprite_anim(knuckles_walking_base_id, JO_TILE_COUNT(KnucklesWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_RUN1.TGA", JO_COLOR_Green, KnucklesRunning1Tiles, JO_TILE_COUNT(KnucklesRunning1Tiles));
-        knuckles_running1_anim_id = jo_create_sprite_anim(knuckles_running1_base_id, JO_TILE_COUNT(KnucklesRunning1Tiles), 4);
+            knuckles_running1_anim_id = jo_create_sprite_anim(knuckles_running1_base_id, JO_TILE_COUNT(KnucklesRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_RUN1.TGA", JO_COLOR_Green, KnucklesRunning2Tiles, JO_TILE_COUNT(KnucklesRunning2Tiles));
-        knuckles_running2_anim_id = jo_create_sprite_anim(knuckles_running2_base_id, JO_TILE_COUNT(KnucklesRunning2Tiles), 4);
+            knuckles_running2_anim_id = jo_create_sprite_anim(knuckles_running2_base_id, JO_TILE_COUNT(KnucklesRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_STD.TGA", JO_COLOR_Green, KnucklesStandTiles, JO_TILE_COUNT(KnucklesStandTiles));
-        knuckles_stand_anim_id = jo_create_sprite_anim(knuckles_stand_base_id, JO_TILE_COUNT(KnucklesStandTiles), 4);
+            knuckles_stand_anim_id = jo_create_sprite_anim(knuckles_stand_base_id, JO_TILE_COUNT(KnucklesStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "KNK_SPN.TGA", JO_COLOR_Green);
         knuckles_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "KNK_JMP.TGA", JO_COLOR_Green);
@@ -396,10 +396,10 @@ void load_knuckles(void)
         knuckles_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_DFT.TGA", JO_COLOR_Green, KnucklesDefeatedTile, JO_TILE_COUNT(KnucklesDefeatedTile));
 
         knuckles_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_PNC.TGA", JO_COLOR_Green, KnucklesPunchTiles, JO_TILE_COUNT(KnucklesPunchTiles));
-        knuckles_punch_anim_id = jo_create_sprite_anim(knuckles_punch_base_id, JO_TILE_COUNT(KnucklesPunchTiles), 4);
+            knuckles_punch_anim_id = jo_create_sprite_anim(knuckles_punch_base_id, JO_TILE_COUNT(KnucklesPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_KCK.TGA", JO_COLOR_Green, KnucklesKickTiles, JO_TILE_COUNT(KnucklesKickTiles));
-        knuckles_kick_anim_id = jo_create_sprite_anim(knuckles_kick_base_id, JO_TILE_COUNT(KnucklesKickTiles), 4);
+            knuckles_kick_anim_id = jo_create_sprite_anim(knuckles_kick_base_id, JO_TILE_COUNT(KnucklesKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_loaded = true;
     }

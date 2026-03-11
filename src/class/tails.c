@@ -411,17 +411,17 @@ void load_tails(void)
     if (!tails_loaded)
     {
         tails_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_WLK.TGA", JO_COLOR_Green, TailsWalkingTiles, JO_TILE_COUNT(TailsWalkingTiles));
-        tails_walking_anim_id = jo_create_sprite_anim(tails_walking_base_id, JO_TILE_COUNT(TailsWalkingTiles), 4);
+            tails_walking_anim_id = jo_create_sprite_anim(tails_walking_base_id, JO_TILE_COUNT(TailsWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_RUN1.TGA", JO_COLOR_Green, TailsRunning1Tiles, JO_TILE_COUNT(TailsRunning1Tiles));
-        tails_running1_anim_id = jo_create_sprite_anim(tails_running1_base_id, JO_TILE_COUNT(TailsRunning1Tiles), 4);
+            tails_running1_anim_id = jo_create_sprite_anim(tails_running1_base_id, JO_TILE_COUNT(TailsRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         // We don't have TLS_RUN2.TGA, reuse TLS_RUN1.TGA for the second running level
         tails_running2_base_id = tails_running1_base_id;
-        tails_running2_anim_id = jo_create_sprite_anim(tails_running2_base_id, JO_TILE_COUNT(TailsRunning1Tiles), 4);
+            tails_running2_anim_id = jo_create_sprite_anim(tails_running2_base_id, JO_TILE_COUNT(TailsRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_STD.TGA", JO_COLOR_Green, TailsStandTiles, JO_TILE_COUNT(TailsStandTiles));
-        tails_stand_anim_id = jo_create_sprite_anim(tails_stand_base_id, JO_TILE_COUNT(TailsStandTiles), 4);
+            tails_stand_anim_id = jo_create_sprite_anim(tails_stand_base_id, JO_TILE_COUNT(TailsStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_SPN.TGA", JO_COLOR_Green);
         tails_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_JMP.TGA", JO_COLOR_Green);
@@ -431,10 +431,10 @@ void load_tails(void)
         tails_tail_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_TLS.TGA", JO_COLOR_Green, TailsTailTiles, JO_TILE_COUNT(TailsTailTiles));
 
         tails_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_PNC.TGA", JO_COLOR_Green, TailsPunchTiles, JO_TILE_COUNT(TailsPunchTiles));
-        tails_punch_anim_id = jo_create_sprite_anim(tails_punch_base_id, JO_TILE_COUNT(TailsPunchTiles), 4);
+            tails_punch_anim_id = jo_create_sprite_anim(tails_punch_base_id, JO_TILE_COUNT(TailsPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_KCK.TGA", JO_COLOR_Green, TailsKickTiles, JO_TILE_COUNT(TailsKickTiles));
-        tails_kick_anim_id = jo_create_sprite_anim(tails_kick_base_id, JO_TILE_COUNT(TailsKickTiles), 4);
+            tails_kick_anim_id = jo_create_sprite_anim(tails_kick_base_id, JO_TILE_COUNT(TailsKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_loaded = true;
     }
