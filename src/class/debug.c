@@ -8,7 +8,7 @@ static int fps = 0;
 static int last_frame_count = 0;
 static int frame_accumulator = 0;
 
-#define DEBUG_SAFE_TOP_LINES 7
+#define DEBUG_SAFE_TOP_LINES 10
 
 #define DEBUG_DISPLAY_HARDWARE 0
 #define DEBUG_DISPLAY_PLAYER   1

@@ -2,6 +2,7 @@
 #define UI_CONTROL_H
 
 #include <jo/jo.h>
+#include "runtime_log.h"
 
 typedef enum
 {
@@ -25,6 +26,9 @@ typedef enum
     UiPauseOptionContinue = 0,
     UiPauseOptionResetFight,
     UiPauseOptionCharacterSelect,
+    UiPauseOptionDebug,
+    UiPauseOptionLogs,
+    UiPauseOptionLogPage,
     UiPauseOptionCount
 } ui_pause_option_t;
 
@@ -94,6 +98,7 @@ typedef struct
     bool game_paused;
     bool debug_enabled;
     ui_debug_mode_t debug_mode;
+    runtime_log_mode_t log_mode;
     ui_pause_option_t pause_selected_option;
     bool pause_up_released;
     bool pause_down_released;
@@ -119,5 +124,6 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                                    void *user_data);
 void ui_control_handle_start_toggle(ui_control_state_t *state);
 void ui_control_reset_menu_bgm_state(void);
+void ui_control_reset_menu_sprites(void);
 
 #endif

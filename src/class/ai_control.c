@@ -5,6 +5,7 @@
 #include "damage_fx.h"
 #include "game_constants.h"
 #include "character_registry.h"
+#include "jo_audio_ext/jo_map_ext.h"
 #include <stdlib.h>
 
 #define BOT_ENGAGE_RANGE 9
@@ -146,7 +147,7 @@ static bool bot_nav_has_headroom_at_x(int world_x, int world_y)
     if (probe_x < 0 || probe_y < 0)
         return false;
 
-    attr = jo_map_hitbox_detection_custom_boundaries(
+    attr = jo_map_hitbox_detection_custom_boundaries_ext(
         WORLD_MAP_ID,
         probe_x,
         probe_y,
@@ -161,7 +162,7 @@ static bool bot_nav_is_ground_reachable_at_x(int candidate_x, int bot_world_y)
     int attr;
     int foot_probe_x = candidate_x + 1;
     int foot_probe_y = bot_world_y + CHARACTER_HEIGHT - 1;
-    int dist = jo_map_per_pixel_vertical_collision(
+    int dist = jo_map_per_pixel_vertical_collision_ext(
         WORLD_MAP_ID,
         candidate_x + CHARACTER_WIDTH_2,
         bot_world_y + CHARACTER_HEIGHT,
@@ -170,7 +171,7 @@ static bool bot_nav_is_ground_reachable_at_x(int candidate_x, int bot_world_y)
     if (candidate_x < 0 || bot_world_y < 0)
         return false;
 
-    attr = jo_map_hitbox_detection_custom_boundaries(
+    attr = jo_map_hitbox_detection_custom_boundaries_ext(
         WORLD_MAP_ID,
         foot_probe_x,
         foot_probe_y,

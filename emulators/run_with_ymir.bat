@@ -15,7 +15,8 @@ if not exist "%YMIR_EXECUTABLE_PATH%" (
 )
 
 if exist "%GAME_BIN_CUE%" (
-"%YMIR_EXECUTABLE_PATH%" "%GAME_BIN_CUE%"
+rem forward any args to the emulator (e.g. -D -E for debug/exceptions)
+"%YMIR_EXECUTABLE_PATH%" %* "%GAME_BIN_CUE%"
 ) else (
 echo Please compile first ! Missing %GAME_BIN_CUE%
 pause

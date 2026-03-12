@@ -8,7 +8,10 @@
 #include "world_physics.h"
 #include "damage_fx.h"
 #include "world_background.h"
+#include "world_map.h"
 #include "game_loop.h"
+#include "runtime_log.h"
+#include "rotating_sprite_pool.h"
 
 static character_handlers_t active_handlers;
 static ui_character_choice_t active_character = UiCharacterSonic;
@@ -21,17 +24,14 @@ static int player2_tail_base_id = -1;
 static int player2_kick_sprite_id = -1;
 static bool loading_pending = false;
 static bool loading_assets_ready = false;
-static bool loading_show_first_frame = false;
 static ui_character_choice_t loading_selected_character = UiCharacterSonic;
 static ui_character_choice_t loading_selected_bot_character = UiCharacterAmy;
 static int battle_sprite_start_id = -1;
-static int loading_delay_frames = 0;
 static bool cdda_start_pending = false;
 static int cdda_start_delay_frames = 0;
 static int cdda_debug_state = 0;
 static int cdda_attempts_left = 0;
 
-#define LOADING_MIN_FRAMES 60
 #define CDDA_START_DELAY_FRAMES 20
 #define CDDA_RETRY_DELAY_FRAMES 60
 #define CDDA_MAX_ATTEMPTS 8
@@ -85,6 +85,7 @@ static void unload_battle_assets(void)
     if (battle_sprite_start_id >= 0)
     {
         jo_sprite_free_from(battle_sprite_start_id);
+        rotating_sprite_pool_release_freed_sprites(battle_sprite_start_id);
         bot_invalidate_asset_cache();
     }
 
@@ -155,12 +156,12 @@ static void setup_player2_character(ui_character_choice_t selected_character)
 
     game_flow_remove_player2_runtime_anims();
 
-    player2.walking_anim_id = jo_create_sprite_anim(walking_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
-    player2.running1_anim_id = jo_create_sprite_anim(running1_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
-    player2.running2_anim_id = jo_create_sprite_anim(running2_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
-    player2.stand_sprite_id = jo_create_sprite_anim(stand_base_id, stand_count, DEFAULT_SPRITE_FRAME_DURATION);
-    player2.punch_anim_id = jo_create_sprite_anim(punch_base_id, punch_count, DEFAULT_SPRITE_FRAME_DURATION);
-    player2.kick_anim_id = jo_create_sprite_anim(kick_base_id, kick_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.walking_anim_id = sprite_safe_create_anim(walking_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.running1_anim_id = sprite_safe_create_anim(running1_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.running2_anim_id = sprite_safe_create_anim(running2_base_id, move_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.stand_sprite_id = sprite_safe_create_anim(stand_base_id, stand_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.punch_anim_id = sprite_safe_create_anim(punch_base_id, punch_count, DEFAULT_SPRITE_FRAME_DURATION);
+    player2.kick_anim_id = sprite_safe_create_anim(kick_base_id, kick_count, DEFAULT_SPRITE_FRAME_DURATION);
     player2_runtime_anims_created = true;
 
     player2.spin_sprite_id = player.spin_sprite_id;
@@ -173,12 +174,7 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.hit_range_kick2 = player.hit_range_kick2;
     player2.attack_forward_impulse_light = player.attack_forward_impulse_light;
     player2.attack_forward_impulse_heavy = player.attack_forward_impulse_heavy;
-    player2.knockback_punch1 = player.knockback_punch1;
-    player2.knockback_punch2 = player.knockback_punch2;
-    player2.knockback_kick1 = player.knockback_kick1;
-    player2.knockback_kick2 = player.knockback_kick2;
-    player2.charged_kick_enabled = player.charged_kick_enabled;
-    player2.charged_kick_hold_ms = 0;
+    
     player2.charged_kick_ready = false;
     player2.charged_kick_active = false;
     player2.charged_kick_phase = 0;
@@ -255,8 +251,8 @@ void game_flow_start_from_menu(ui_character_choice_t selected_character,
     loading_selected_bot_character = selected_bot_character;
     loading_pending = true;
     loading_assets_ready = false;
-    loading_show_first_frame = true;
-    loading_delay_frames = 0;
+    ui_control_reset_menu_sprites();
+    world_map_load();
     ctx->ui_state->game_paused = false;
     ctx->ui_state->current_game_state = UiGameStateLoading;
 }
@@ -266,32 +262,45 @@ void game_flow_process_loading(void *user_data)
     game_flow_context_t *ctx = (game_flow_context_t *)user_data;
     int bot_count;
 
+    jo_printf(0, 20, "game_flow: process_loading start");
+    runtime_log("game_flow: process_loading start");
+
     if (!loading_pending)
         return;
 
-    if (loading_show_first_frame)
-    {
-        loading_show_first_frame = false;
-        return;
-    }
-
     if (!loading_assets_ready)
     {
+        jo_printf(0, 200, "game_flow: beginning asset preparation");
+        runtime_log("game_flow: beginning asset preparation");
         if (battle_sprite_start_id < 0)
             battle_sprite_start_id = jo_get_last_sprite_id() + 1;
 
+        jo_printf(0, 201, "game_flow: calling unload_battle_assets");
         unload_battle_assets();
+        jo_printf(0, 202, "game_flow: unload_battle_assets returned");
+
         player = (character_t){0};
         player2 = (character_t){0};
+        jo_printf(0, 203, "game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
+        runtime_log("game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
         ensure_active_character_loaded(loading_selected_character);
+        jo_printf(0, 204, "game_flow: ensure_active_character_loaded returned");
 
         if (ctx->ui_state->menu_multiplayer_versus)
+        {
+            jo_printf(0, 205, "game_flow: calling setup_player2_character(%d)", (int)ctx->ui_state->menu_selected_player2_character);
+            runtime_log("game_flow: calling setup_player2_character(%d)", (int)ctx->ui_state->menu_selected_player2_character);
             setup_player2_character(ctx->ui_state->menu_selected_player2_character);
+            jo_printf(0, 206, "game_flow: setup_player2_character returned");
+        }
         else
             player2 = (character_t){0};
 
+        jo_printf(0, 207, "game_flow: world_physics_init_character");
         world_physics_init_character(ctx->physics);
+        jo_printf(0, 208, "game_flow: reset_fight");
         reset_fight(ctx->map_pos_x, ctx->map_pos_y);
+        jo_printf(0, 209, "game_flow: damage_fx_reset");
         damage_fx_reset();
         *ctx->player_defeated = false;
         bot_count = ctx->ui_state->menu_bot_count;
@@ -299,11 +308,14 @@ void game_flow_process_loading(void *user_data)
         {
             if (bot_count > 0)
             {
+                jo_printf(0, 210, "game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
+                runtime_log("game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
                 bot_init_versus((int)loading_selected_character,
                                 (int)ctx->ui_state->menu_selected_player2_character,
                                 bot_count,
                                 *ctx->map_pos_x + player.x,
                                 *ctx->map_pos_y + player.y);
+                jo_printf(0, 211, "game_flow: bot_init_versus returned");
             }
             else
             {
@@ -315,26 +327,33 @@ void game_flow_process_loading(void *user_data)
         {
             bot_set_active_count(bot_count);
             if (bot_count > 0)
+            {
+                jo_printf(0, 212, "game_flow: calling bot_init selected_char=%d bot_char=%d bot_count=%d", (int)loading_selected_character, (int)loading_selected_bot_character, bot_count);
+                runtime_log("game_flow: calling bot_init selected_char=%d bot_char=%d bot_count=%d", (int)loading_selected_character, (int)loading_selected_bot_character, bot_count);
                 bot_init((int)loading_selected_character,
                          (int)loading_selected_bot_character,
                          *ctx->map_pos_x + player.x,
                          *ctx->map_pos_y + player.y);
+                jo_printf(0, 213, "game_flow: bot_init returned");
+            }
         }
 
         loading_assets_ready = true;
-        loading_delay_frames = 0;
+        jo_printf(0, 21, "game_flow: assets ready");
+        runtime_log("game_flow: assets ready");
     }
 
-    ++loading_delay_frames;
-    if (loading_delay_frames < LOADING_MIN_FRAMES)
+    if (!world_map_is_ready())
         return;
 
     loading_pending = false;
     loading_assets_ready = false;
-    loading_delay_frames = 0;
     world_background_load();
+    jo_printf(0, 22, "game_flow: world_background_load called");
     ctx->ui_state->game_paused = false;
     ctx->ui_state->current_game_state = UiGameStatePlaying;
+    jo_printf(0, 23, "game_flow: switching to playing");
+    runtime_log("game_flow: switching to playing");
 }
 
 void game_flow_reset_fight(void *user_data)

@@ -17,6 +17,10 @@
 #include "game_loop.h"
 #include "damage_fx.h"
 #include "character_registry.h"
+#include "vram_cache.h"
+#include "runtime_log.h"
+#include "world_map.h"
+#include "jo_audio_ext/jo_map_ext.h"
 
 static game_loop_context_t *g_ctx;
 static jo_sidescroller_physics_params g_player2_physics;
@@ -58,6 +62,8 @@ static bool g_dbg_pvp_hit_k2 = false;
 static bool g_dbg_pvp_available = false;
 static int g_p1_airborne_time_ms = 0;
 static int g_p2_airborne_time_ms = 0;
+static int g_runtime_playing_update_logs = 0;
+static int g_runtime_playing_draw_logs = 0;
 
 #define TAILS_KICK1_ROTATION_TIME 16
 #define TAILS_KICK2_ROTATION_TIME 32
@@ -1147,6 +1153,8 @@ void game_loop_init(game_loop_context_t *ctx)
     g_ctx = ctx;
     /* Seed RNG for AI randomness. */
     srand((unsigned)time(NULL));
+    /* Inicializa o cache VRAM/WRAM para evitar uso de APIs não inicializadas. */
+    vram_cache_init();
 }
 
 void game_loop_update(void)
@@ -1156,6 +1164,8 @@ void game_loop_update(void)
 
     if (g_ctx->ui_state->current_game_state == UiGameStateLoading)
     {
+        g_runtime_playing_update_logs = 0;
+        g_runtime_playing_draw_logs = 0;
         g_player2_initialized = false;
         g_player2_defeated = false;
         game_flow_process_loading(g_ctx->game_flow_ctx);
@@ -1164,10 +1174,20 @@ void game_loop_update(void)
 
     if (g_ctx->ui_state->current_game_state != UiGameStatePlaying || g_ctx->ui_state->game_paused)
     {
+        g_runtime_playing_update_logs = 0;
+        g_runtime_playing_draw_logs = 0;
         if (g_ctx->ui_state->current_game_state != UiGameStatePlaying)
             g_player2_initialized = false;
         return;
     }
+
+    if (g_runtime_playing_update_logs < 4)
+    {
+        runtime_log("upd: begin");
+        ++g_runtime_playing_update_logs;
+    }
+
+    world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
 
     game_loop_sync_player2_mode();
 
@@ -1175,6 +1195,12 @@ void game_loop_update(void)
     g_player2_defeated = (player2.life <= 0);
 
     game_loop_process_player_vs_player_hits();
+
+    if (g_runtime_playing_update_logs < 5)
+    {
+        runtime_log("upd: hits done");
+        ++g_runtime_playing_update_logs;
+    }
 
     bot_update(&player,
                g_ctx->player_defeated,
@@ -1185,6 +1211,12 @@ void game_loop_update(void)
                g_player2_active,
                *g_ctx->map_pos_x,
                *g_ctx->map_pos_y);
+
+    if (g_runtime_playing_update_logs < 6)
+    {
+        runtime_log("upd: bot done");
+        ++g_runtime_playing_update_logs;
+    }
 }
 
 void game_loop_reset_player2_runtime(void)
@@ -1245,6 +1277,10 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->current_game_state == UiGameStateLoading)
     {
+        // Avança a carga do mapa (não-bloqueante). world_map_do_load_step
+        // fará leituras incrementais via vram_cache e só chamará
+        // jo_map_load_from_file quando o pack estiver pronto.
+        world_map_do_load_step();
         jo_move_background(0, 0);
         ui_control_draw_loading();
         return;
@@ -1259,12 +1295,44 @@ void game_loop_draw(void)
     }
 
     world_background_set_gameplay();
+    if (g_runtime_playing_draw_logs < 1)
+    {
+        runtime_log("draw: bg mode");
+        ++g_runtime_playing_draw_logs;
+    }
     world_background_draw_parallax(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    if (g_runtime_playing_draw_logs < 2)
+    {
+        runtime_log("draw: parallax");
+        ++g_runtime_playing_draw_logs;
+    }
 
-    jo_map_draw(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    // Ensure any scheduled WRAM->VRAM uploads are performed before desenhar
+    // o mapa. Isso garante que as tiles presentes em WRAM estejam na VRAM
+    // quando o `jo_map_draw` for executado.
+    vram_cache_do_uploads();
+    if (g_runtime_playing_draw_logs < 3)
+    {
+        runtime_log("draw: uploads");
+        ++g_runtime_playing_draw_logs;
+    }
+
+    world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+
+    jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    if (g_runtime_playing_draw_logs < 4)
+    {
+        runtime_log("draw: map");
+        ++g_runtime_playing_draw_logs;
+    }
     prev_y = player.y;
     world_handle_player_collision(g_ctx->physics, &player, g_ctx->map_pos_x, *g_ctx->map_pos_y);
     world_camera_handle(&player, prev_y, g_ctx->map_pos_y);
+    if (g_runtime_playing_draw_logs < 5)
+    {
+        runtime_log("draw: camera");
+        ++g_runtime_playing_draw_logs;
+    }
     game_loop_sync_player2_mode();
     game_loop_update_player2_runtime();
     game_flow_update_animation();
@@ -1295,6 +1363,11 @@ void game_loop_draw(void)
     game_loop_draw_player2();
     bot_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
     damage_fx_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    if (g_runtime_playing_draw_logs < 6)
+    {
+        runtime_log("draw: chars");
+        ++g_runtime_playing_draw_logs;
+    }
 
     if (*g_ctx->player_defeated)
         jo_printf(14, 2, "PLAYER KO");
@@ -1308,6 +1381,9 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->debug_enabled)
         debug_frame();
+
+    /* Draw runtime_log once at the end of the frame (bottom area) */
+    runtime_log_draw(0, 16);
 }
 
 void game_loop_input(void)

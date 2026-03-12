@@ -1,6 +1,7 @@
 #include <jo/jo.h>
 #include "world_collision.h"
 #include "game_constants.h"
+#include "jo_audio_ext/jo_map_ext.h"
 
 #define PLATFORM_GROUNDED_SNAP_MAX_PIXELS (4)
 
@@ -26,14 +27,14 @@ static bool has_vertical_collision(jo_sidescroller_physics_params *physics,
     foot_x = map_pos_x + controlled_character->x + CHARACTER_WIDTH_2;
     foot_y = map_pos_y + controlled_character->y + CHARACTER_HEIGHT - 1;
 
-    dist = jo_map_per_pixel_vertical_collision(
+    dist = jo_map_per_pixel_vertical_collision_ext(
         WORLD_MAP_ID,
         foot_x,
         map_pos_y + controlled_character->y + CHARACTER_HEIGHT,
         JO_NULL);
 
     /* Determine interaction type from the tile directly under character center feet. */
-    attr = jo_map_hitbox_detection_custom_boundaries(
+    attr = jo_map_hitbox_detection_custom_boundaries_ext(
         WORLD_MAP_ID,
         foot_x,
         foot_y,
@@ -110,7 +111,7 @@ static bool has_horizontal_collision(jo_sidescroller_physics_params *physics,
     else
         return false;
 
-    attr = jo_map_hitbox_detection_custom_boundaries(
+    attr = jo_map_hitbox_detection_custom_boundaries_ext(
         WORLD_MAP_ID,
         probe_x,
         map_pos_y + controlled_character->y,

@@ -2,6 +2,8 @@
 #include "ui_control.h"
 #include "input_mapping.h"
 #include "game_audio.h"
+#include "rotating_sprite_pool.h"
+#include "runtime_log.h"
 
 #define MENU_SPRITE_Y 88
 #define MENU_NAME_Y 6
@@ -76,6 +78,12 @@ enum
 };
 
 static bool menu_sprites_loaded = false;
+static int menu_jump_sprite_pool_id = -1;
+static int menu_sonic_jump_handle = -1;
+static int menu_amy_jump_handle = -1;
+static int menu_tails_jump_handle = -1;
+static int menu_knuckles_jump_handle = -1;
+static int menu_shadow_jump_handle = -1;
 static int menu_sonic_jump_sprite_id = -1;
 static int menu_amy_jump_sprite_id = -1;
 static int menu_tails_jump_sprite_id = -1;
@@ -243,36 +251,56 @@ static int ui_control_set_mapping_action(input_mapping_config_t *mapping, int ac
 
 static void ui_control_load_menu_sprites(void)
 {
-    int last_sprite_id;
-
-    last_sprite_id = jo_get_last_sprite_id();
-
     if (menu_sprites_loaded)
     {
-        if (menu_sonic_jump_sprite_id >= 0 && menu_sonic_jump_sprite_id <= last_sprite_id &&
-            menu_amy_jump_sprite_id >= 0 && menu_amy_jump_sprite_id <= last_sprite_id &&
-            menu_tails_jump_sprite_id >= 0 && menu_tails_jump_sprite_id <= last_sprite_id &&
-            menu_knuckles_jump_sprite_id >= 0 && menu_knuckles_jump_sprite_id <= last_sprite_id &&
-            menu_shadow_jump_sprite_id >= 0 && menu_shadow_jump_sprite_id <= last_sprite_id)
-            return;
-
-        menu_sprites_loaded = false;
-        menu_sonic_jump_sprite_id = -1;
-        menu_amy_jump_sprite_id = -1;
-        menu_tails_jump_sprite_id = -1;
-        menu_knuckles_jump_sprite_id = -1;
-        menu_shadow_jump_sprite_id = -1;
+        menu_sonic_jump_sprite_id = rotating_sprite_pool_request(menu_sonic_jump_handle);
+        menu_amy_jump_sprite_id = rotating_sprite_pool_request(menu_amy_jump_handle);
+        menu_tails_jump_sprite_id = rotating_sprite_pool_request(menu_tails_jump_handle);
+        menu_knuckles_jump_sprite_id = rotating_sprite_pool_request(menu_knuckles_jump_handle);
+        menu_shadow_jump_sprite_id = rotating_sprite_pool_request(menu_shadow_jump_handle);
+        return;
     }
 
-    if (menu_sprites_loaded)
-        return;
+    if (menu_jump_sprite_pool_id < 0)
+    {
+        menu_jump_sprite_pool_id = rotating_sprite_pool_create(32, 36, 5);
+        if (menu_jump_sprite_pool_id < 0)
+            return;
+    }
 
-    menu_sonic_jump_sprite_id = jo_sprite_add_tga("SPT", "SNC_JMP.TGA", JO_COLOR_Green);
-    menu_amy_jump_sprite_id = jo_sprite_add_tga("SPT", "AMY_JMP.TGA", JO_COLOR_Green);
-    menu_tails_jump_sprite_id = jo_sprite_add_tga("SPT", "TLS_JMP.TGA", JO_COLOR_Green);
-    menu_knuckles_jump_sprite_id = jo_sprite_add_tga("SPT", "KNK_JMP.TGA", JO_COLOR_Green);
-    menu_shadow_jump_sprite_id = jo_sprite_add_tga("SPT", "SDW_JMP.TGA", JO_COLOR_Green);
+    menu_sonic_jump_handle = rotating_sprite_pool_register_tga(menu_jump_sprite_pool_id, "SPT", "SNC_JMP.TGA", JO_COLOR_Green);
+    menu_amy_jump_handle = rotating_sprite_pool_register_tga(menu_jump_sprite_pool_id, "SPT", "AMY_JMP.TGA", JO_COLOR_Green);
+    menu_tails_jump_handle = rotating_sprite_pool_register_tga(menu_jump_sprite_pool_id, "SPT", "TLS_JMP.TGA", JO_COLOR_Green);
+    menu_knuckles_jump_handle = rotating_sprite_pool_register_tga(menu_jump_sprite_pool_id, "SPT", "KNK_JMP.TGA", JO_COLOR_Green);
+    menu_shadow_jump_handle = rotating_sprite_pool_register_tga(menu_jump_sprite_pool_id, "SPT", "SDW_JMP.TGA", JO_COLOR_Green);
+
+    rotating_sprite_pool_prefetch(menu_sonic_jump_handle);
+    rotating_sprite_pool_prefetch(menu_amy_jump_handle);
+    rotating_sprite_pool_prefetch(menu_tails_jump_handle);
+    rotating_sprite_pool_prefetch(menu_knuckles_jump_handle);
+    rotating_sprite_pool_prefetch(menu_shadow_jump_handle);
+
+    menu_sonic_jump_sprite_id = -1;
+    menu_amy_jump_sprite_id = -1;
+    menu_tails_jump_sprite_id = -1;
+    menu_knuckles_jump_sprite_id = -1;
+    menu_shadow_jump_sprite_id = -1;
     menu_sprites_loaded = true;
+}
+
+void ui_control_reset_menu_sprites(void)
+{
+    menu_sprites_loaded = false;
+    menu_sonic_jump_handle = -1;
+    menu_amy_jump_handle = -1;
+    menu_tails_jump_handle = -1;
+    menu_knuckles_jump_handle = -1;
+    menu_shadow_jump_handle = -1;
+    menu_sonic_jump_sprite_id = -1;
+    menu_amy_jump_sprite_id = -1;
+    menu_tails_jump_sprite_id = -1;
+    menu_knuckles_jump_sprite_id = -1;
+    menu_shadow_jump_sprite_id = -1;
 }
 
 static bool ui_control_character_is_locked(ui_character_choice_t choice)
@@ -403,6 +431,9 @@ void ui_control_init(ui_control_state_t *state)
     state->game_paused = false;
     state->debug_enabled = false;
     state->debug_mode = UiDebugModeOff;
+    state->log_mode = RuntimeLogModeOff;
+
+    runtime_log_set_mode(state->log_mode);
     state->pause_selected_option = UiPauseOptionContinue;
     state->pause_up_released = true;
     state->pause_down_released = true;
@@ -421,17 +452,23 @@ void ui_control_clear_text_layer(void)
 void ui_control_draw_pause_menu(const ui_control_state_t *state)
 {
     static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER"};
+    static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "SPRITE"};
+    int sprite_log_page = runtime_log_get_sprite_page() + 1;
+    int sprite_log_page_count = runtime_log_get_sprite_page_count();
 
     jo_printf(17, 6, "PAUSED");
     jo_printf(8, 9, "%s CONTINUE", state->pause_selected_option == UiPauseOptionContinue ? ">" : " ");
     
     jo_printf(8, 11, "%s RESET FIGHT", state->pause_selected_option == UiPauseOptionResetFight ? ">" : " ");
     jo_printf(8, 12, "%s CHARACTER SELECT", state->pause_selected_option == UiPauseOptionCharacterSelect ? ">" : " ");
+    jo_printf(8, 14, "%s DEBUG: %s", state->pause_selected_option == UiPauseOptionDebug ? ">" : " ", debug_mode_label[state->debug_mode]);
+    jo_printf(8, 15, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
+    jo_printf(8, 16, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
     
-    jo_printf(4, 22, "DEBUG: %s", debug_mode_label[state->debug_mode]);
     jo_printf(4, 24, "UP/DOWN: SELECT");
     jo_printf(4, 25, "A: CONFIRM");
-    jo_printf(4, 26, "START: RESUME");
+    jo_printf(4, 26, "L+R: CHANGE MODE");
+    jo_printf(4, 27, "START: RESUME");
 }
 
 void ui_control_draw_character_menu(const ui_control_state_t *state)
@@ -1180,12 +1217,37 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
     {
         if (state->pause_lr_released)
         {
-            if (state->debug_mode == (ui_debug_mode_t)(UiDebugModeCount - 1))
-                state->debug_mode = UiDebugModeOff;
-            else
-                state->debug_mode = (ui_debug_mode_t)(state->debug_mode + 1);
+            if (state->pause_selected_option == UiPauseOptionDebug)
+            {
+                if (state->debug_mode == (ui_debug_mode_t)(UiDebugModeCount - 1))
+                    state->debug_mode = UiDebugModeOff;
+                else
+                    state->debug_mode = (ui_debug_mode_t)(state->debug_mode + 1);
 
-            state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+                state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+            }
+            else if (state->pause_selected_option == UiPauseOptionLogs)
+            {
+                if (state->log_mode == (runtime_log_mode_t)(RuntimeLogModeCount - 1))
+                    state->log_mode = RuntimeLogModeOff;
+                else
+                    state->log_mode = (runtime_log_mode_t)(state->log_mode + 1);
+
+                runtime_log_set_mode(state->log_mode);
+            }
+            else if (state->pause_selected_option == UiPauseOptionLogPage)
+            {
+                int next_page = runtime_log_get_sprite_page() + 1;
+                int page_count = runtime_log_get_sprite_page_count();
+
+                if (next_page >= page_count)
+                    next_page = 0;
+                runtime_log_set_sprite_page(next_page);
+            }
+            else
+            {
+                state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+            }
         }
         state->pause_lr_released = false;
     }

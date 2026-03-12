@@ -14,6 +14,7 @@
 #include "src/class/debug.h"
 #include "src/class/damage_fx.h"
 #include "src/class/ram_cart.h"
+#include "src/class/runtime_log.h"
 
 static ui_control_state_t ui_state;
 static game_flow_context_t game_flow_ctx;
@@ -49,17 +50,24 @@ int total_pcm = 0;
 
 static void perform_startup_initialization(void)
 {
+    runtime_log_init();
+    jo_printf(0, 2, "startup: begin");
+    runtime_log("startup: begin");
     ini_screen_img.data = JO_NULL;
+    jo_printf(0, 3, "startup: loading ini TGA");
     if (jo_tga_loader(&ini_screen_img, "BG", "BGG_INI.TGA", JO_COLOR_Black) == JO_TGA_OK)
         ini_screen_loaded = true;
 
+    jo_printf(0, 4, "startup: init ui_control");
     ui_control_init(&ui_state);
+    jo_printf(0, 5, "startup: init game flow ctx");
     game_flow_ctx.physics = &physics;
     game_flow_ctx.map_pos_x = &map_pos_x;
     game_flow_ctx.map_pos_y = &map_pos_y;
     game_flow_ctx.player_defeated = &player_defeated;
     game_flow_ctx.ui_state = &ui_state;
 
+    jo_printf(0, 6, "startup: init game loop ctx");
     game_loop_ctx.ui_state = &ui_state;
     game_loop_ctx.game_flow_ctx = &game_flow_ctx;
     game_loop_ctx.physics = &physics;
@@ -69,14 +77,22 @@ static void perform_startup_initialization(void)
     game_loop_ctx.player_defeated = &player_defeated;
     game_loop_ctx.total_pcm = &total_pcm;
     game_loop_init(&game_loop_ctx);
+    jo_printf(0, 7, "startup: game_loop_init done");
 
+    jo_printf(0, 8, "startup: debug_init");
     debug_init();
+    jo_printf(0, 9, "startup: audio setup");
     game_audio_setup();
+    jo_printf(0, 10, "startup: damage_fx setup");
     damage_fx_setup();
+    jo_printf(0, 11, "startup: world_map_load");
+    runtime_log("startup: world_map_load");
     world_map_load();
     ram_cart_status = ram_cart_detect();
+    jo_printf(0, 12, "startup: ram_cart detect=%d", ram_cart_status);
 
     show_boot_loading = false;
+    jo_printf(0, 13, "startup: finished");
 }
 
 static void display_ram_cart_screen(void)
@@ -179,12 +195,14 @@ void main_draw_callback(void)
     if (show_boot_loading)
     {
         ui_control_draw_loading();
+        runtime_log_draw(0, 20);
         return;
     }
 
     if (show_ram_cart_screen)
     {
         display_ram_cart_screen();
+        runtime_log_draw(0, 20);
         return;
     }
 
@@ -192,10 +210,12 @@ void main_draw_callback(void)
     {
         display_initial_screen();
         jo_printf(GAME_VERSION_TEXT_X, GAME_VERSION_TEXT_Y, GAME_VERSION_TEXT);
+        runtime_log_draw(0, 20);
         return;
     }
 
     game_loop_draw();
+    runtime_log_draw(0, 20);
 }
 
 void main_input_callback(void)
