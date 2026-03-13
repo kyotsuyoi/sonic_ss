@@ -2,7 +2,9 @@
 #include "sonic.h"
 #include "amy.h"
 #include "player.h"
+#include "game_constants.h"
 #include "character_registry.h"
+#include "sprite_safe.h"
 
 #define character_ref player
 extern jo_sidescroller_physics_params physics;
@@ -42,10 +44,6 @@ static const jo_tile AmyRunning1Tiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyRunning2Tiles[] =
@@ -54,10 +52,6 @@ static const jo_tile AmyRunning2Tiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyStandTiles[] =
@@ -180,41 +174,7 @@ void amy_running_animation_handling(void)
     }
 
     player_update_punch_state_for_character(&character_ref);
-
-    if (character_ref.kick) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        int kick_last_frame = JO_TILE_COUNT(AmyKickTiles) - 1;
-        if (anim_frame > kick_last_frame || jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 0);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        if (anim_frame >= kick_last_frame) {
-            if (character_ref.kick2_requested) {
-                character_ref.kick = false;
-                character_ref.kick2 = true;
-                character_ref.kick2_requested = false;
-                character_ref.perform_kick2 = true;
-                jo_set_sprite_anim_frame(character_ref.kick_anim_id, kick_last_frame);
-                jo_start_sprite_anim(character_ref.kick_anim_id);
-            } else {
-                character_ref.kick = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                jo_reset_sprite_anim(character_ref.kick_anim_id);
-            }
-        }
-    } else if (character_ref.kick2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        int kick_last_frame = JO_TILE_COUNT(AmyKickTiles) - 1;
-        if (anim_frame < kick_last_frame) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, kick_last_frame);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        if (anim_frame >= kick_last_frame && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            character_ref.kick2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-            jo_reset_sprite_anim(character_ref.kick_anim_id);
-        }
-    }
+    player_update_kick_state_for_character(&character_ref);
 }
 
 void display_amy(void)
@@ -292,7 +252,7 @@ void load_amy(void)
 {
     if (!amy_loaded)
     {
-        amy_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_WLK.TGA", JO_COLOR_Green, AmyWalkingTiles, JO_TILE_COUNT(AmyWalkingTiles));
+amy_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_WLK.TGA", JO_COLOR_Green, AmyWalkingTiles, JO_TILE_COUNT(AmyWalkingTiles));
         amy_walking_anim_id = jo_create_sprite_anim(amy_walking_base_id, JO_TILE_COUNT(AmyWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_RUN1.TGA", JO_COLOR_Green, AmyRunning1Tiles, JO_TILE_COUNT(AmyRunning1Tiles));

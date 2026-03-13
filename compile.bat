@@ -79,12 +79,12 @@ echo [WARN] Build step returned code !MAKE_EXIT!.
 )
 
 if exist %BUILD_DIR%\game_bin.cue (
-echo Emulation is rinning!
+echo Emulation is running!
 "%YMIR_EXECUTABLE_PATH%" "%cd%\%BUILD_DIR%\game_bin.cue"
 CLS
 echo Finished!
 ) else if exist %BUILD_DIR%\game.cue (
-echo Emulation is rinning!
+echo Emulation is running!
 "%YMIR_EXECUTABLE_PATH%" "%cd%\%BUILD_DIR%\game.cue"
 CLS
 echo Finished!

@@ -174,6 +174,10 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.hit_range_kick2 = player.hit_range_kick2;
     player2.attack_forward_impulse_light = player.attack_forward_impulse_light;
     player2.attack_forward_impulse_heavy = player.attack_forward_impulse_heavy;
+    player2.knockback_punch1 = player.knockback_punch1;
+    player2.knockback_punch2 = player.knockback_punch2;
+    player2.knockback_kick1 = player.knockback_kick1;
+    player2.knockback_kick2 = player.knockback_kick2;
     
     player2.charged_kick_ready = false;
     player2.charged_kick_active = false;

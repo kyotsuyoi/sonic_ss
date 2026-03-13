@@ -1,7 +1,20 @@
 #include <jo/jo.h>
 #include "world_collision.h"
+#include "debug.h"
 #include "game_constants.h"
 #include "jo_audio_ext/jo_map_ext.h"
+
+static inline float world_collision_fabs(float x)
+{
+    return (x < 0.0f) ? -x : x;
+}
+
+static inline float world_collision_round(float x)
+{
+    if (x >= 0.0f)
+        return (float)((int)(x + 0.5f));
+    return (float)((int)(x - 0.5f));
+}
 
 #define PLATFORM_GROUNDED_SNAP_MAX_PIXELS (4)
 
@@ -124,11 +137,16 @@ static bool has_horizontal_collision(jo_sidescroller_physics_params *physics,
     return (attr == MAP_TILE_BLOCK_ATTR);
 }
 
+
 void world_handle_character_collision(jo_sidescroller_physics_params *physics,
                                       character_t *controlled_character,
                                       int *map_pos_x,
                                       int map_pos_y)
 {
+    int prev_map_x = *map_pos_x;
+
+    (void)controlled_character;
+
     if (has_vertical_collision(physics, controlled_character, *map_pos_x, map_pos_y))
         physics->speed_y = 0.0f;
     else
@@ -139,10 +157,18 @@ void world_handle_character_collision(jo_sidescroller_physics_params *physics,
 
     if (has_horizontal_collision(physics, controlled_character, *map_pos_x, map_pos_y))
         physics->speed = 0.0f;
-    else if (physics->speed > 0.0f)
-        *map_pos_x += physics->speed < 1.0f ? 1.0f : physics->speed;
-    else if (physics->speed < 0.0f)
-        *map_pos_x += physics->speed > -1.0f ? -1.0f : physics->speed;
+    else
+    {
+        float delta = world_collision_round(physics->speed);
+        if (delta == 0.0f && physics->speed != 0.0f)
+        {
+            // Guarantee at least 1 pixel movement when there is non-zero speed.
+            delta = (physics->speed > 0.0f) ? 1.0f : -1.0f;
+        }
+        *map_pos_x += (int)delta;
+    }
+
+    g_dbg_knock_dx = *map_pos_x - prev_map_x;
 }
 
 void world_handle_player_collision(jo_sidescroller_physics_params *physics,

@@ -24,6 +24,12 @@ typedef struct
 	bool hit_k2;
 } debug_hitbox_snapshot_t;
 
+/* debug info set by game_loop_apply_hit_effect */
+extern int g_dbg_knock_dir;
+extern float g_dbg_knock_force;
+extern float g_dbg_knock_speed;
+extern int g_dbg_knock_dx;
+
 /* Inicializa debug (se precisar) */
 void debug_init(void);
 

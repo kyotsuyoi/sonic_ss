@@ -37,6 +37,7 @@ typedef enum
     UiDebugModeOff = 0,
     UiDebugModeHardware,
     UiDebugModePlayer,
+    UiDebugModeAttack,
     UiDebugModeCount
 } ui_debug_mode_t;
 
@@ -102,6 +103,8 @@ typedef struct
     ui_pause_option_t pause_selected_option;
     bool pause_up_released;
     bool pause_down_released;
+    bool pause_left_released;
+    bool pause_right_released;
     bool pause_a_released;
     bool pause_start_released;
     bool pause_lr_released;

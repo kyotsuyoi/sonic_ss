@@ -9,6 +9,7 @@
 #include "world_physics.h"
 #include "character_registry.h"
 #include "tails.h"
+#include "runtime_log.h"
 
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
@@ -32,6 +33,7 @@
 #define KNUCKLES_KICK_PART4_INDEX 2
 #define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
 
+#include "sprite_safe.h"
 #define KNUCKLES_BOT_CHARGED_HOLD_FRAMES 60
 #define BOT_AI_WARMUP_FRAMES 60
 
@@ -336,6 +338,8 @@ static int bot_punch_combo2_start_frame_for_count(int frame_count)
 {
     if (frame_count >= 10)
         return 5;
+    if (frame_count >= 4)
+        return 2;
     if (frame_count >= 5)
         return 0;
     return -1;
@@ -346,43 +350,21 @@ static int bot_last_frame_for_player_attack(const character_t *player_ref, int a
     int cid = player_ref->character_id;
 
     if (attack_kind == 0)
-    {
-        if (cid == CHARACTER_ID_KNUCKLES)
-            return 2;
-        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
-            return 2;
-        return 3;
-    }
+        /* punch1: second frame */
+        return 1;
     if (attack_kind == 1)
-    {
-        if (cid == CHARACTER_ID_KNUCKLES)
-            return 3;
-        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
-            return 3;
-        return 9;
-    }
+        /* punch2: final frame */
+        return 3;
     if (attack_kind == 2)
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
-        if (cid == CHARACTER_ID_TAILS)
-            return 0;
-        if (cid == CHARACTER_ID_AMY)
-            return 3;
-        return 5;
+        return 1;
     }
 
-    if (cid == CHARACTER_ID_KNUCKLES)
-    {
-        if (player_ref->charged_kick_active || player_ref->charged_kick_phase > 0)
-            return 2;
-        return 3;
-    }
-    if (cid == CHARACTER_ID_TAILS)
-        return 0;
-    if (cid == CHARACTER_ID_AMY)
-        return 7;
-    return 12;
+    if (cid == CHARACTER_ID_KNUCKLES && (player_ref->charged_kick_active || player_ref->charged_kick_phase > 0))
+        return 2;
+    return 2;
 }
 
 static bool bot_player_attack_reached_hit_frame(const character_t *player_ref, int attack_kind)
@@ -411,6 +393,8 @@ static int bot_kick_combo2_start_frame_for_count(int frame_count)
         return 7;
     if (frame_count >= 8)
         return 5;
+    if (frame_count >= 4)
+        return 2;
     return -1;
 }
 
@@ -764,6 +748,17 @@ static void bot_reset_animation_lists_except(int active_anim_id)
         jo_reset_sprite_anim(bot.kick_anim_id);
 }
 
+/*
+Speed -> Animation mapping (bot):
+- `speed_step = (int)JO_ABS(bot_physics.speed)` converts physics speed to a discrete level.
+- The bot code maps speed ranges to an animation variant and a sprite frame rate (thresholds differ per implementation),
+  but the principle is the same:
+  * higher `speed_step` selects faster running variants and lower `frame_rate` values (faster animation)
+  * lower `speed_step` selects walking and slower animation frame rates
+- Lower `frame_rate` values advance animation frames faster (e.g. `3` animates quicker than `9`).
+- `run` (or equivalent) selects which animation variant is drawn.
+This keeps visual animation speed consistent with the bot's physical speed.
+*/
 static void bot_update_animation(void)
 {
     int speed_step;
@@ -829,7 +824,7 @@ static void bot_update_animation(void)
     {
         jo_reset_sprite_anim(bot.walking_anim_id);
         jo_reset_sprite_anim(bot.running2_anim_id);
-        jo_set_sprite_anim_frame_rate(bot.running1_anim_id, 6);
+        jo_set_sprite_anim_frame_rate(bot.running1_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
         bot.run = 1;
         if (jo_is_sprite_anim_stopped(bot.running1_anim_id))
             jo_start_sprite_anim_loop(bot.running1_anim_id);
@@ -1482,6 +1477,10 @@ void bot_instance_init(bot_instance_t *instance,
                        int player_world_x,
                        int player_world_y)
 {
+    //LOG
+    jo_printf(0, 242, "bot_instance_init: entry selected_player=%d selected_bot=%d", selected_player_character, selected_bot_character);
+    runtime_log("bot_instance_init: entry selected_player=%d selected_bot=%d", selected_player_character, selected_bot_character);
+    
     bot_character_assets_t *assets;
     int desired_bot_character;
     bool use_shared_player_assets;
@@ -1571,6 +1570,10 @@ void bot_instance_init(bot_instance_t *instance,
     prev_player2_kick2 = false;
 
     bot_loaded = true;
+
+    //LOG
+    jo_printf(0, 243, "bot_instance_init: exit bot_character=%d loaded=%d", bot_character, bot_loaded);
+    runtime_log("bot_instance_init: exit bot_character=%d loaded=%d", bot_character, bot_loaded);
 }
 
 void bot_instance_unload(bot_instance_t *instance)
@@ -2006,6 +2009,9 @@ void bot_init(int selected_player_character, int selected_bot_character, int pla
     int index;
     int spacing = 64;
 
+    //LOG
+    jo_printf(0, 240, "bot_init: start active_count=%d selected_player=%d selected_bot=%d", default_bot_active_count, selected_player_character, selected_bot_character);
+
     for (index = BOT_MAX_DEFAULT_COUNT - 1; index >= default_bot_active_count; --index)
         bot_instance_unload(&default_bot_instances[index]);
 
@@ -2018,6 +2024,9 @@ void bot_init(int selected_player_character, int selected_bot_character, int pla
                   player_world_y);
         default_bot_instances[index].bot_is_ally = false;
     }
+
+    //LOG
+    jo_printf(0, 241, "bot_init: done\n");
 }
 
 void bot_init_versus(int selected_player_character,

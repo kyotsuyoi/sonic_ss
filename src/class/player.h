@@ -7,6 +7,7 @@
 
 extern character_t player;
 extern character_t player2;
+extern bool g_show_attack_debug;
 
 character_t *player_get_instance(int index);
 int player_get_max_instances(void);
@@ -21,6 +22,7 @@ void player_update_punch_state(character_t *controlled_player,
 							   bool finish_stage2_on_last_frame);
 
 void player_update_punch_state_for_character(character_t *controlled_player);
+void player_update_kick_state_for_character(character_t *controlled_player);
 
 void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 								  character_t *controlled_player,

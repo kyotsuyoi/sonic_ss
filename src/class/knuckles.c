@@ -180,39 +180,7 @@ inline void knuckles_running_animation_handling(void)
         }
     }
 
-    // Punch handling: 2-stage punch (simplificado)
-    if (character_ref.punch) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame > (KNUCKLES_FRAME_COUNT - 1) || jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, 0);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        if (anim_frame >= KNUCKLES_COMBO2_START_FRAME) {
-            if (character_ref.punch2_requested) {
-                character_ref.punch = false;
-                character_ref.punch2 = true;
-                character_ref.punch2_requested = false;
-                character_ref.perform_punch2 = true;
-                jo_set_sprite_anim_frame(character_ref.punch_anim_id, KNUCKLES_COMBO2_START_FRAME);
-                jo_start_sprite_anim(character_ref.punch_anim_id);
-            } else if (anim_frame >= (KNUCKLES_FRAME_COUNT - 1)) {
-                character_ref.punch = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                jo_reset_sprite_anim(character_ref.punch_anim_id);
-            }
-        }
-    } else if (character_ref.punch2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame < KNUCKLES_COMBO2_START_FRAME) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, KNUCKLES_COMBO2_START_FRAME);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        if (anim_frame >= (KNUCKLES_FRAME_COUNT - 1) && jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            character_ref.punch2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-            jo_reset_sprite_anim(character_ref.punch_anim_id);
-        }
-    }
+    player_update_punch_state_for_character(&character_ref);
 
     if (character_ref.charged_kick_enabled && character_ref.kick && !character_ref.kick2)
     {
@@ -460,8 +428,3 @@ void unload_knuckles(void)
     knuckles_defeated_sprite_id = -1;
     knuckles_loaded = false;
 }
-
-/*
-** END OF FILE
-*/
-

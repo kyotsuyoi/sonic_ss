@@ -2,6 +2,13 @@
 #include "player.h"
 #include "bot.h"
 #include "game_loop.h"
+#include <math.h>
+
+/* globals exposed via debug.h */
+int g_dbg_knock_dir = 0;
+float g_dbg_knock_force = 0.0f;
+float g_dbg_knock_speed = 0.0f;
+int g_dbg_knock_dx = 0;
 
 static volatile int frame_counter = 0;
 static int fps = 0;
@@ -133,6 +140,27 @@ static void debug_draw_hitbox_snapshot(const char *title, const debug_hitbox_sna
     jo_printf(26, 18, "K1:%3d/%3d %s", snapshot->center_dx, snapshot->hreach_k1, snapshot->hit_k1 ? "HIT" : "---");
     jo_printf(26, 19, "K2:%3d/%3d %s", snapshot->center_dx, snapshot->hreach_k2, snapshot->hit_k2 ? "HIT" : "---");
     jo_printf(26, 20, "V :%3d/%3d", snapshot->center_dy, snapshot->vreach);
+    /* show recent knockback info */
+    char dir = '-';
+    if (g_dbg_knock_dir > 0)
+        dir = 'R';
+    else if (g_dbg_knock_dir < 0)
+        dir = 'L';
+
+    float abs_force = g_dbg_knock_force;
+    if (abs_force < 0.0f)
+        abs_force = -abs_force;
+    int force_int = (int)abs_force;
+    int force_frac = (int)(abs_force * 100.0f) % 100;
+
+    float abs_speed = g_dbg_knock_speed;
+    if (abs_speed < 0.0f)
+        abs_speed = -abs_speed;
+    int speed_int = (int)abs_speed;
+    int speed_frac = (int)(abs_speed * 100.0f) % 100;
+
+    jo_printf(26, 21, "KB dir=%c f=%d.%02d", dir, force_int, force_frac);
+    jo_printf(26, 22, "SPD=%d.%02d DX=%d", speed_int, speed_frac, g_dbg_knock_dx);
 }
 
 void print_debug_valu(char* description, int value, char* suffix, int screen_line){

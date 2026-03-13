@@ -69,10 +69,10 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
 {
     character_animation_profile_t profile;
 
-    profile.move_count = 8;
+    profile.move_count = 4;
     profile.stand_count = 3;
-    profile.punch_count = 10;
-    profile.kick_count = 13;
+    profile.punch_count = 4;
+    profile.kick_count = 4;
 
     switch (choice)
     {
@@ -83,7 +83,7 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
     case UiCharacterTails:
         profile.move_count = 4;
         profile.punch_count = 4;
-        profile.kick_count = 1;
+        profile.kick_count = 4;
         break;
     case UiCharacterKnuckles:
         profile.move_count = 4;

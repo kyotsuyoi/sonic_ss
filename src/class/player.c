@@ -1,5 +1,7 @@
+#include <jo/jo.h>
 #include "player.h"
 #include "game_audio.h"
+#include "game_constants.h"
 
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
@@ -12,6 +14,9 @@
 
 character_t player;
 character_t player2;
+
+/* Toggle for showing debug logs for punch/kick state machines. */
+bool g_show_attack_debug = false;
 
 character_t *player_get_instance(int index)
 {
@@ -126,6 +131,9 @@ static void player_input_punch(character_t *controlled_player,
 	{
 		controlled_player->punch = true;
 		controlled_player->hit_done_punch1 = false;
+		/* start stage1 timer, reset any leftover stage2 timer */
+		controlled_player->punch_stage1_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+		controlled_player->punch_stage2_ticks = 0;
 		player_apply_attack_forward_impulse(physics, controlled_player, player_get_attack_forward_impulse_light(controlled_player));
 		if (punch_sfx != JO_NULL)
 			game_audio_play_sfx_next_channel(punch_sfx);
@@ -243,6 +251,9 @@ static void player_input_kick(character_t *controlled_player,
 	{
 		controlled_player->kick = true;
 		controlled_player->hit_done_kick1 = false;
+		/* start stage1 timer, clear any leftover stage2 timer */
+		controlled_player->kick_stage1_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+		controlled_player->kick_stage2_ticks = 0;
 		player_apply_attack_forward_impulse(physics, controlled_player, player_get_attack_forward_impulse_light(controlled_player));
 		if (punch_sfx != JO_NULL)
 			game_audio_play_sfx_next_channel(punch_sfx);
@@ -378,6 +389,27 @@ void player_update_punch_state(character_t *controlled_player,
 	if (controlled_player == JO_NULL || controlled_player->punch_anim_id < 0)
 		return;
 
+	/* read current animation state early so stage‑2 logic always has valid values */
+	anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
+	anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
+
+	/* DEBUG: punch state timers */
+	if (g_show_attack_debug)
+	{
+		if (controlled_player == &player)
+		{
+			jo_printf(1, 9, "P1 PNCH f=%d t1=%d t2=%d", anim_frame,
+				controlled_player->punch_stage1_ticks,
+				controlled_player->punch_stage2_ticks);
+		}
+		else if (controlled_player == &player2)
+		{
+			jo_printf(1, 10, "P2 PNCH f=%d t1=%d t2=%d", anim_frame,
+				controlled_player->punch_stage1_ticks,
+				controlled_player->punch_stage2_ticks);
+		}
+	}
+
 	/* Punch flow owns the attack slot; clear any stale kick state to avoid
 	   sprite bleed (notably visible on P2 Amy at combo end). */
 	if (controlled_player->punch || controlled_player->punch2)
@@ -392,24 +424,50 @@ void player_update_punch_state(character_t *controlled_player,
 	if (combo_trigger_frame > punch_stage1_last_frame)
 		combo_trigger_frame = punch_stage1_last_frame;
 
+	/* countdown stage timer (used for both stages) */
+	if (controlled_player->punch_stage1_ticks > 0)
+		controlled_player->punch_stage1_ticks--;
+
 	if (controlled_player->punch)
 	{
-		anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
-		anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
+		/* stage1-specific handling */
 
-		/* Ensure stage-1 punch actually runs after input triggers it. */
+		/* debug log for P1 + P2 */
+		// if (controlled_player == &player)
+		// {
+		// 	jo_printf(1, 8, "PUNCH f=%d rq=%d t=%d", anim_frame,
+		// 		controlled_player->punch2_requested ? 1 : 0,
+		// 		controlled_player->punch_stage1_ticks);
+		// }
+
+		/* keep anim running until stage1 finishes */
 		if (anim_stopped && anim_frame < punch_stage1_last_frame)
 		{
 			jo_start_sprite_anim(controlled_player->punch_anim_id);
 			anim_stopped = false;
 		}
 
+		/* while timer active, clamp to last frame and skip transitions */
+		if (controlled_player->punch_stage1_ticks > 0)
+		{
+			if (anim_frame > punch_stage1_last_frame)
+			{
+				jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage1_last_frame);
+				jo_start_sprite_anim(controlled_player->punch_anim_id);
+			}
+			return;
+		}
+
+		/* timer expired: resume normal flow */
 		if (anim_frame > punch_stage1_last_frame)
 		{
-			jo_set_sprite_anim_frame(controlled_player->punch_anim_id, 0);
-			jo_start_sprite_anim(controlled_player->punch_anim_id);
-			anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
-			anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
+			if (!controlled_player->punch2_requested)
+			{
+				jo_set_sprite_anim_frame(controlled_player->punch_anim_id, 0);
+				jo_start_sprite_anim(controlled_player->punch_anim_id);
+				anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
+				anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
+			}
 		}
 
 		if (anim_frame >= combo_trigger_frame)
@@ -420,11 +478,13 @@ void player_update_punch_state(character_t *controlled_player,
 				controlled_player->punch2 = true;
 				controlled_player->punch2_requested = false;
 				controlled_player->perform_punch2 = true;
+				/* set total ticks for stage2: two frames each lasting DEFAULT */
+				controlled_player->punch_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+				/* explicitly show first frame of stage2; do not start anim */
 				jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
-				jo_start_sprite_anim(controlled_player->punch_anim_id);
 			}
 			else if (anim_frame >= punch_stage1_last_frame
-				&& (anim_stopped || finish_stage1_on_last_frame))
+				 && (anim_stopped || finish_stage1_on_last_frame))
 			{
 				controlled_player->punch = false;
 				controlled_player->punch2_requested = false;
@@ -438,7 +498,22 @@ void player_update_punch_state(character_t *controlled_player,
 	if (!controlled_player->punch2)
 		return;
 
-	anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
+	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
+	if (controlled_player->punch_stage2_ticks > 0)
+	{
+		int half = DEFAULT_SPRITE_FRAME_DURATION;
+		if (controlled_player->punch_stage2_ticks > half)
+		{
+			jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
+		}
+		else
+		{
+			jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_last_frame);
+		}
+		/* don't start_anim, just lock frame */
+		controlled_player->punch_stage2_ticks--;
+		return;
+	}
 
 	if (!has_punch2_stage)
 	{
@@ -475,15 +550,181 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	if (controlled_player->character_id == CHARACTER_ID_KNUCKLES
-		|| controlled_player->character_id == CHARACTER_ID_AMY
-		|| controlled_player->character_id == CHARACTER_ID_TAILS)
+	/* Unified 4-frame profile matching the working Knuckles combo flow. */
+	/* 2 + 2 frames: stage1 frames 0-1, stage2 frames 2-3. Allow combo trigger at frame 1. */
+	player_update_punch_state(controlled_player, 1, 1, 2, 3, true, true, false);
+}
+
+void player_update_kick_state(character_t *controlled_player,
+							  int kick_combo_trigger_frame,
+							  int kick_stage1_last_frame,
+							  int kick_stage2_start_frame,
+							  int kick_stage2_last_frame,
+							  bool has_kick2_stage,
+							  bool finish_stage1_on_last_frame,
+							  bool finish_stage2_on_last_frame)
+{
+	int anim_frame;
+	bool anim_stopped;
+	int combo_trigger_frame;
+
+	if (controlled_player == JO_NULL || controlled_player->kick_anim_id < 0)
+		return;
+
+	/* read current animation state early so stage-2 logic always has valid values */
+	anim_frame = jo_get_sprite_anim_frame(controlled_player->kick_anim_id);
+	anim_stopped = jo_is_sprite_anim_stopped(controlled_player->kick_anim_id);
+
+	/* DEBUG: kick state timers */
+	if (g_show_attack_debug)
 	{
-		/* 4-frame profile matching Knuckles behavior: combo opens at frame 2. */
-		player_update_punch_state(controlled_player, 2, 3, 2, 3, true, true, false);
+		if (controlled_player == &player)
+		{
+			jo_printf(1, 11, "P1 KICK f=%d t1=%d t2=%d", anim_frame,
+				controlled_player->kick_stage1_ticks,
+				controlled_player->kick_stage2_ticks);
+		}
+		else if (controlled_player == &player2)
+		{
+			jo_printf(1, 12, "P2 KICK f=%d t1=%d t2=%d", anim_frame,
+				controlled_player->kick_stage1_ticks,
+				controlled_player->kick_stage2_ticks);
+		}
+	}
+
+	/* Kick flow owns the attack slot; clear any stale punch state to avoid
+	   sprite bleed. */
+	if (controlled_player->kick || controlled_player->kick2)
+	{
+		controlled_player->punch = false;
+		controlled_player->punch2 = false;
+		controlled_player->punch2_requested = false;
+		controlled_player->perform_punch2 = false;
+	}
+
+	combo_trigger_frame = kick_combo_trigger_frame;
+	if (combo_trigger_frame > kick_stage1_last_frame)
+		combo_trigger_frame = kick_stage1_last_frame;
+
+	/* countdown stage timer (used for both stages) */
+	if (controlled_player->kick_stage1_ticks > 0)
+		controlled_player->kick_stage1_ticks--;
+
+	if (controlled_player->kick)
+	{
+		/* stage1-specific handling */
+
+		/* keep anim running until stage1 finishes */
+		if (anim_stopped && anim_frame < kick_stage1_last_frame)
+		{
+			jo_start_sprite_anim(controlled_player->kick_anim_id);
+			anim_stopped = false;
+		}
+
+		/* while timer active, clamp to last frame and skip transitions */
+		if (controlled_player->kick_stage1_ticks > 0)
+		{
+			if (anim_frame > kick_stage1_last_frame)
+			{
+				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage1_last_frame);
+				jo_start_sprite_anim(controlled_player->kick_anim_id);
+			}
+			return;
+		}
+
+		/* timer expired: resume normal flow */
+		if (anim_frame > kick_stage1_last_frame)
+		{
+			if (!controlled_player->kick2_requested)
+			{
+				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, 0);
+				jo_start_sprite_anim(controlled_player->kick_anim_id);
+				anim_frame = jo_get_sprite_anim_frame(controlled_player->kick_anim_id);
+				anim_stopped = jo_is_sprite_anim_stopped(controlled_player->kick_anim_id);
+			}
+		}
+
+		if (anim_frame >= combo_trigger_frame)
+		{
+			if (controlled_player->kick2_requested && has_kick2_stage)
+			{
+				controlled_player->kick = false;
+				controlled_player->kick2 = true;
+				controlled_player->kick2_requested = false;
+				controlled_player->perform_kick2 = true;
+				/* set total ticks for stage2: two frames each lasting DEFAULT */
+				controlled_player->kick_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+				/* explicitly show first frame of stage2; do not start anim */
+				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+			}
+			else if (anim_frame >= kick_stage1_last_frame
+				&& (anim_stopped || finish_stage1_on_last_frame))
+			{
+				controlled_player->kick = false;
+				controlled_player->kick2_requested = false;
+				controlled_player->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+				jo_reset_sprite_anim(controlled_player->kick_anim_id);
+			}
+		}
 		return;
 	}
 
-	/* Sonic/default profile (10 frames: 0-4, 5-9). */
-	player_update_punch_state(controlled_player, 4, 4, 5, 9, true, true, false);
+	if (!controlled_player->kick2)
+		return;
+
+	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
+	if (controlled_player->kick_stage2_ticks > 0)
+	{
+		int half = DEFAULT_SPRITE_FRAME_DURATION;
+		if (controlled_player->kick_stage2_ticks > half)
+		{
+			jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+		}
+		else
+		{
+			jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_last_frame);
+		}
+		/* don't start_anim, just lock frame */
+		controlled_player->kick_stage2_ticks--;
+		return;
+	}
+
+	if (!has_kick2_stage)
+	{
+		controlled_player->kick2 = false;
+		controlled_player->kick2_requested = false;
+		controlled_player->attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
+		jo_reset_sprite_anim(controlled_player->kick_anim_id);
+		return;
+	}
+
+	if (anim_frame < kick_stage2_start_frame)
+	{
+		jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+		jo_start_sprite_anim(controlled_player->kick_anim_id);
+		anim_frame = jo_get_sprite_anim_frame(controlled_player->kick_anim_id);
+	}
+	else if (jo_is_sprite_anim_stopped(controlled_player->kick_anim_id) && anim_frame < kick_stage2_last_frame)
+	{
+		/* Keep stage-2 running until it reaches its end frame. */
+		jo_start_sprite_anim(controlled_player->kick_anim_id);
+	}
+
+	if (anim_frame >= kick_stage2_last_frame
+		&& (jo_is_sprite_anim_stopped(controlled_player->kick_anim_id) || finish_stage2_on_last_frame))
+	{
+		controlled_player->kick2 = false;
+		controlled_player->attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
+		jo_reset_sprite_anim(controlled_player->kick_anim_id);
+	}
+}
+
+void player_update_kick_state_for_character(character_t *controlled_player)
+{
+	if (controlled_player == JO_NULL)
+		return;
+
+	/* Unified 4-frame profile matching the punch combo flow:
+	   stage1 frames 0-1, stage2 frames 2-3 */
+	player_update_kick_state(controlled_player, 1, 1, 2, 3, true, true, false);
 }

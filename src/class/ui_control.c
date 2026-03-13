@@ -1,5 +1,6 @@
 #include <jo/jo.h>
 #include "ui_control.h"
+#include "player.h"
 #include "input_mapping.h"
 #include "game_audio.h"
 #include "rotating_sprite_pool.h"
@@ -437,6 +438,8 @@ void ui_control_init(ui_control_state_t *state)
     state->pause_selected_option = UiPauseOptionContinue;
     state->pause_up_released = true;
     state->pause_down_released = true;
+    state->pause_left_released = true;
+    state->pause_right_released = true;
     state->pause_a_released = true;
     state->pause_start_released = true;
     state->pause_lr_released = true;
@@ -451,7 +454,7 @@ void ui_control_clear_text_layer(void)
 
 void ui_control_draw_pause_menu(const ui_control_state_t *state)
 {
-    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER"};
+    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATTACK"};
     static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "SPRITE"};
     int sprite_log_page = runtime_log_get_sprite_page() + 1;
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
@@ -463,11 +466,12 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     jo_printf(8, 12, "%s CHARACTER SELECT", state->pause_selected_option == UiPauseOptionCharacterSelect ? ">" : " ");
     jo_printf(8, 14, "%s DEBUG: %s", state->pause_selected_option == UiPauseOptionDebug ? ">" : " ", debug_mode_label[state->debug_mode]);
     jo_printf(8, 15, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
-    jo_printf(8, 16, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
+    if (state->log_mode == RuntimeLogModeSprite)
+        jo_printf(8, 16, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
     
     jo_printf(4, 24, "UP/DOWN: SELECT");
     jo_printf(4, 25, "A: CONFIRM");
-    jo_printf(4, 26, "L+R: CHANGE MODE");
+    jo_printf(4, 26, "LEFT/RIGHT: CHANGE MODE");
     jo_printf(4, 27, "START: RESUME");
 }
 
@@ -1213,9 +1217,9 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                                    ui_control_action_fn on_character_select,
                                    void *user_data)
 {
-    if (jo_is_pad1_key_down(JO_KEY_L) && jo_is_pad1_key_down(JO_KEY_R))
+    if (jo_is_pad1_key_down(JO_KEY_RIGHT))
     {
-        if (state->pause_lr_released)
+        if (state->pause_right_released)
         {
             if (state->pause_selected_option == UiPauseOptionDebug)
             {
@@ -1224,7 +1228,9 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 else
                     state->debug_mode = (ui_debug_mode_t)(state->debug_mode + 1);
 
-                state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+                /* Only show player debug when in PLAYER/HARDWARE modes. */
+                state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
+                g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
             }
             else if (state->pause_selected_option == UiPauseOptionLogs)
             {
@@ -1249,11 +1255,55 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->debug_enabled = (state->debug_mode != UiDebugModeOff);
             }
         }
-        state->pause_lr_released = false;
+        state->pause_right_released = false;
     }
     else
     {
-        state->pause_lr_released = true;
+        state->pause_right_released = true;
+    }
+
+    if (jo_is_pad1_key_down(JO_KEY_LEFT))
+    {
+        if (state->pause_left_released)
+        {
+            if (state->pause_selected_option == UiPauseOptionDebug)
+            {
+                if (state->debug_mode == UiDebugModeOff)
+                    state->debug_mode = (ui_debug_mode_t)(UiDebugModeCount - 1);
+                else
+                    state->debug_mode = (ui_debug_mode_t)(state->debug_mode - 1);
+
+                /* Only show player debug when in PLAYER/HARDWARE modes. */
+                state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
+                g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
+            }
+            else if (state->pause_selected_option == UiPauseOptionLogs)
+            {
+                if (state->log_mode == RuntimeLogModeOff)
+                    state->log_mode = (runtime_log_mode_t)(RuntimeLogModeCount - 1);
+                else
+                    state->log_mode = (runtime_log_mode_t)(state->log_mode - 1);
+
+                runtime_log_set_mode(state->log_mode);
+            }
+            else if (state->pause_selected_option == UiPauseOptionLogPage)
+            {
+                int page_count = runtime_log_get_sprite_page_count();
+                int prev_page = runtime_log_get_sprite_page() - 1;
+                if (prev_page < 0)
+                    prev_page = page_count - 1;
+                runtime_log_set_sprite_page(prev_page);
+            }
+            else
+            {
+                state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+            }
+        }
+        state->pause_left_released = false;
+    }
+    else
+    {
+        state->pause_left_released = true;
     }
 
     if (jo_is_pad1_key_down(JO_KEY_UP))
@@ -1264,6 +1314,15 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->pause_selected_option = (ui_pause_option_t)(UiPauseOptionCount - 1);
             else
                 state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option - 1);
+
+            /* Skip LOG PAGE when sprite logs are not active */
+            while (state->pause_selected_option == UiPauseOptionLogPage && state->log_mode != RuntimeLogModeSprite)
+            {
+                if (state->pause_selected_option == UiPauseOptionContinue)
+                    state->pause_selected_option = (ui_pause_option_t)(UiPauseOptionCount - 1);
+                else
+                    state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option - 1);
+            }
         }
         state->pause_up_released = false;
     }
@@ -1280,6 +1339,15 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->pause_selected_option = UiPauseOptionContinue;
             else
                 state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option + 1);
+
+            /* Skip LOG PAGE when sprite logs are not active */
+            while (state->pause_selected_option == UiPauseOptionLogPage && state->log_mode != RuntimeLogModeSprite)
+            {
+                if (state->pause_selected_option == (ui_pause_option_t)(UiPauseOptionCount - 1))
+                    state->pause_selected_option = UiPauseOptionContinue;
+                else
+                    state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option + 1);
+            }
         }
         state->pause_down_released = false;
     }

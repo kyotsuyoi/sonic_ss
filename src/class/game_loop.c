@@ -91,43 +91,21 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
     int cid = attacker->character_id;
 
     if (attack_kind == 0)
-    {
-        if (cid == CHARACTER_ID_KNUCKLES)
-            return 2;
-        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
-            return 2;
-        return 3;
-    }
+        /* punch1: hit occurs on second frame (index 1) */
+        return 1;
     if (attack_kind == 1)
-    {
-        if (cid == CHARACTER_ID_KNUCKLES)
-            return 3;
-        if (cid == CHARACTER_ID_TAILS || cid == CHARACTER_ID_AMY)
-            return 3;
-        return 9;
-    }
+        /* punch2: hit on final frame (index 3) */
+        return 3;
     if (attack_kind == 2)
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
-        if (cid == CHARACTER_ID_TAILS)
-            return 0;
-        if (cid == CHARACTER_ID_AMY)
-            return 3;
-        return 5;
+        return 1;
     }
 
-    if (cid == CHARACTER_ID_KNUCKLES)
-    {
-        if (attacker->charged_kick_active || attacker->charged_kick_phase > 0)
-            return 2;
-        return 3;
-    }
-    if (cid == CHARACTER_ID_TAILS)
-        return 0;
-    if (cid == CHARACTER_ID_AMY)
-        return 7;
-    return 12;
+    if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
+        return 2;
+    return 2;
 }
 
 static bool game_loop_attack_reached_hit_frame(const character_t *attacker, int attack_kind)
@@ -242,8 +220,19 @@ static void game_loop_apply_hit_effect(character_t *target,
 {
     int direction = attacker_flip ? -1 : 1;
 
+    
+    //jo_printf(1, 20, "KB dir=%d f=%.2f flip=%d", direction, knockback_force, attacker_flip ? 1 : 0);
+    //LOG
+    g_dbg_knock_dir = direction;
+    g_dbg_knock_force = knockback_force;        
+
     if (target_physics != JO_NULL)
         target_physics->speed = (float)direction * knockback_force;
+
+    // if (direction == -1)
+    //     target_physics->speed *= 0.65;          
+    
+    g_dbg_knock_speed = target_physics->speed;  
 
     if (stun_frames <= 0)
         return;
@@ -787,6 +776,7 @@ static void game_loop_update_player2_animation(void)
     else
     {
         player_update_punch_state_for_character(&player2);
+        player_update_kick_state_for_character(&player2);
     }
 
     if (is_tails)
@@ -861,108 +851,108 @@ static void game_loop_update_player2_animation(void)
             g_player2_tails_kick_total_degrees = 0;
         }
     }
-    else
-    {
-        if (is_knuckles && player2.charged_kick_enabled)
-        {
-            if (player2.kick && !player2.kick2)
-            {
-                jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
-                jo_start_sprite_anim(player2.kick_anim_id);
-            }
-            else if (player2.kick2 && player2.charged_kick_active)
-            {
-                player2.charged_kick_phase_timer++;
-                if (player2.charged_kick_phase == 1)
-                {
-                    jo_set_sprite_anim_frame(player2.kick_anim_id, 1);
-                    jo_start_sprite_anim(player2.kick_anim_id);
-                    if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE1_FRAMES)
-                    {
-                        player2.charged_kick_phase = 2;
-                        player2.charged_kick_phase_timer = 0;
-                    }
-                }
-                else
-                {
-                    jo_set_sprite_anim_frame(player2.kick_anim_id, 2);
-                    jo_start_sprite_anim(player2.kick_anim_id);
-                    if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE2_FRAMES)
-                    {
-                        player2.kick2 = false;
-                        player2.charged_kick_active = false;
-                        player2.charged_kick_ready = false;
-                        player2.charged_kick_hold_ms = 0;
-                        player2.charged_kick_phase = 0;
-                        player2.charged_kick_phase_timer = 0;
-                        player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-                        jo_reset_sprite_anim(player2.kick_anim_id);
-                    }
-                }
-            }
-            else if (player2.kick2)
-            {
-                anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
-                if (anim_frame < kick_stage2_start_frame)
-                {
-                    jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-                    jo_start_sprite_anim(player2.kick_anim_id);
-                }
-                if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
-                {
-                    player2.kick2 = false;
-                    player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-                    jo_reset_sprite_anim(player2.kick_anim_id);
-                }
-            }
-        }
-        else if (player2.kick)
-        {
-            anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
+    // else
+    // {
+    //     if (is_knuckles && player2.charged_kick_enabled)
+    //     {
+    //         if (player2.kick && !player2.kick2)
+    //         {
+    //             jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
+    //             jo_start_sprite_anim(player2.kick_anim_id);
+    //         }
+    //         else if (player2.kick2 && player2.charged_kick_active)
+    //         {
+    //             player2.charged_kick_phase_timer++;
+    //             if (player2.charged_kick_phase == 1)
+    //             {
+    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, 1);
+    //                 jo_start_sprite_anim(player2.kick_anim_id);
+    //                 if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE1_FRAMES)
+    //                 {
+    //                     player2.charged_kick_phase = 2;
+    //                     player2.charged_kick_phase_timer = 0;
+    //                 }
+    //             }
+    //             else
+    //             {
+    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, 2);
+    //                 jo_start_sprite_anim(player2.kick_anim_id);
+    //                 if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE2_FRAMES)
+    //                 {
+    //                     player2.kick2 = false;
+    //                     player2.charged_kick_active = false;
+    //                     player2.charged_kick_ready = false;
+    //                     player2.charged_kick_hold_ms = 0;
+    //                     player2.charged_kick_phase = 0;
+    //                     player2.charged_kick_phase_timer = 0;
+    //                     player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
+    //                     jo_reset_sprite_anim(player2.kick_anim_id);
+    //                 }
+    //             }
+    //         }
+    //         else if (player2.kick2)
+    //         {
+    //             anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
+    //             if (anim_frame < kick_stage2_start_frame)
+    //             {
+    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
+    //                 jo_start_sprite_anim(player2.kick_anim_id);
+    //             }
+    //             if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
+    //             {
+    //                 player2.kick2 = false;
+    //                 player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
+    //                 jo_reset_sprite_anim(player2.kick_anim_id);
+    //             }
+    //         }
+    //     }
+    //     else if (player2.kick)
+    //     {
+    //         anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
 
-            if (anim_frame > kick_stage1_last_frame || jo_is_sprite_anim_stopped(player2.kick_anim_id))
-            {
-                jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
-                jo_start_sprite_anim(player2.kick_anim_id);
-                anim_frame = 0;
-            }
+    //         if (anim_frame > kick_stage1_last_frame || jo_is_sprite_anim_stopped(player2.kick_anim_id))
+    //         {
+    //             jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
+    //             jo_start_sprite_anim(player2.kick_anim_id);
+    //             anim_frame = 0;
+    //         }
 
-            if (anim_frame >= kick_stage1_last_frame)
-            {
-                if (player2.kick2_requested)
-                {
-                    player2.kick = false;
-                    player2.kick2 = true;
-                    player2.kick2_requested = false;
-                    player2.perform_kick2 = true;
-                    jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-                    jo_start_sprite_anim(player2.kick_anim_id);
-                }
-                else
-                {
-                    player2.kick = false;
-                    player2.kick2_requested = false;
-                    player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                    jo_reset_sprite_anim(player2.kick_anim_id);
-                }
-            }
-        }
-        else if (player2.kick2)
-        {
-            anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
-            if (anim_frame < kick_stage2_start_frame)
-            {
-                jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-                jo_start_sprite_anim(player2.kick_anim_id);
-            }
-            if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
-            {
-                player2.kick2 = false;
-                player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-                jo_reset_sprite_anim(player2.kick_anim_id);
-            }
-        }
-    }
+    //         if (anim_frame >= kick_stage1_last_frame)
+    //         {
+    //             if (player2.kick2_requested)
+    //             {
+    //                 player2.kick = false;
+    //                 player2.kick2 = true;
+    //                 player2.kick2_requested = false;
+    //                 player2.perform_kick2 = true;
+    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
+    //                 jo_start_sprite_anim(player2.kick_anim_id);
+    //             }
+    //             else
+    //             {
+    //                 player2.kick = false;
+    //                 player2.kick2_requested = false;
+    //                 player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+    //                 jo_reset_sprite_anim(player2.kick_anim_id);
+    //             }
+    //         }
+    //     }
+    //     else if (player2.kick2)
+    //     {
+    //         anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
+    //         if (anim_frame < kick_stage2_start_frame)
+    //         {
+    //             jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
+    //             jo_start_sprite_anim(player2.kick_anim_id);
+    //         }
+    //         if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
+    //         {
+    //             player2.kick2 = false;
+    //             player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
+    //             jo_reset_sprite_anim(player2.kick_anim_id);
+    //         }
+    //     }
+    // }
 }
 
 static void game_loop_update_player2_runtime(void)

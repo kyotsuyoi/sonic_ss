@@ -98,24 +98,12 @@ static int ai_bot_last_frame_for_attack(const character_t *attacker, int attack_
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
-        if (cid == CHARACTER_ID_TAILS)
-            return 0;
-        if (cid == CHARACTER_ID_AMY)
-            return JO_MAX(0, JO_MIN(kick_last, 3));
-        return JO_MAX(0, JO_MIN(kick_last, 5));
+        return JO_MAX(0, JO_MIN(kick_last, 1));
     }
 
-    if (cid == CHARACTER_ID_KNUCKLES)
-    {
-        if (attacker->charged_kick_active || attacker->charged_kick_phase > 0)
-            return JO_MAX(0, JO_MIN(kick_last, 2));
-        return JO_MAX(0, JO_MIN(kick_last, 3));
-    }
-    if (cid == CHARACTER_ID_TAILS)
-        return 0;
-    if (cid == CHARACTER_ID_AMY)
-        return JO_MAX(0, JO_MIN(kick_last, 7));
-    return JO_MAX(0, kick_last);
+    if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
+        return JO_MAX(0, JO_MIN(kick_last, 2));
+    return JO_MAX(0, JO_MIN(kick_last, 2));
 }
 
 static bool ai_bot_attack_reached_hit_frame(const character_t *attacker, int attack_kind)

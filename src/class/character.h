@@ -37,10 +37,14 @@ typedef struct
     bool punch2;
     bool punch2_requested;
     bool perform_punch2;
+    int punch_stage1_ticks; /* remaining ticks for stage1 (0/1) */
+    int punch_stage2_ticks; /* hold timer for final stage2 frame */
     bool kick;
     bool kick2;
     bool kick2_requested;
     bool perform_kick2;
+    int kick_stage1_ticks; /* remaining ticks for stage1 (0/1) */
+    int kick_stage2_ticks; /* hold timer for final stage2 frame */
     bool charged_kick_enabled;
     int charged_kick_hold_ms;
     bool charged_kick_ready;

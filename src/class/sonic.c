@@ -1,5 +1,6 @@
 #include <jo/jo.h>
 #include "sonic.h"
+#include "player.h"
 #include "character_registry.h"
 
 #define character_ref player
@@ -32,10 +33,6 @@ static const jo_tile SonicWalkingTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile SonicRunning1Tiles[] =
@@ -44,10 +41,6 @@ static const jo_tile SonicRunning1Tiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile SonicRunning2Tiles[] =
@@ -56,10 +49,6 @@ static const jo_tile SonicRunning2Tiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile SonicStandTiles[] =
@@ -75,12 +64,6 @@ static const jo_tile SonicPunchTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile SonicKickTiles[] =
@@ -89,15 +72,6 @@ static const jo_tile SonicKickTiles[] =
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 10, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 11, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 12, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile SonicDefeatedTile[] =
@@ -121,6 +95,21 @@ static void sonic_reset_animation_lists_except(int active_anim_id)
         jo_reset_sprite_anim(character_ref.kick_anim_id);
 }
 
+/*
+Speed -> Animation mapping:
+- `speed_step = (int)JO_ABS(physics.speed)` converts the physics speed to a discrete level.
+- The code maps speed ranges to an animation variant and a sprite frame rate:
+    * `speed_step >= 6`: use `running2` with `frame_rate = 3` (fast)
+    * `speed_step >= 5`: use `running1` with `frame_rate = 4`
+    * `speed_step >= 4`: use `running1` with `frame_rate = 5`
+    * `speed_step >= 3`: use `running1` with `frame_rate = DEFAULT_SPRITE_FRAME_DURATION` (medium)
+    * `speed_step >= 2`: use `running1` with `frame_rate = 7`
+    * `speed_step >= 1`: use `walking` with `frame_rate = 8`
+    * `else`: use `walking` with `frame_rate = 9`
+- Lower `frame_rate` values advance animation frames faster (so `3` animates quicker than `9`).
+- `run` selects which animation variant is drawn (0 = walking, 1 = running1, 2 = running2).
+This mapping keeps the visual animation speed consistent with the character's physical speed.
+*/
 inline void sonic_running_animation_handling(void)
 {
     int speed_step;
@@ -198,74 +187,8 @@ inline void sonic_running_animation_handling(void)
         }
     }
 
-    // Punch handling: 2-stage punch (simplificado)
-    if (character_ref.punch) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame > 4 || jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, 0);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        // If player call punch2 in frame 4, activate kick2
-        if (anim_frame >= 4) {
-            if (character_ref.punch2_requested) {
-                character_ref.punch = false;
-                character_ref.punch2 = true;
-                character_ref.punch2_requested = false;
-                character_ref.perform_punch2 = true;
-                jo_set_sprite_anim_frame(character_ref.punch_anim_id, 5);
-                jo_start_sprite_anim(character_ref.punch_anim_id);
-            } else {
-                character_ref.punch = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                jo_reset_sprite_anim(character_ref.punch_anim_id);
-            }
-        }
-    } else if (character_ref.punch2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
-        if (anim_frame < 5) {
-            jo_set_sprite_anim_frame(character_ref.punch_anim_id, 5);
-            jo_start_sprite_anim(character_ref.punch_anim_id);
-        }
-        if (anim_frame >= 9 && jo_is_sprite_anim_stopped(character_ref.punch_anim_id)) {
-            character_ref.punch2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-            jo_reset_sprite_anim(character_ref.punch_anim_id);
-        }
-    }
-
-    if(character_ref.kick){
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame > 6 || jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 0);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        // If player call kick2 in frame 6, activate kick2
-        if (anim_frame >= 6) {
-            if (character_ref.kick2_requested) {
-                character_ref.kick = false;
-                character_ref.kick2 = true;
-                character_ref.kick2_requested = false;
-                character_ref.perform_kick2 = true;
-                jo_set_sprite_anim_frame(character_ref.kick_anim_id, 7);
-                jo_start_sprite_anim(character_ref.kick_anim_id);
-            } else {
-                character_ref.kick = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                jo_reset_sprite_anim(character_ref.kick_anim_id);
-            }
-        }
-    } else if (character_ref.kick2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame < 7) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 7);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        if (anim_frame >= 12 && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            character_ref.kick2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-            jo_reset_sprite_anim(character_ref.kick_anim_id);
-        }
-    }
+    player_update_punch_state_for_character(&character_ref);
+    player_update_kick_state_for_character(&character_ref);
 }
 
 inline void display_sonic(void)
