@@ -35,6 +35,6 @@
 #define COUNTER_STUN_FRAMES (120)
 
 /* Default sprite frame duration used when creating animations. Change to slow/faster global animation speed */
-#define DEFAULT_SPRITE_FRAME_DURATION (10)
+#define DEFAULT_SPRITE_FRAME_DURATION (8)
 
 #endif

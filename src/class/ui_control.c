@@ -400,6 +400,14 @@ void ui_control_init(ui_control_state_t *state)
     state->menu_cursor_character = UiCharacterSonic;
     state->menu_cursor_bot_character = UiCharacterAmy;
     state->menu_cursor_player2_character = UiCharacterAmy;
+    for (int i = 0; i < UiCharacterCount; ++i)
+    {
+        state->menu_character_controller[i] = UiControllerNone;
+        state->menu_character_group[i] = 0;
+    }
+    state->menu_character_controller[UiCharacterSonic] = UiControllerPlayer;
+    state->menu_group_count = 0;
+    state->menu_group_cursor = 0;
     state->menu_selecting_bot_character = false;
     state->menu_selecting_player2_character = false;
     state->menu_player1_confirmed = false;
@@ -407,6 +415,7 @@ void ui_control_init(ui_control_state_t *state)
     state->menu_multiplayer_versus = false;
     state->menu_multiplayer_selected_option = MenuMultiplayerVersus;
     state->menu_bot_count = 0;
+    state->menu_start_released = true;
     state->menu_up_released = true;
     state->menu_down_released = true;
     state->menu_left_released = true;
@@ -475,6 +484,56 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     jo_printf(4, 27, "START: RESUME");
 }
 
+static int ui_control_get_player_index(const ui_control_state_t *state)
+{
+    for (int i = 0; i < UiCharacterCount; ++i)
+    {
+        if (state->menu_character_controller[i] == UiControllerPlayer)
+            return i;
+    }
+    return -1;
+}
+
+static int ui_control_count_cpu(const ui_control_state_t *state)
+{
+    int count = 0;
+    for (int i = 0; i < UiCharacterCount; ++i)
+    {
+        if (state->menu_character_controller[i] == UiControllerCpu)
+            count++;
+    }
+    return count;
+}
+
+static ui_controller_type_t ui_control_next_controller(const ui_control_state_t *state, int cursor_index)
+{
+    ui_controller_type_t current = state->menu_character_controller[cursor_index];
+    bool has_player = (ui_control_get_player_index(state) >= 0);
+    int cpu_count = ui_control_count_cpu(state);
+    int active_count = cpu_count + (has_player ? 1 : 0);
+
+    /* Cycle order: NONE -> CPU -> PLAYER -> NONE */
+    ui_controller_type_t next;
+    if (current == UiControllerNone)
+        next = UiControllerCpu;
+    else if (current == UiControllerCpu)
+        next = UiControllerPlayer;
+    else
+        next = UiControllerNone;
+
+    /* Prevent exceeding 4 total active (Player+CPU). If we're at max and we would switch a None into CPU, skip to Player/None. */
+    if (current == UiControllerNone && next == UiControllerCpu && active_count >= 4)
+    {
+        /* If we already have Player, skip CPU to allow Player conversion (and free a CPU slot). */
+        if (has_player)
+            next = UiControllerNone;
+        else
+            next = UiControllerPlayer;
+    }
+
+    return next;
+}
+
 void ui_control_draw_character_menu(const ui_control_state_t *state)
 {
     static const char *character_names[UiCharacterCount] = {"SONIC", "AMY", "TAILS", "KNUCKLES", "SHADOW"};
@@ -526,6 +585,33 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf(4, 24, "UP/DOWN: SELECT");
         jo_printf(4, 25, "A: CONFIRM");
         jo_printf(4, 26, "B: BACK");
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenGroupAssign)
+    {
+        jo_printf(12, 4, "GROUP ASSIGN");
+        jo_printf(4, 6, "GROUP 1");
+        jo_printf(18, 6, "NO GROUP");
+        jo_printf(32, 6, "GROUP 2");
+
+        for (int i = 0; i < state->menu_group_count; ++i)
+        {
+            int y = 9 + (i * 3);
+            ui_character_choice_t ch = state->menu_group_order[i];
+            const char *name = character_names[ch];
+            bool selected = (i == state->menu_group_cursor);
+            int group = state->menu_character_group[ch];
+            const char *group_label = group == 1 ? "G1" : (group == 2 ? "G2" : "--");
+
+            jo_printf(6, y, "%s %s", selected ? ">" : " ", name);
+            jo_printf(22, y, "%s", group_label);
+        }
+
+        jo_printf(4, 24, "UP/DOWN: SELECT");
+        jo_printf(4, 25, "LEFT/RIGHT: GROUP");
+        jo_printf(4, 26, "START: PLAY");
+        jo_printf(4, 27, "B: BACK");
         return;
     }
 
@@ -700,6 +786,23 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
                       (MENU_SPRITE_Y / 8) + 1,
                       "%s",
                       is_hovered ? (is_locked ? "X" : ">") : " ");
+            const char *controller_label;
+            switch (state->menu_character_controller[idx])
+            {
+                case UiControllerPlayer:
+                    controller_label = "PLAYER";
+                    break;
+                case UiControllerCpu:
+                    controller_label = "CPU";
+                    break;
+                default:
+                    controller_label = "X";
+                    break;
+            }
+            jo_printf((item_x[idx] / 8) - 2,
+                      (MENU_SPRITE_Y / 8) + 5,
+                      "%s",
+                      controller_label);
         }
     }
 
@@ -711,22 +814,10 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         const char *p1_name = show_p1 ? character_names[state->menu_cursor_character] : "";
         const char *p2_name = show_p2 ? character_names[state->menu_cursor_player2_character] : "";
 
-        jo_printf(4,
-                  20,
-                  "CURRENT: [%-8s] VS [%-8s]",
-                  p1_name,
-                  p2_name);
+        jo_printf(4, 20, "P1: %-8s P2: %-8s", p1_name, p2_name);
     }
-    else if (state->menu_selecting_bot_character)
-        jo_printf(4,
-                  20,
-                  "CURRENT: %s VS %s",
-                  character_names[state->menu_selected_character],
-                  character_names[state->menu_cursor_bot_character]);
-    else
-        jo_printf(4, 20, "CURRENT: %s", character_names[state->menu_cursor_character]);
 
-    jo_printf(4, 21, "BOTS: %d", state->menu_bot_count);
+    jo_printf(4, 21, "CLONE BOTS: %d", state->menu_bot_count);
     if (ui_control_is_multiplayer_versus(state))
     {
         int p2_port = input_mapping_get_player2_port();
@@ -738,10 +829,10 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
             jo_printf(4, 19, "P2 DISCONNECTED");
     }
 
+    //jo_printf(4, 22, "UP/DOWN: CLONE BOTS");
     jo_printf(4, 23, "LEFT/RIGHT: CHAR");
-    jo_printf(4, 24, "UP/DOWN: BOTS");
-    jo_printf(4, 25, state->menu_selecting_bot_character ? "A: START GAME" : "A: CONFIRM CHAR");
-    jo_printf(4, 26, "B: BACK");
+    jo_printf(4, 24, "A: SWITCH TYPE  B: BACK");
+    jo_printf(4, 25, "START: NEXT");
 }
 
 void ui_control_draw_loading(void)
@@ -765,6 +856,7 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
     bool pressed_a = ui_control_consume_pressed(jo_is_pad1_key_down(JO_KEY_A), &state->menu_a_released);
     bool pressed_b = ui_control_consume_pressed(jo_is_pad1_key_down(JO_KEY_B), &state->menu_b_released);
     bool pressed_c = ui_control_consume_pressed(jo_is_pad1_key_down(JO_KEY_C), &state->menu_c_released);
+    bool pressed_start = ui_control_consume_pressed(jo_is_pad1_key_down(JO_KEY_START), &state->menu_start_released);
     bool pressed_up_p2 = ui_control_consume_pressed(input_mapping_is_player2_key_down(JO_KEY_UP), &state->menu_p2_up_released);
     bool pressed_down_p2 = ui_control_consume_pressed(input_mapping_is_player2_key_down(JO_KEY_DOWN), &state->menu_p2_down_released);
     bool pressed_left_p2 = ui_control_consume_pressed(input_mapping_is_player2_key_down(JO_KEY_LEFT), &state->menu_p2_left_released);
@@ -1076,53 +1168,125 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
         }
         else if (pressed_left)
         {
-            ui_character_choice_t *target_cursor = state->menu_selecting_bot_character
-                                                       ? &state->menu_cursor_bot_character
-                                                       : &state->menu_cursor_character;
-
-            *target_cursor = ui_control_prev_character(*target_cursor);
+            state->menu_cursor_character = ui_control_prev_character(state->menu_cursor_character);
         }
         else if (pressed_right)
         {
-            ui_character_choice_t *target_cursor = state->menu_selecting_bot_character
-                                                       ? &state->menu_cursor_bot_character
-                                                       : &state->menu_cursor_character;
-
-            *target_cursor = ui_control_next_character(*target_cursor);
+            state->menu_cursor_character = ui_control_next_character(state->menu_cursor_character);
         }
         else if (pressed_a)
         {
-            ui_character_choice_t cursor_choice = state->menu_selecting_bot_character
-                ? state->menu_cursor_bot_character
-                : state->menu_cursor_character;
+            ui_character_choice_t cursor = state->menu_cursor_character;
+            ui_controller_type_t current = state->menu_character_controller[cursor];
+            ui_controller_type_t next = ui_control_next_controller(state, cursor);
 
-            if (ui_control_character_is_locked(cursor_choice))
-                return;
-
-            if (!state->menu_selecting_bot_character)
+            if (next == UiControllerPlayer)
             {
-                state->menu_selected_character = state->menu_cursor_character;
-                state->menu_selected_bot_character = state->menu_selected_character;
-                state->menu_cursor_bot_character = state->menu_selected_character;
-                state->menu_selecting_bot_character = true;
+                int prev_player = ui_control_get_player_index(state);
+                if (prev_player >= 0)
+                    state->menu_character_controller[prev_player] = UiControllerNone;
             }
-            else
+
+            state->menu_character_controller[cursor] = next;
+        }
+        else if (pressed_start)
+        {
+            /* Determine selected player and CPUs before going to group assignment */
+            int player_char = -1;
+            ui_character_choice_t first_cpu_char = UiCharacterSonic;
+            int cpu_found = 0;
+
+            for (int i = 0; i < UiCharacterCount; ++i)
             {
-                state->menu_selected_bot_character = state->menu_cursor_bot_character;
+                if (state->menu_character_controller[i] == UiControllerPlayer)
+                    player_char = i;
+                if (state->menu_character_controller[i] == UiControllerCpu)
+                {
+                    if (cpu_found == 0)
+                        first_cpu_char = (ui_character_choice_t)i;
+                    cpu_found++;
+                }
+            }
+
+            if (player_char < 0 && cpu_found > 0)
+            {
+                /* No explicit Player selected: promote first CPU to Player to avoid duplicates. */
+                player_char = first_cpu_char;
+                state->menu_character_controller[player_char] = UiControllerPlayer;
+                cpu_found--;
+            }
+
+            if (player_char < 0)
+                player_char = UiCharacterSonic;
+
+            state->menu_selected_character = (ui_character_choice_t)player_char;
+            state->menu_selected_bot_character = first_cpu_char;
+
+            /* Move to group assignment before starting battle */
+            int count = 0;
+            for (int i = 0; i < UiCharacterCount; ++i)
+            {
+                if (state->menu_character_controller[i] == UiControllerPlayer
+                    || state->menu_character_controller[i] == UiControllerCpu)
+                {
+                    state->menu_group_order[count++] = (ui_character_choice_t)i;
+                    state->menu_character_group[i] = 0;
+                }
+            }
+            state->menu_group_count = count;
+            state->menu_group_cursor = 0;
+            state->menu_screen = UiMenuScreenGroupAssign;
+        }
+        else if (pressed_b)
+        {
+            state->menu_screen = UiMenuScreenBattleModeSelect;
+        }
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenGroupAssign)
+    {
+        if (state->menu_group_count > 0)
+        {
+            if (pressed_up)
+            {
+                if (state->menu_group_cursor == 0)
+                    state->menu_group_cursor = state->menu_group_count - 1;
+                else
+                    state->menu_group_cursor--;
+            }
+            else if (pressed_down)
+            {
+                state->menu_group_cursor = (state->menu_group_cursor + 1) % state->menu_group_count;
+            }
+            else if (pressed_left)
+            {
+                int char_id = state->menu_group_order[state->menu_group_cursor];
+                int current = state->menu_character_group[char_id];
+                if (current == 2)
+                    state->menu_character_group[char_id] = 0;
+                else if (current == 0)
+                    state->menu_character_group[char_id] = 1;
+            }
+            else if (pressed_right)
+            {
+                int char_id = state->menu_group_order[state->menu_group_cursor];
+                int current = state->menu_character_group[char_id];
+                if (current == 1)
+                    state->menu_character_group[char_id] = 0;
+                else if (current == 0)
+                    state->menu_character_group[char_id] = 2;
+            }
+            else if (pressed_start)
+            {
                 on_start_game(state->menu_selected_character,
                               state->menu_selected_bot_character,
                               user_data);
             }
-        }
-        else if (pressed_b)
-        {
-            if (state->menu_selecting_bot_character)
+            else if (pressed_b)
             {
-                state->menu_selecting_bot_character = false;
-                state->menu_cursor_character = state->menu_selected_character;
+                state->menu_screen = UiMenuScreenCharacterSelect;
             }
-            else
-                state->menu_screen = UiMenuScreenBattleModeSelect;
         }
         return;
     }

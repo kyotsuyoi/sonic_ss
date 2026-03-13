@@ -20,7 +20,7 @@
 #include "vram_cache.h"
 #include "runtime_log.h"
 #include "world_map.h"
-#include "jo_audio_ext/jo_map_ext.h"
+#include "jo_ext/jo_map_ext.h"
 
 static game_loop_context_t *g_ctx;
 static jo_sidescroller_physics_params g_player2_physics;
@@ -98,13 +98,22 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
         return 3;
     if (attack_kind == 2)
     {
+        if (cid == CHARACTER_ID_TAILS)
+            return 0; /* Tails has only 1 kick frame, so hit should occur immediately */
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
         return 1;
     }
 
-    if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
+    if (attack_kind == 3)
+    {
+        if (cid == CHARACTER_ID_TAILS)
+            return 0; /* Tails combo kick uses the same single-frame animation */
+        if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
+            return 2;
         return 2;
+    }
+
     return 2;
 }
 
@@ -285,6 +294,8 @@ static void game_loop_process_player_attack(character_t *attacker,
         return;
     if (attacker->life <= 0 || target->life <= 0)
         return;
+    if (attacker->group != 0 && attacker->group == target->group)
+        return;
 
     if (!attacker->punch)
         attacker->hit_done_punch1 = false;
@@ -351,70 +362,82 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
     }
 
-    if (attacker->kick
-        && attacker->character_id != CHARACTER_ID_KNUCKLES
-        && !attacker->hit_done_kick1
-        && game_loop_attack_reached_hit_frame(attacker, 2)
-        && game_loop_is_attack_in_range(attacker_world_x,
-                                        attacker_world_y,
-                                        attacker->flip,
-                                        target_world_x,
-                                        target_world_y,
-                                        attacker->hit_range_kick1))
     {
-        attacker->hit_done_kick1 = true;
-        if (target->spin)
+        int range_k1 = attacker->hit_range_kick1;
+        if (attacker->character_id == CHARACTER_ID_TAILS)
+            range_k1 += 10; /* Tails kick extends farther due to tail reach */
+
+        if (attacker->kick
+            && attacker->character_id != CHARACTER_ID_KNUCKLES
+            && !attacker->hit_done_kick1
+            && game_loop_attack_reached_hit_frame(attacker, 2)
+            && game_loop_is_attack_in_range(attacker_world_x,
+                                            attacker_world_y,
+                                            attacker->flip,
+                                            target_world_x,
+                                            target_world_y,
+                                            range_k1))
         {
-            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, attacker->knockback_kick1, COUNTER_STUN_FRAMES);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1 * 2.0f, 0);
-            damage_fx_trigger_world(target_world_x, target_world_y);
-            game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
-        }
-        else
-        {
-            target->life -= combat_profile.damage_kick1;
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1, STUN_LIGHT_FRAMES);
-            damage_fx_trigger_world(target_world_x, target_world_y);
-            game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
+            attacker->hit_done_kick1 = true;
+            if (target->spin)
+            {
+                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, attacker->knockback_kick1, COUNTER_STUN_FRAMES);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1 * 2.0f, 0);
+                damage_fx_trigger_world(target_world_x, target_world_y);
+                game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
+            }
+            else
+            {
+                target->life -= combat_profile.damage_kick1;
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1, STUN_LIGHT_FRAMES);
+                damage_fx_trigger_world(target_world_x, target_world_y);
+                game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
+            }
         }
     }
 
-    if (attacker->kick2
-        && (attacker->character_id != CHARACTER_ID_KNUCKLES
-            || attacker->charged_kick_active
-            || attacker->charged_kick_phase > 0
-            || attacker_physics->is_in_air)
-        && !attacker->hit_done_kick2
-        && game_loop_attack_reached_hit_frame(attacker, 3)
-        && game_loop_is_attack_in_range(attacker_world_x,
-                                        attacker_world_y,
-                                        attacker->flip,
-                                        target_world_x,
-                                        target_world_y,
-                                        attacker->hit_range_kick2))
     {
-        attacker->hit_done_kick2 = true;
-        bool charged_kick = combat_profile.charged_kick_enabled
-            && (attacker->charged_kick_active || attacker->charged_kick_phase > 0);
-        float kick2_knockback = charged_kick
-            ? (attacker->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
-            : attacker->knockback_kick2;
-        int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus) : STUN_HEAVY_FRAMES;
-        int kick2_damage = charged_kick ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
+        int range_k2 = attacker->hit_range_kick2;
+        if (attacker->character_id == CHARACTER_ID_TAILS)
+            range_k2 += 10; /* Tails second kick also needs extra reach */
 
-        if (target->spin)
+        if (attacker->kick2
+            && (attacker->character_id != CHARACTER_ID_KNUCKLES
+                || attacker->charged_kick_active
+                || attacker->charged_kick_phase > 0
+                || attacker_physics->is_in_air)
+            && !attacker->hit_done_kick2
+            && game_loop_attack_reached_hit_frame(attacker, 3)
+            && game_loop_is_attack_in_range(attacker_world_x,
+                                            attacker_world_y,
+                                            attacker->flip,
+                                            target_world_x,
+                                            target_world_y,
+                                            range_k2))
         {
-            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, kick2_knockback, COUNTER_STUN_FRAMES);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback * 2.0f, 0);
-            damage_fx_trigger_world(target_world_x, target_world_y);
-            game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
-        }
-        else
-        {
-            target->life -= kick2_damage;
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, kick2_stun);
-            damage_fx_trigger_world(target_world_x, target_world_y);
-            game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
+            attacker->hit_done_kick2 = true;
+            bool charged_kick = combat_profile.charged_kick_enabled
+                && (attacker->charged_kick_active || attacker->charged_kick_phase > 0);
+            float kick2_knockback = charged_kick
+                ? (attacker->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
+                : attacker->knockback_kick2;
+            int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus) : STUN_HEAVY_FRAMES;
+            int kick2_damage = charged_kick ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
+
+            if (target->spin)
+            {
+                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, kick2_knockback, COUNTER_STUN_FRAMES);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback * 2.0f, 0);
+                damage_fx_trigger_world(target_world_x, target_world_y);
+                game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
+            }
+            else
+            {
+                target->life -= kick2_damage;
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, kick2_stun);
+                damage_fx_trigger_world(target_world_x, target_world_y);
+                game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
+            }
         }
 
         attacker->charged_kick_active = false;
@@ -999,6 +1022,37 @@ static void game_loop_update_player2_runtime(void)
     game_loop_update_player2_animation();
 }
 
+static const char *character_short_name(int character_id)
+{
+    switch (character_id)
+    {
+    case CHARACTER_ID_AMY:
+        return "AMY";
+    case CHARACTER_ID_TAILS:
+        return "TLS";
+    case CHARACTER_ID_KNUCKLES:
+        return "KNK";
+    case CHARACTER_ID_SHADOW:
+        return "SDW";
+    case CHARACTER_ID_SONIC:
+    default:
+        return "SNC";
+    }
+}
+
+static void game_loop_draw_life_bar(int x, int y, const char *label, int life)
+{
+    int life_percent = (life * 100) / 50;
+    int bar_max_width = 10;
+    int bar_width = (life_percent * bar_max_width) / 100;
+    char bar[bar_max_width + 1];
+    for (int i = 0; i < bar_max_width; ++i)
+        bar[i] = (i < bar_width) ? '#' : '-';
+    bar[bar_max_width] = '\0';
+
+    jo_printf(x, y, "%s[%s] %d%%", label, bar, life_percent);
+}
+
 static void game_loop_draw_player2(void)
 {
     int life_percent;
@@ -1136,6 +1190,23 @@ static void game_loop_draw_player2(void)
 
     if (player2.flip)
         jo_sprite_disable_horizontal_flip();
+}
+
+static void game_loop_draw_health_bars(void)
+{
+    /* Draw up to 5 life bars (player + player2 + up to 3 bots), using 3-letter codes. */
+    game_loop_draw_life_bar(1, 24, character_short_name(player.character_id), player.life);
+
+    if (g_player2_active)
+        game_loop_draw_life_bar(1, 25, character_short_name(player2.character_id), player2.life);
+
+    int bot_count = bot_get_active_count();
+    if (bot_count > 0)
+        game_loop_draw_life_bar(24, 24, character_short_name(bot_get_character_id(0)), bot_get_life(0));
+    if (bot_count > 1)
+        game_loop_draw_life_bar(24, 25, character_short_name(bot_get_character_id(1)), bot_get_life(1));
+    if (bot_count > 2)
+        game_loop_draw_life_bar(24, 26, character_short_name(bot_get_character_id(2)), bot_get_life(2));
 }
 
 void game_loop_init(game_loop_context_t *ctx)
@@ -1353,6 +1424,7 @@ void game_loop_draw(void)
     game_loop_draw_player2();
     bot_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
     damage_fx_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    game_loop_draw_health_bars();
     if (g_runtime_playing_draw_logs < 6)
     {
         runtime_log("draw: chars");

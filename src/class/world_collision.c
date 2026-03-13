@@ -2,7 +2,7 @@
 #include "world_collision.h"
 #include "debug.h"
 #include "game_constants.h"
-#include "jo_audio_ext/jo_map_ext.h"
+#include "jo_ext/jo_map_ext.h"
 
 static inline float world_collision_fabs(float x)
 {

@@ -1,6 +1,6 @@
 #include <jo/jo.h>
 #include "game_audio.h"
-#include "jo_audio_ext/jo_audio_ext.h"
+#include "jo_ext/jo_audio_ext.h"
 
 #define GAME_SFX_SAMPLE_RATE_DEFAULT 36000
 #define GAME_SFX_SAMPLE_RATE_SPIN 36000

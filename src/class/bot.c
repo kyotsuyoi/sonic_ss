@@ -45,6 +45,7 @@ typedef enum
     BotCharacterAmy,
     BotCharacterTails,
     BotCharacterKnuckles,
+    BotCharacterShadow,
     BotCharacterCount
 } bot_character_t;
 
@@ -359,8 +360,13 @@ static int bot_last_frame_for_player_attack(const character_t *player_ref, int a
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
+        if (cid == CHARACTER_ID_TAILS)
+            return 0; /* Tails kick is single-frame; hit should occur immediately */
         return 1;
     }
+
+    if (cid == CHARACTER_ID_TAILS)
+        return 0; /* Tails kick2 also should hit immediately */
 
     if (cid == CHARACTER_ID_KNUCKLES && (player_ref->charged_kick_active || player_ref->charged_kick_phase > 0))
         return 2;
@@ -503,25 +509,6 @@ static bot_character_assets_t *bot_get_assets_cache(int character)
     return &bot_assets_cache[character];
 }
 
-void bot_instance_init(bot_instance_t *instance,
-                       int selected_player_character,
-                       int selected_bot_character,
-                       int player_world_x,
-                       int player_world_y);
-void bot_instance_unload(bot_instance_t *instance);
-void bot_instance_update(bot_instance_t *instance,
-                         character_t *player,
-                         bool *player_defeated,
-                         jo_sidescroller_physics_params *player_physics,
-                         character_t *player2,
-                         bool *player2_defeated,
-                         jo_sidescroller_physics_params *player2_physics,
-                         bool versus_mode,
-                         int map_pos_x,
-                         int map_pos_y);
-void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y);
-bool bot_instance_is_defeated(bot_instance_t *instance);
-
 static ui_character_choice_t bot_ui_character_from_bot_character(int character)
 {
     switch (character)
@@ -532,6 +519,8 @@ static ui_character_choice_t bot_ui_character_from_bot_character(int character)
         return UiCharacterTails;
     case BotCharacterKnuckles:
         return UiCharacterKnuckles;
+    case BotCharacterShadow:
+        return UiCharacterShadow;
     case BotCharacterSonic:
     default:
         return UiCharacterSonic;
@@ -1019,6 +1008,23 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         punch_tiles = PunchTiles4;
         kick_tiles = KickTiles4;
     }
+    else if (character == BotCharacterShadow)
+    {
+        wlk = "SDW_WLK.TGA";
+        run1 = "SDW_RUN1.TGA";
+        run2 = "SDW_RUN2.TGA";
+        std = "SDW_STD.TGA";
+        jmp = "SDW_JMP.TGA";
+        spn = "SDW_SPN.TGA";
+        dmg = "SDW_DMG.TGA";
+        dft = "SDW_DFT.TGA";
+        pnc = "SDW_PNC.TGA";
+        kck = "SDW_KCK.TGA";
+        move_tiles = WalkTiles;
+        stand_tiles = StandTiles;
+        punch_tiles = PunchTiles;
+        kick_tiles = KickTiles13;
+    }
     else
     {
         wlk = "TLS_WLK.TGA";
@@ -1211,6 +1217,12 @@ static void process_player_hits(character_t *player_ref,
     int player_hit_range_punch2 = player_ref->hit_range_punch2;
     int player_hit_range_kick1 = player_ref->hit_range_kick1;
     int player_hit_range_kick2 = player_ref->hit_range_kick2;
+    if (player_ref->character_id == CHARACTER_ID_TAILS)
+    {
+        /* Tails has extra reach due to tail length */
+        player_hit_range_kick1 += 10;
+        player_hit_range_kick2 += 10;
+    }
     float player_knockback_punch1 = player_ref->knockback_punch1;
     float player_knockback_punch2 = player_ref->knockback_punch2;
     float player_knockback_kick1 = player_ref->knockback_kick1;
@@ -1219,6 +1231,9 @@ static void process_player_hits(character_t *player_ref,
     combat_profile = character_registry_get_combat_profile_by_character_id(player_ref->character_id);
 
     if (bot_defeated)
+        return;
+
+    if (player_ref->group != 0 && player_ref->group == bot.group)
         return;
 
     if (!player_ref->punch)
@@ -1362,7 +1377,7 @@ static void bot_select_target(bot_instance_t *self_instance,
                               int *out_target_world_x,
                               int *out_target_world_y)
 {
-    bool self_is_ally = self_instance->bot_is_ally;
+    int self_group = self_instance->bot.group;
     int self_world_x = (int)self_instance->bot_world_x;
     int self_world_y = (int)self_instance->bot_world_y;
     int best_score = 0x7fffffff;
@@ -1373,38 +1388,32 @@ static void bot_select_target(bot_instance_t *self_instance,
     int best_target_world_y = self_world_y;
     int index;
 
-    if (!versus_mode || player2_ref == JO_NULL)
+    /* If either party is in group 0 (no group), treat as enemies (free-for-all). */
+    bool player_is_enemy = (player_ref != JO_NULL)
+        && (self_group == 0 || player_ref->group == 0 || self_group != player_ref->group);
+    if (player_is_enemy && player_ref->life > 0 && (player_defeated == JO_NULL || !(*player_defeated)))
     {
-        *out_target_character = player_ref;
-        *out_target_defeated = player_defeated;
-        *out_target_physics = player_physics;
-        *out_target_world_x = player_world_x;
-        *out_target_world_y = player_world_y;
-        return;
+        best_target_character = player_ref;
+        best_target_defeated = player_defeated;
+        best_target_physics = player_physics;
+        best_target_world_x = player_world_x;
+        best_target_world_y = player_world_y;
+        best_score = JO_ABS(self_world_x - player_world_x) + JO_ABS(self_world_y - player_world_y);
     }
 
-    if (self_is_ally)
+    bool player2_is_enemy = (player2_ref != JO_NULL)
+        && (self_group == 0 || player2_ref->group == 0 || self_group != player2_ref->group);
+    if (player2_ref != JO_NULL && player2_is_enemy && player2_ref->life > 0 && (player2_defeated == JO_NULL || !(*player2_defeated)))
     {
-        if (player2_ref->life > 0 && (player2_defeated == JO_NULL || !(*player2_defeated)))
+        int score = JO_ABS(self_world_x - player2_world_x) + JO_ABS(self_world_y - player2_world_y);
+        if (best_target_character == JO_NULL || score < best_score)
         {
             best_target_character = player2_ref;
             best_target_defeated = player2_defeated;
             best_target_physics = player2_physics;
             best_target_world_x = player2_world_x;
             best_target_world_y = player2_world_y;
-            best_score = JO_ABS(self_world_x - player2_world_x) + JO_ABS(self_world_y - player2_world_y);
-        }
-    }
-    else
-    {
-        if (player_ref->life > 0 && (player_defeated == JO_NULL || !(*player_defeated)))
-        {
-            best_target_character = player_ref;
-            best_target_defeated = player_defeated;
-            best_target_physics = player_physics;
-            best_target_world_x = player_world_x;
-            best_target_world_y = player_world_y;
-            best_score = JO_ABS(self_world_x - player_world_x) + JO_ABS(self_world_y - player_world_y);
+            best_score = score;
         }
     }
 
@@ -1419,7 +1428,10 @@ static void bot_select_target(bot_instance_t *self_instance,
             continue;
         if (!candidate->bot_loaded || candidate->bot_defeated)
             continue;
-        if (candidate->bot_is_ally == self_is_ally)
+
+        int candidate_group = candidate->bot.group;
+        bool candidate_is_enemy = (self_group == 0 || candidate_group == 0 || self_group != candidate_group);
+        if (!candidate_is_enemy)
             continue;
 
         candidate_world_x = (int)candidate->bot_world_x;
@@ -1439,15 +1451,7 @@ static void bot_select_target(bot_instance_t *self_instance,
 
     if (best_target_character == JO_NULL)
     {
-        if (self_is_ally)
-        {
-            best_target_character = player2_ref;
-            best_target_defeated = player2_defeated;
-            best_target_physics = player2_physics;
-            best_target_world_x = player2_world_x;
-            best_target_world_y = player2_world_y;
-        }
-        else
+        if (player_is_enemy && player_ref != JO_NULL)
         {
             best_target_character = player_ref;
             best_target_defeated = player_defeated;
@@ -1455,6 +1459,16 @@ static void bot_select_target(bot_instance_t *self_instance,
             best_target_world_x = player_world_x;
             best_target_world_y = player_world_y;
         }
+        else if (player2_ref != JO_NULL && player2_is_enemy)
+        {
+            best_target_character = player2_ref;
+            best_target_defeated = player2_defeated;
+            best_target_physics = player2_physics;
+            best_target_world_x = player2_world_x;
+            best_target_world_y = player2_world_y;
+        }
+        /* If neither player is an enemy (same group or no group), leave target NULL so the bot can idle.
+           This prevents allied bots from chasing the player even when they cannot hit. */
     }
 
     *out_target_character = best_target_character;
@@ -1474,6 +1488,7 @@ static void bot_select_target(bot_instance_t *self_instance,
 void bot_instance_init(bot_instance_t *instance,
                        int selected_player_character,
                        int selected_bot_character,
+                       int selected_bot_group,
                        int player_world_x,
                        int player_world_y)
 {
@@ -1543,6 +1558,7 @@ void bot_instance_init(bot_instance_t *instance,
     bot.can_jump = true;
     bot.stun_timer = 0;
     character_registry_apply_combat_profile(&bot, bot_ui_character_from_bot_character(bot_character));
+    bot.group = selected_bot_group;
 
     bot_defeated = false;
     world_physics_init_character(&bot_physics);
@@ -1697,7 +1713,20 @@ void bot_instance_update(bot_instance_t *instance,
                       &ai_ctx.player_world_x,
                       &ai_ctx.player_world_y);
 
-    if (target_player_defeated != JO_NULL && *target_player_defeated)
+    bool has_target = (target_player_ref != JO_NULL);
+
+    if (!has_target)
+    {
+        /* No enemies remain (all allies). Stop movement and reset actions, but keep physics running. */
+        bot_end_attack();
+        bot_attack_cooldown = 0;
+        bot.walk = false;
+        bot.run = 0;
+        bot.spin = false;
+        bot.stun_timer = 0;
+        bot_physics.speed = 0.0f;
+    }
+    else if (target_player_defeated != JO_NULL && *target_player_defeated)
     {
         bot_end_attack();
         bot_attack_cooldown = 0;
@@ -1734,11 +1763,6 @@ void bot_instance_update(bot_instance_t *instance,
         ai_ctx.bot_world_y_ref = &bot_world_y;
         ai_ctx.bot_speed_x_ref = &bot_physics.speed;
         ai_ctx.bot_speed_y_ref = &bot_physics.speed_y;
-        if (target_player_ref == JO_NULL)
-        {
-            ai_ctx.player_world_x = player_world_x;
-            ai_ctx.player_world_y = player_world_y;
-        }
         ai_ctx.bot_attack_cooldown_ref = &bot_attack_cooldown;
         ai_ctx.bot_attack_step_ref = &bot_attack_step;
         ai_ctx.bot_jump_cooldown_ref = &bot_jump_cooldown;
@@ -1835,7 +1859,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         else
             bot.angle += CHARACTER_SPIN_SPEED;
     }
-    else if (bot_defeated && bot_defeated_sprite_id >= 0)
+    else if ((bot_defeated || bot.life <= 0) && bot_defeated_sprite_id >= 0)
     {
         bot_reset_animation_lists_except(-1);
         jo_sprite_draw3D2(bot_defeated_sprite_id, bot.x, bot.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
@@ -1966,6 +1990,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         bar[i] = (i < bar_width) ? '#' : '-';
     bar[bar_max_width] = '\0';
 
+    /*
     if (instance == &default_bot_instances[0] && !bot_is_ally_flag)
     {
         jo_printf(0,
@@ -1977,6 +2002,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         if (bot_defeated)
             jo_printf(0, 28, "BOT KO");
     }
+    */
 }
 
 bool bot_instance_is_defeated(bot_instance_t *instance)
@@ -2006,27 +2032,44 @@ int bot_get_active_count(void)
 
 void bot_init(int selected_player_character, int selected_bot_character, int player_world_x, int player_world_y)
 {
+    int selected_bot_characters[1];
+    int selected_bot_groups[1];
+    selected_bot_characters[0] = selected_bot_character;
+    selected_bot_groups[0] = 0;
+    bot_init_multi(selected_player_character, selected_bot_characters, selected_bot_groups, 1, 0, player_world_x, player_world_y);
+}
+
+void bot_init_multi(int selected_player_character, const int selected_bot_characters[], const int selected_bot_groups[], int bot_count, int selected_player_group, int player_world_x, int player_world_y)
+{
     int index;
     int spacing = 64;
 
-    //LOG
-    jo_printf(0, 240, "bot_init: start active_count=%d selected_player=%d selected_bot=%d", default_bot_active_count, selected_player_character, selected_bot_character);
+    if (bot_count < 0)
+        bot_count = 0;
+    if (bot_count > BOT_MAX_DEFAULT_COUNT)
+        bot_count = BOT_MAX_DEFAULT_COUNT;
+
+    default_bot_active_count = bot_count;
 
     for (index = BOT_MAX_DEFAULT_COUNT - 1; index >= default_bot_active_count; --index)
         bot_instance_unload(&default_bot_instances[index]);
 
     for (index = 0; index < default_bot_active_count; ++index)
     {
+        int char_index = selected_bot_characters[index % bot_count];
+        int group = selected_bot_groups[index % bot_count];
         bot_instance_init(&default_bot_instances[index],
-                  selected_player_character,
-                  selected_bot_character,
-                  player_world_x + (spacing * index),
-                  player_world_y);
-        default_bot_instances[index].bot_is_ally = false;
+                          selected_player_character,
+                          char_index,
+                          group,
+                          player_world_x + (spacing * index),
+                          player_world_y);
+
+        default_bot_instances[index].bot_is_ally = (group != 0 && group == selected_player_group);
     }
 
     //LOG
-    jo_printf(0, 241, "bot_init: done\n");
+    jo_printf(0, 241, "bot_init_multi: done count=%d\n", default_bot_active_count);
 }
 
 void bot_init_versus(int selected_player_character,
@@ -2064,9 +2107,11 @@ void bot_init_versus(int selected_player_character,
             bot_instance_init(&default_bot_instances[ally_index],
                               selected_player_character,
                               selected_player_character,
+                              1,
                               player_world_x - (96 * (index + 1)),
                               player_world_y);
             default_bot_instances[ally_index].bot_is_ally = true;
+            ally_index += 2;
         }
 
         if (enemy_index < default_bot_active_count)
@@ -2074,13 +2119,12 @@ void bot_init_versus(int selected_player_character,
             bot_instance_init(&default_bot_instances[enemy_index],
                               selected_player_character,
                               selected_player2_character,
-                              player_world_x + (96 * (index + 2)),
+                              2,
+                              player_world_x + (96 * (index + 1)),
                               player_world_y);
             default_bot_instances[enemy_index].bot_is_ally = false;
+            enemy_index += 2;
         }
-
-        ally_index += 2;
-        enemy_index += 2;
     }
 }
 
@@ -2181,4 +2225,23 @@ bool bot_debug_get_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot)
     snapshot->hit_k2 = dbg_hit_k2;
 
     return true;
+}
+
+int bot_get_life(int index)
+{
+    if (index < 0 || index >= default_bot_active_count)
+        return 0;
+
+    /* bot_instance_t starts with a character_t, so we can read life directly. */
+    character_t *bot_chr = (character_t *)&default_bot_instances[index];
+    return bot_chr->life;
+}
+
+int bot_get_character_id(int index)
+{
+    if (index < 0 || index >= default_bot_active_count)
+        return CHARACTER_ID_SONIC;
+
+    character_t *bot_chr = (character_t *)&default_bot_instances[index];
+    return bot_chr->character_id;
 }

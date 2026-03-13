@@ -124,6 +124,16 @@ character_combat_profile_t character_registry_get_combat_profile(ui_character_ch
     profile.charged_kick_stun_bonus = 14;
     profile.charged_kick_knockback_mult = 1.70f;
 
+    if (choice == UiCharacterTails)
+    {
+        profile.hit_range_kick1 = 16;
+        profile.hit_range_kick2 = 20;
+        profile.attack_forward_impulse_light = 0.65f;
+        profile.attack_forward_impulse_heavy = 1.00f;
+        profile.knockback_kick1 = 1.8f;
+        profile.knockback_kick2 = 2.4f;
+    }
+
     if (choice == UiCharacterKnuckles)
     {
         profile.hit_range_kick1 = 13;
@@ -183,4 +193,8 @@ void character_registry_apply_combat_profile(character_t *character, ui_characte
         character->character_id = CHARACTER_ID_SONIC;
         break;
     }
+
+    /* Default group assignment (no group) */
+    character->group = 0;
 }
+

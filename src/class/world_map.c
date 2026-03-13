@@ -5,7 +5,7 @@
 #include "runtime_log.h"
 #include "rotating_sprite_pool.h"
 #include "vram_cache.h"
-#include "jo_audio_ext/jo_map_ext.h"
+#include "jo_ext/jo_map_ext.h"
 
 #define WORLD_MAP_FIELD_BUFFER_SIZE (16)
 #define WORLD_MAP_MAX_GROUPS (ROTATING_SPRITE_POOL_MAX_POOLS)

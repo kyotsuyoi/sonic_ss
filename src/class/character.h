@@ -73,6 +73,7 @@ typedef struct
     int angle;
     int speed;
     int life;
+    int group; /* 0 = no group, 1 = group1, 2 = group2 */
 } character_t;
 
 #endif

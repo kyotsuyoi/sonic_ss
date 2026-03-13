@@ -5,7 +5,7 @@
 #include "damage_fx.h"
 #include "game_constants.h"
 #include "character_registry.h"
-#include "jo_audio_ext/jo_map_ext.h"
+#include "jo_ext/jo_map_ext.h"
 #include <stdlib.h>
 
 #define BOT_ENGAGE_RANGE 9
@@ -82,28 +82,27 @@ static ui_character_choice_t ai_choice_from_character_id(int character_id)
 static int ai_bot_last_frame_for_attack(const character_t *attacker, int attack_kind)
 {
     int cid = attacker->character_id;
-    character_animation_profile_t profile = character_registry_get_animation_profile(ai_choice_from_character_id(cid));
-    int punch_last = profile.punch_count - 1;
-    int kick_last = profile.kick_count - 1;
 
     if (attack_kind == 0)
-    {
-        return JO_MAX(0, JO_MIN(punch_last, 2));
-    }
+        /* punch1: hit occurs on second frame (index 1) */
+        return 1;
     if (attack_kind == 1)
-    {
-        return JO_MAX(0, JO_MIN(punch_last, 3));
-    }
+        /* punch2: hit on final frame (index 3) */
+        return 3;
     if (attack_kind == 2)
     {
         if (cid == CHARACTER_ID_KNUCKLES)
             return -1;
-        return JO_MAX(0, JO_MIN(kick_last, 1));
+        if (cid == CHARACTER_ID_TAILS)
+            return 0; /* Tails has only 1 kick frame */
+        return 1;
     }
 
+    if (cid == CHARACTER_ID_TAILS)
+        return 0; /* Tails combo kick uses the same single-frame animation */
     if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
-        return JO_MAX(0, JO_MIN(kick_last, 2));
-    return JO_MAX(0, JO_MIN(kick_last, 2));
+        return 2;
+    return 2;
 }
 
 static bool ai_bot_attack_reached_hit_frame(const character_t *attacker, int attack_kind)
@@ -509,6 +508,8 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
             attack_damage = ctx->bot_ref->charged_kick_enabled ? 0 : combat_profile.damage_kick1;
             attack_kind = ctx->bot_ref->charged_kick_enabled ? -1 : 2;
             attack_range = combat_profile.hit_range_kick1;
+            if (ctx->bot_ref->character_id == CHARACTER_ID_TAILS)
+                attack_range += 10; /* Tails has extra reach */
             attack_knockback = ctx->bot_ref->knockback_kick1;
             attack_stun = STUN_LIGHT_FRAMES;
         }
@@ -519,6 +520,8 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
             attack_range = knuckles_charge_attack
                 ? (combat_profile.hit_range_kick2 + combat_profile.charged_kick_range_bonus)
                 : combat_profile.hit_range_kick2;
+            if (ctx->bot_ref->character_id == CHARACTER_ID_TAILS)
+                attack_range += 10; /* Tails has extra reach */
             attack_knockback = knuckles_charge_attack
                 ? (ctx->bot_ref->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
                 : ctx->bot_ref->knockback_kick2;
@@ -537,9 +540,12 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                                        ctx->player_world_y,
                                        attack_range))
         {
+            bool skip_damage = (ctx->bot_ref->group != 0 && ctx->bot_ref->group == ctx->player->group);
             *ctx->bot_attack_damage_done_ref = true;
 
-            if (ctx->player->spin)
+            if (skip_damage)
+                ;
+            else if (ctx->player->spin)
             {
                 int defender_direction = ctx->bot_ref->flip ? -1 : 1;
                 int attacker_direction = -defender_direction;

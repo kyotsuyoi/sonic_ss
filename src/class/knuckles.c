@@ -339,7 +339,7 @@ inline void display_knuckles(void)
     for (int i = 0; i < bar_max_width; ++i)
         bar[i] = (i < bar_width) ? '#' : '-';
     bar[bar_max_width] = '\0';
-    jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent);
+    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar (temporário)
 }
 
 void load_knuckles(void)

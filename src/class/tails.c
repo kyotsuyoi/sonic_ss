@@ -280,6 +280,14 @@ void tails_running_animation_handling(void)
             tails_kick_duration = TAILS_KICK1_ROTATION_TIME;
             tails_kick_total_degrees = 180;
             tails_kick_rotation_active = true;
+
+            /* Ensure the kick animation advances so hit detection can trigger. */
+            if (character_ref.kick_anim_id >= 0)
+            {
+                tails_reset_animation_lists_except(character_ref.kick_anim_id);
+                jo_start_sprite_anim(character_ref.kick_anim_id);
+                jo_set_sprite_anim_frame_rate(character_ref.kick_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
+            }
         }
 
         if (tails_kick_timer < tails_kick_duration)
@@ -298,6 +306,14 @@ void tails_running_animation_handling(void)
                 tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
                 tails_kick_total_degrees = 360;
                 tails_kick_rotation_active = true;
+
+                /* Start kick2 animation to allow hit detection. */
+                if (character_ref.kick_anim_id >= 0)
+                {
+                    tails_reset_animation_lists_except(character_ref.kick_anim_id);
+                    jo_start_sprite_anim(character_ref.kick_anim_id);
+                    jo_set_sprite_anim_frame_rate(character_ref.kick_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
+                }
             }
             else
             {
@@ -418,7 +434,7 @@ void display_tails(void)
     for (int i = 0; i < bar_max_width; ++i)
         bar[i] = (i < bar_width) ? '#' : '-';
     bar[bar_max_width] = '\0';
-    jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent);
+    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar (temporário)
 }
 
 void load_tails(void)

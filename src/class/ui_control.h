@@ -34,6 +34,14 @@ typedef enum
 
 typedef enum
 {
+    UiControllerNone = 0,
+    UiControllerPlayer,
+    UiControllerCpu,
+    UiControllerCount
+} ui_controller_type_t;
+
+typedef enum
+{
     UiDebugModeOff = 0,
     UiDebugModeHardware,
     UiDebugModePlayer,
@@ -48,6 +56,7 @@ typedef enum
     UiMenuScreenBattleModeSelect,
     UiMenuScreenMultiplayerModeSelect,
     UiMenuScreenCharacterSelect,
+    UiMenuScreenGroupAssign,
     UiMenuScreenOptions,
     UiMenuScreenConfigControls,
     UiMenuScreenSongTest
@@ -62,6 +71,11 @@ typedef struct
     ui_character_choice_t menu_cursor_character;
     ui_character_choice_t menu_cursor_bot_character;
     ui_character_choice_t menu_cursor_player2_character;
+    ui_controller_type_t menu_character_controller[UiCharacterCount];
+    int menu_character_group[UiCharacterCount];
+    ui_character_choice_t menu_group_order[4];
+    int menu_group_count;
+    int menu_group_cursor;
     bool menu_selecting_bot_character;
     bool menu_selecting_player2_character;
     bool menu_player1_confirmed;
@@ -69,6 +83,7 @@ typedef struct
     bool menu_multiplayer_versus;
     int menu_multiplayer_selected_option;
     int menu_bot_count;
+    bool menu_start_released;
     bool menu_up_released;
     bool menu_down_released;
     bool menu_left_released;
