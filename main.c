@@ -31,7 +31,7 @@ static bool ram_cart_start_released = true;
 static ram_cart_status_t ram_cart_status = RamCartStatusNotDetected;
 static int sprite_anim_bootstrap_id = -1;
 
-#define GAME_VERSION_TEXT "ver. 0.1.18a"
+#define GAME_VERSION_TEXT "ver. 0.1.25a"
 #define GAME_VERSION_TEXT_X 28
 #define GAME_VERSION_TEXT_Y 28
 #define RAM_CART_TEXT_X 7
