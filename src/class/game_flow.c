@@ -270,7 +270,7 @@ void game_flow_process_loading(void *user_data)
     game_flow_context_t *ctx = (game_flow_context_t *)user_data;
     int bot_count;
 
-    jo_printf(0, 20, "game_flow: process_loading start");
+    //jo_printf(0, 20, "game_flow: process_loading start");
     runtime_log("game_flow: process_loading start");
 
     if (!loading_pending)
@@ -278,37 +278,42 @@ void game_flow_process_loading(void *user_data)
 
     if (!loading_assets_ready)
     {
-        jo_printf(0, 200, "game_flow: beginning asset preparation");
+        //jo_printf(0, 200, "game_flow: beginning asset preparation");
         runtime_log("game_flow: beginning asset preparation");
         if (battle_sprite_start_id < 0)
             battle_sprite_start_id = jo_get_last_sprite_id() + 1;
 
-        jo_printf(0, 201, "game_flow: calling unload_battle_assets");
+            
+        runtime_log("game_flow: calling unload_battle_assets");
+        //jo_printf(0, 201, "game_flow: calling unload_battle_assets");
         unload_battle_assets();
-        jo_printf(0, 202, "game_flow: unload_battle_assets returned");
+        //jo_printf(0, 202, "game_flow: unload_battle_assets returned");
+        runtime_log("game_flow: unload_battle_assets returned");
 
         player = (character_t){0};
         player2 = (character_t){0};
-        jo_printf(0, 203, "game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
+        //jo_printf(0, 203, "game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
         runtime_log("game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
-        ensure_active_character_loaded(loading_selected_character);
-        jo_printf(0, 204, "game_flow: ensure_active_character_loaded returned");
+        ensure_active_character_loaded(loading_selected_character);        
+        runtime_log("game_flow: ensure_active_character_loaded returned");
+        //jo_printf(0, 204, "game_flow: ensure_active_character_loaded returned");
 
         if (ctx->ui_state->menu_multiplayer_versus)
         {
-            jo_printf(0, 205, "game_flow: calling setup_player2_character(%d)", (int)ctx->ui_state->menu_selected_player2_character);
+            //jo_printf(0, 205, "game_flow: calling setup_player2_character(%d)", (int)ctx->ui_state->menu_selected_player2_character);
             runtime_log("game_flow: calling setup_player2_character(%d)", (int)ctx->ui_state->menu_selected_player2_character);
             setup_player2_character(ctx->ui_state->menu_selected_player2_character);
-            jo_printf(0, 206, "game_flow: setup_player2_character returned");
+            //jo_printf(0, 206, "game_flow: setup_player2_character returned");
+            runtime_log("game_flow: setup_player2_character returned");
         }
         else
             player2 = (character_t){0};
 
-        jo_printf(0, 207, "game_flow: world_physics_init_character");
+        runtime_log("game_flow: world_physics_init_character");
         world_physics_init_character(ctx->physics);
-        jo_printf(0, 208, "game_flow: reset_fight");
+        runtime_log("game_flow: reset_fight");
         reset_fight(ctx->map_pos_x, ctx->map_pos_y);
-        jo_printf(0, 209, "game_flow: damage_fx_reset");
+        runtime_log("game_flow: damage_fx_reset");
         damage_fx_reset();
         *ctx->player_defeated = false;
 
@@ -317,14 +322,14 @@ void game_flow_process_loading(void *user_data)
             bot_count = ctx->ui_state->menu_bot_count;
             if (bot_count > 0)
             {
-                jo_printf(0, 210, "game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
+                //jo_printf(0, 210, "game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
                 runtime_log("game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
                 bot_init_versus((int)loading_selected_character,
                                 (int)ctx->ui_state->menu_selected_player2_character,
                                 bot_count,
                                 *ctx->map_pos_x + player.x,
                                 *ctx->map_pos_y + player.y);
-                jo_printf(0, 211, "game_flow: bot_init_versus returned");
+                runtime_log("game_flow: bot_init_versus returned");
             }
             else
             {
@@ -357,7 +362,7 @@ void game_flow_process_loading(void *user_data)
 
             if (cpu_count > 0)
             {
-                jo_printf(0, 212, "game_flow: calling bot_init_multi player=%d cpu_count=%d", player_character, cpu_count);
+                //jo_printf(0, 212, "game_flow: calling bot_init_multi player=%d cpu_count=%d", player_character, cpu_count);
                 runtime_log("game_flow: calling bot_init_multi player=%d cpu_count=%d", player_character, cpu_count);
                 bot_init_multi(player_character,
                                cpu_characters,
@@ -376,7 +381,7 @@ void game_flow_process_loading(void *user_data)
         }
 
         loading_assets_ready = true;
-        jo_printf(0, 21, "game_flow: assets ready");
+        //jo_printf(0, 21, "game_flow: assets ready");
         runtime_log("game_flow: assets ready");
     }
 
@@ -386,10 +391,9 @@ void game_flow_process_loading(void *user_data)
     loading_pending = false;
     loading_assets_ready = false;
     world_background_load();
-    jo_printf(0, 22, "game_flow: world_background_load called");
+    runtime_log("game_flow: world_background_load called");
     ctx->ui_state->game_paused = false;
     ctx->ui_state->current_game_state = UiGameStatePlaying;
-    jo_printf(0, 23, "game_flow: switching to playing");
     runtime_log("game_flow: switching to playing");
 }
 
