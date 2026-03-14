@@ -17,7 +17,7 @@
 #include "game_loop.h"
 #include "damage_fx.h"
 #include "character_registry.h"
-#include "knuckles.h"
+#include "character/knuckles.h"
 #include "vram_cache.h"
 #include "runtime_log.h"
 #include "world_map.h"
@@ -1114,6 +1114,20 @@ void game_loop_debug_frame(void)
         debug_frame();
 }
 
+int game_loop_get_map_pos_x(void)
+{
+    if (g_ctx == JO_NULL || g_ctx->map_pos_x == JO_NULL)
+        return 0;
+    return *g_ctx->map_pos_x;
+}
+
+int game_loop_get_map_pos_y(void)
+{
+    if (g_ctx == JO_NULL || g_ctx->map_pos_y == JO_NULL)
+        return 0;
+    return *g_ctx->map_pos_y;
+}
+
 void game_loop_draw(void)
 {
     int prev_y;
@@ -1146,6 +1160,7 @@ void game_loop_draw(void)
         world_map_do_load_step();
         jo_move_background(0, 0);
         ui_control_draw_loading();
+        runtime_log_draw(0, 16);
         return;
     }
 

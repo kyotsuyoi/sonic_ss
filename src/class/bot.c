@@ -8,7 +8,7 @@
 #include "world_collision.h"
 #include "world_physics.h"
 #include "character_registry.h"
-#include "tails.h"
+#include "character/tails.h"
 #include "runtime_log.h"
 
 #define SPRITE_DIR "SPT"

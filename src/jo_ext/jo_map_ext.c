@@ -147,7 +147,8 @@ int jo_map_per_pixel_vertical_collision_ext(const unsigned int layer, int x, int
     if (layer >= JO_MAP_MAX_LAYER || g_map_ext[layer] == JO_NULL)
         return JO_MAP_NO_COLLISION;
 
-    for (i = 0; i < g_map_ext_tile_count[layer]; ++i)
+    /* Iterate from top-most (last added) tile to bottom-most so collision hits the visible tile first. */
+    for (i = g_map_ext_tile_count[layer]; i-- > 0; )
     {
         current_tile = &g_map_ext[layer][i];
         if (!jo_square_intersect(current_tile->real_x, current_tile->real_y, current_tile->width, current_tile->height, x, y, 1, 1))
@@ -211,7 +212,8 @@ int jo_map_hitbox_detection_custom_boundaries_ext(const unsigned int layer, cons
     if (layer >= JO_MAP_MAX_LAYER || g_map_ext[layer] == JO_NULL)
         return JO_MAP_NO_COLLISION;
 
-    for (i = 0; i < g_map_ext_tile_count[layer]; ++i)
+    /* Iterate from top-most (last added) tile to bottom-most so hitbox/collision uses the visible tile first. */
+    for (i = g_map_ext_tile_count[layer]; i-- > 0; )
     {
         current_tile = &g_map_ext[layer][i];
         if (jo_square_intersect(current_tile->real_x, current_tile->real_y, current_tile->width, current_tile->height, x, y, w, h))

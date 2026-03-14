@@ -129,6 +129,8 @@ static void debug_draw_player(void)
         debug_draw_hitbox_snapshot("PVP HITBOX", &snapshot);
     else if (bot_debug_get_hitbox_snapshot(&snapshot))
         debug_draw_hitbox_snapshot("HITBOX DBG", &snapshot);
+
+    jo_printf(0, 15 + DEBUG_SAFE_TOP_LINES, "P:%3d,%3d M:%4d,%4d", player.x, player.y, game_loop_get_map_pos_x(), game_loop_get_map_pos_y());
 }
 
 static void debug_draw_hitbox_snapshot(const char *title, const debug_hitbox_snapshot_t *snapshot)

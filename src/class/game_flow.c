@@ -4,7 +4,7 @@
 #include "player.h"
 #include "character_registry.h"
 #include "bot.h"
-#include "tails.h"
+#include "character/tails.h"
 #include "world_physics.h"
 #include "damage_fx.h"
 #include "world_background.h"
@@ -105,8 +105,8 @@ static void reset_fight(int *map_pos_x, int *map_pos_y)
     player.life = 50;
 
      /* Center camera on configured world coordinate where the player should appear. */
-     *map_pos_x = WORLD_CAMERA_TARGET_X - player.x;
-     *map_pos_y = WORLD_CAMERA_TARGET_Y - player.y;
+     *map_pos_x = world_map_get_player_start_x() - player.x;
+     *map_pos_y = world_map_get_player_start_y() - player.y;
 }
 
 static void select_active_character(ui_character_choice_t selected_character)
@@ -260,6 +260,11 @@ void game_flow_start_from_menu(ui_character_choice_t selected_character,
     loading_pending = true;
     loading_assets_ready = false;
     ui_control_reset_menu_sprites();
+
+    /* Use the map selected in the menu (default to GHS.MAP). */
+    if (ctx->ui_state->menu_selected_map_name[0] != '\0')
+        world_map_set_filename(ctx->ui_state->menu_selected_map_name);
+
     world_map_load();
     ctx->ui_state->game_paused = false;
     ctx->ui_state->current_game_state = UiGameStateLoading;
@@ -415,6 +420,9 @@ void game_flow_process_loading(void *user_data)
 
     if (!world_map_is_ready())
         return;
+
+    /* The map is now fully parsed, so re-apply the start marker position. */
+    reset_fight(ctx->map_pos_x, ctx->map_pos_y);
 
     loading_pending = false;
     loading_assets_ready = false;

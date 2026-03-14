@@ -7,4 +7,7 @@ bool world_map_do_load_step(void);
 void world_map_prepare_visible_tiles(int screen_x, int screen_y);
 bool world_map_is_ready(void);
 
+int world_map_get_player_start_x(void);
+int world_map_get_player_start_y(void);
+
 #endif

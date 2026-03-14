@@ -37,6 +37,7 @@ typedef struct
     short x;
     short y;
     unsigned char attribute;
+    unsigned char layer;
     bool is_animated;
     unsigned char anim_id;
     short width;
@@ -50,7 +51,21 @@ static bool deferred_load_started = false;
 static bool deferred_load_completed = false;
 static char *world_map_stream = JO_NULL;
 static char *world_tiles_stream = JO_NULL;
+static char world_map_filename[JO_MAX_FILENAME_LENGTH] = "GHS.MAP";
+
+/* Player start position marker (from `SNC_SRT.TGA` or attribute 255 entries). */
+static int world_map_player_start_x = WORLD_CAMERA_TARGET_X;
+static int world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
+
 static world_map_asset_t world_assets[JO_MAX_FILE_IN_IMAGE_PACK];
+
+void world_map_set_filename(const char *filename)
+{
+    if (filename == JO_NULL)
+        return;
+    strncpy(world_map_filename, filename, JO_MAX_FILENAME_LENGTH - 1);
+    world_map_filename[JO_MAX_FILENAME_LENGTH - 1] = '\0';
+}
 static world_map_group_t world_groups[WORLD_MAP_MAX_GROUPS];
 static world_map_tile_t *world_tiles = JO_NULL;
 static int world_asset_count = 0;
@@ -117,6 +132,8 @@ static void world_map_reset_tiles(void)
         world_tiles = JO_NULL;
     }
     world_map_tile_count = 0;
+    world_map_player_start_x = WORLD_CAMERA_TARGET_X;
+    world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
 }
 
 static int world_map_count_tiles(const char *stream)
@@ -176,10 +193,24 @@ static bool world_map_parse_tiles_manifest(const char *stream)
 static int world_map_find_asset_index(const char *filename)
 {
     int index;
+    static char warned_missing[32][JO_MAX_FILENAME_LENGTH];
+    static int warned_count = 0;
 
     for (index = 0; index < world_asset_count; ++index)
         if (strcmp(world_assets[index].filename, filename) == 0)
             return index;
+
+    for (index = 0; index < warned_count; ++index)
+        if (strcmp(warned_missing[index], filename) == 0)
+            return -1;
+
+    if (warned_count < (int)(sizeof(warned_missing) / sizeof(warned_missing[0])))
+    {
+        strcpy(warned_missing[warned_count], filename);
+        ++warned_count;
+    }
+
+    runtime_log("world_map: missing tile asset '%s' (check BLK.TEX)", filename);
     return -1;
 }
 
@@ -254,20 +285,26 @@ static bool world_map_parse_entries_from_stream(const char *stream)
 
     world_map_reset_tiles();
     tile_capacity = world_map_count_tiles(stream);
+    runtime_log("world_map: tile count %d", tile_capacity);
     if (tile_capacity <= 0)
         return false;
 
     world_tiles = (world_map_tile_t *)jo_malloc(tile_capacity * sizeof(*world_tiles));
     if (world_tiles == JO_NULL)
+    {
+        runtime_log("world_map: failed to allocate %d tiles", tile_capacity);
         return false;
+    }
 
     tile_index = 0;
     while (*stream)
     {
         int char_index;
         unsigned char attribute_value;
+        unsigned char layer_value;
 
         attribute_value = 0;
+        layer_value = 0;
         while (*stream && jo_tools_is_whitespace(*stream))
             ++stream;
         if (!*stream)
@@ -301,8 +338,22 @@ static bool world_map_parse_entries_from_stream(const char *stream)
         }
         y_buf[char_index] = '\0';
 
+        /* Marker by sprite name: set player start position and skip tile creation. */
+        if (strcmp(sprite, "SNC_SRT.TGA") == 0)
+        {
+            world_map_player_start_x = jo_tools_atoi(x_buf);
+            world_map_player_start_y = jo_tools_atoi(y_buf);
+            runtime_log("world_map: start marker sprite at %d,%d", world_map_player_start_x, world_map_player_start_y);
+            /* Skip remaining fields on this line (e.g. attribute) so we don't reprocess it. */
+            while (*stream && *stream != '\n')
+                ++stream;
+            continue;
+        }
+
         if (*stream && *stream != '\r' && *stream != '\n')
         {
+            size_t attribute_len;
+
             while (*stream && jo_tools_is_whitespace(*stream))
                 ++stream;
             for (char_index = 0; *stream && !jo_tools_is_whitespace(*stream); ++char_index)
@@ -312,15 +363,47 @@ static bool world_map_parse_entries_from_stream(const char *stream)
                 attribute_buf[char_index] = *stream++;
             }
             attribute_buf[char_index] = '\0';
-            attribute_value = (unsigned char)jo_tools_atoi(attribute_buf);
+
+            /* Marker by attribute: 255 (captures start position and skip tile). */
+            if (strcmp(attribute_buf, "255") == 0)
+            {
+                world_map_player_start_x = jo_tools_atoi(x_buf);
+                world_map_player_start_y = jo_tools_atoi(y_buf);
+                runtime_log("world_map: start marker attr at %d,%d", world_map_player_start_x, world_map_player_start_y);
+                continue;
+            }
+
+            attribute_len = strlen(attribute_buf);
+            if (attribute_len == 3 && attribute_buf[0] >= '0' && attribute_buf[0] <= '9' &&
+                attribute_buf[1] >= '0' && attribute_buf[1] <= '9' &&
+                attribute_buf[2] >= '0' && attribute_buf[2] <= '9')
+            {
+                char attribute_part[3];
+
+                layer_value = (unsigned char)(attribute_buf[2] - '0');
+                attribute_part[0] = attribute_buf[0];
+                attribute_part[1] = attribute_buf[1];
+                attribute_part[2] = '\0';
+                attribute_value = (unsigned char)jo_tools_atoi(attribute_part);
+            }
+            else
+            {
+                attribute_value = (unsigned char)jo_tools_atoi(attribute_buf);
+            }
+
+            world_tiles[tile_index].layer = layer_value;
         }
 
         if (tile_index >= tile_capacity)
+        {
+            runtime_log("world_map: tile_index %d >= capacity %d (map too large)", tile_index, tile_capacity);
             return false;
+        }
 
         world_tiles[tile_index].x = (short)jo_tools_atoi(x_buf);
         world_tiles[tile_index].y = (short)jo_tools_atoi(y_buf);
         world_tiles[tile_index].attribute = attribute_value;
+        world_tiles[tile_index].layer = layer_value;
         world_tiles[tile_index].tile_index = (unsigned short)tile_index;
         world_tiles[tile_index].applied_sprite_id = -1;
         world_tiles[tile_index].is_animated = (sprite[0] == '@');
@@ -337,7 +420,14 @@ static bool world_map_parse_entries_from_stream(const char *stream)
         {
             index = world_map_find_asset_index(sprite);
             if (index < 0)
-                return false;
+            {
+                runtime_log("world_map: missing tile asset '%s' (using placeholder)", sprite);
+                if (world_asset_count > 0)
+                    index = 0;
+                else
+                    return false;
+            }
+
             world_tiles[tile_index].asset_index = (short)index;
             world_tiles[tile_index].width = (short)world_assets[index].width;
             world_tiles[tile_index].height = (short)world_assets[index].height;
@@ -347,6 +437,7 @@ static bool world_map_parse_entries_from_stream(const char *stream)
     }
 
     world_map_tile_count = tile_index;
+    runtime_log("world_map: parsed tiles %d", world_map_tile_count);
     return world_map_tile_count > 0;
 }
 
@@ -481,31 +572,66 @@ static bool world_map_create_pools(void)
 static bool world_map_build_runtime_map(void)
 {
     int tile_index;
+    int map_index;
+    int *tile_order;
+    int layer_counts[10] = {0};
+    int layer_offsets[10];
 
     if (!jo_map_create_ext(WORLD_MAP_ID, (unsigned short)world_map_tile_count, 500))
         return false;
 
+    tile_order = (int *)jo_malloc(world_map_tile_count * sizeof(*tile_order));
+    if (tile_order == JO_NULL)
+        return false;
+
+    /* Build stable ordering by layer (9 first -> 0 last), so layer 0 renders on top. */
     for (tile_index = 0; tile_index < world_map_tile_count; ++tile_index)
     {
-        world_tiles[tile_index].tile_index = (unsigned short)tile_index;
-        if (world_tiles[tile_index].is_animated)
+        unsigned char layer = world_tiles[tile_index].layer;
+        if (layer > 9)
+            layer = 0;
+        layer_counts[layer]++;
+    }
+
+    map_index = 0;
+    for (int layer = 9; layer >= 0; --layer)
+    {
+        layer_offsets[layer] = map_index;
+        map_index += layer_counts[layer];
+    }
+
+    for (tile_index = 0; tile_index < world_map_tile_count; ++tile_index)
+    {
+        unsigned char layer = world_tiles[tile_index].layer;
+        if (layer > 9)
+            layer = 0;
+        tile_order[layer_offsets[layer]++] = tile_index;
+    }
+
+    for (map_index = 0; map_index < world_map_tile_count; ++map_index)
+    {
+        int tile_i = tile_order[map_index];
+
+        world_tiles[tile_i].tile_index = (unsigned short)map_index;
+        if (world_tiles[tile_i].is_animated)
         {
             jo_map_add_animated_tile_ext(WORLD_MAP_ID,
-                                         world_tiles[tile_index].x,
-                                         world_tiles[tile_index].y,
-                                         world_tiles[tile_index].anim_id,
-                                         world_tiles[tile_index].attribute);
+                                         world_tiles[tile_i].x,
+                                         world_tiles[tile_i].y,
+                                         world_tiles[tile_i].anim_id,
+                                         world_tiles[tile_i].attribute);
             continue;
         }
 
-        world_tiles[tile_index].applied_sprite_id = world_assets[world_tiles[tile_index].asset_index].fallback_sprite_id;
+        world_tiles[tile_i].applied_sprite_id = world_assets[world_tiles[tile_i].asset_index].fallback_sprite_id;
         jo_map_add_tile_ext(WORLD_MAP_ID,
-                    world_tiles[tile_index].x,
-                    world_tiles[tile_index].y,
-                    world_tiles[tile_index].applied_sprite_id,
-                    world_tiles[tile_index].attribute);
+                    world_tiles[tile_i].x,
+                    world_tiles[tile_i].y,
+                    world_tiles[tile_i].applied_sprite_id,
+                    world_tiles[tile_i].attribute);
     }
 
+    jo_free(tile_order);
     return true;
 }
 
@@ -572,6 +698,16 @@ bool world_map_is_ready(void)
     return deferred_load_completed;
 }
 
+int world_map_get_player_start_x(void)
+{
+    return world_map_player_start_x;
+}
+
+int world_map_get_player_start_y(void)
+{
+    return world_map_player_start_y;
+}
+
 bool world_map_do_load_step(void)
 {
     if (!deferred_load_started || deferred_load_completed)
@@ -612,7 +748,7 @@ bool world_map_do_load_step(void)
     {
         runtime_log("world_map: map -> WRAM");
         if (world_map_stream == JO_NULL)
-            world_map_stream = jo_fs_read_file_in_dir("GHS.MAP", "MAP", JO_NULL);
+            world_map_stream = jo_fs_read_file_in_dir(world_map_filename, "MAP", JO_NULL);
         if (world_map_stream == JO_NULL)
             return false;
         deferred_load_step = 4;

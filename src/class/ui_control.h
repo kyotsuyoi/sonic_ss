@@ -58,10 +58,14 @@ typedef enum
     UiMenuScreenMultiplayerModeSelect,
     UiMenuScreenCharacterSelect,
     UiMenuScreenGroupAssign,
+    UiMenuScreenMapSelect,
     UiMenuScreenOptions,
     UiMenuScreenConfigControls,
     UiMenuScreenSongTest
 } ui_menu_screen_t;
+
+#define UI_MENU_MAX_MAPS 16
+#define UI_MENU_MAX_MAP_NAME_LEN 24
 
 typedef struct
 {
@@ -112,6 +116,13 @@ typedef struct
     int song_test_selected_line;
     int song_test_bgm_track;
     int song_test_sfx_index;
+
+    /* Map selection (loaded from /MAP/MAPS.TXT) */
+    int menu_map_count;
+    int menu_map_cursor;
+    char menu_map_names[UI_MENU_MAX_MAPS][UI_MENU_MAX_MAP_NAME_LEN];
+    char menu_selected_map_name[UI_MENU_MAX_MAP_NAME_LEN];
+
     bool game_paused;
     bool debug_enabled;
     ui_debug_mode_t debug_mode;

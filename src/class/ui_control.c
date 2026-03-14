@@ -386,6 +386,54 @@ void ui_control_reset_menu_bgm_state(void)
     menu_main_bgm_playing = false;
 }
 
+static void ui_control_load_map_list(ui_control_state_t *state)
+{
+    char *contents = jo_fs_read_file_in_dir("MAPS.TXT", "MAP", JO_NULL);
+    if (contents == JO_NULL)
+    {
+        strncpy(state->menu_map_names[0], "GHS.MAP", UI_MENU_MAX_MAP_NAME_LEN - 1);
+        state->menu_map_names[0][UI_MENU_MAX_MAP_NAME_LEN - 1] = '\0';
+        state->menu_map_count = 1;
+        return;
+    }
+
+    int count = 0;
+    char *line = contents;
+    while (*line && count < UI_MENU_MAX_MAPS)
+    {
+        char *end = line;
+        while (*end && *end != '\n' && *end != '\r')
+            end++;
+
+        int len = (int)(end - line);
+        while (len > 0 && (line[len - 1] == ' ' || line[len - 1] == '\t'))
+            len--;
+
+        if (len > 0)
+        {
+            int copy_len = len;
+            if (copy_len >= UI_MENU_MAX_MAP_NAME_LEN)
+                copy_len = UI_MENU_MAX_MAP_NAME_LEN - 1;
+            memcpy(state->menu_map_names[count], line, copy_len);
+            state->menu_map_names[count][copy_len] = '\0';
+            count++;
+        }
+
+        while (*end == '\r' || *end == '\n')
+            end++;
+        line = end;
+    }
+
+    if (count == 0)
+    {
+        strncpy(state->menu_map_names[0], "GHS.MAP", UI_MENU_MAX_MAP_NAME_LEN - 1);
+        state->menu_map_names[0][UI_MENU_MAX_MAP_NAME_LEN - 1] = '\0';
+        count = 1;
+    }
+
+    state->menu_map_count = count;
+}
+
 void ui_control_init(ui_control_state_t *state)
 {
     *state = (ui_control_state_t){0};
@@ -443,6 +491,13 @@ void ui_control_init(ui_control_state_t *state)
     state->debug_enabled = false;
     state->debug_mode = UiDebugModeOff;
     state->log_mode = RuntimeLogModeOff;
+
+    state->menu_map_count = 0;
+    state->menu_map_cursor = 0;
+    state->menu_map_names[0][0] = '\0';
+    state->menu_selected_map_name[0] = '\0';
+
+    ui_control_load_map_list(state);
 
     runtime_log_set_mode(state->log_mode);
     state->pause_selected_option = UiPauseOptionContinue;
@@ -626,8 +681,34 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
 
         jo_printf(4, 24, "UP/DOWN: SELECT");
         jo_printf(4, 25, "LEFT/RIGHT: GROUP");
-        jo_printf(4, 26, "START: PLAY");
+        jo_printf(4, 26, "START: MAP");
         jo_printf(4, 27, "B: BACK");
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenMapSelect)
+    {
+        jo_printf(14, 6, "SELECT MAP");
+
+        int max_visible = 8;
+        int start = state->menu_map_cursor - (max_visible / 2);
+        if (start < 0)
+            start = 0;
+        if (start + max_visible > state->menu_map_count)
+            start = state->menu_map_count - max_visible;
+        if (start < 0)
+            start = 0;
+
+        for (int i = 0; i < max_visible && start + i < state->menu_map_count; ++i)
+        {
+            int y = 10 + i;
+            bool selected = ((start + i) == state->menu_map_cursor);
+            jo_printf(8, y, "%s %s", selected ? ">" : " ", state->menu_map_names[start + i]);
+        }
+
+        jo_printf(4, 22, "UP/DOWN: SELECT");
+        jo_printf(4, 23, "START: CONFIRM");
+        jo_printf(4, 24, "B: BACK");
         return;
     }
 
@@ -1269,14 +1350,49 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             }
             else if (pressed_start)
             {
-                on_start_game(state->menu_selected_character,
-                              state->menu_selected_bot_character,
-                              user_data);
+                /* Move to map selection before starting the battle */
+                state->menu_map_cursor = 0;
+                if (state->menu_map_count > 0)
+                    strncpy(state->menu_selected_map_name, state->menu_map_names[0], UI_MENU_MAX_MAP_NAME_LEN - 1);
+                state->menu_screen = UiMenuScreenMapSelect;
             }
             else if (pressed_b)
             {
                 state->menu_screen = UiMenuScreenCharacterSelect;
             }
+        }
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenMapSelect)
+    {
+        if (state->menu_map_count <= 0)
+            return;
+
+        if (pressed_up)
+        {
+            if (state->menu_map_cursor == 0)
+                state->menu_map_cursor = state->menu_map_count - 1;
+            else
+                state->menu_map_cursor--;
+        }
+        else if (pressed_down)
+        {
+            state->menu_map_cursor = (state->menu_map_cursor + 1) % state->menu_map_count;
+        }
+        else if (pressed_start)
+        {
+            strncpy(state->menu_selected_map_name,
+                    state->menu_map_names[state->menu_map_cursor],
+                    UI_MENU_MAX_MAP_NAME_LEN - 1);
+            state->menu_selected_map_name[UI_MENU_MAX_MAP_NAME_LEN - 1] = '\0';
+            on_start_game(state->menu_selected_character,
+                          state->menu_selected_bot_character,
+                          user_data);
+        }
+        else if (pressed_b)
+        {
+            state->menu_screen = UiMenuScreenGroupAssign;
         }
         return;
     }
