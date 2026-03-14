@@ -87,259 +87,223 @@ static const jo_tile KnucklesDefeatedTile[] =
     {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
-static void knuckles_reset_animation_lists_except(int active_anim_id)
+static void knuckles_reset_animation_lists_except(character_t *chr, int active_anim_id)
 {
-    if (character_ref.walking_anim_id >= 0 && character_ref.walking_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.walking_anim_id);
-    if (character_ref.running1_anim_id >= 0 && character_ref.running1_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.running1_anim_id);
-    if (character_ref.running2_anim_id >= 0 && character_ref.running2_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.running2_anim_id);
-    if (character_ref.stand_sprite_id >= 0 && character_ref.stand_sprite_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.stand_sprite_id);
-    if (character_ref.punch_anim_id >= 0 && character_ref.punch_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.punch_anim_id);
-    if (character_ref.kick_anim_id >= 0 && character_ref.kick_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.kick_anim_id);
+    if (chr == JO_NULL)
+        return;
+
+    if (chr->walking_anim_id >= 0 && chr->walking_anim_id != active_anim_id)
+        jo_reset_sprite_anim(chr->walking_anim_id);
+    if (chr->running1_anim_id >= 0 && chr->running1_anim_id != active_anim_id)
+        jo_reset_sprite_anim(chr->running1_anim_id);
+    if (chr->running2_anim_id >= 0 && chr->running2_anim_id != active_anim_id)
+        jo_reset_sprite_anim(chr->running2_anim_id);
+    if (chr->stand_sprite_id >= 0 && chr->stand_sprite_id != active_anim_id)
+        jo_reset_sprite_anim(chr->stand_sprite_id);
+    if (chr->punch_anim_id >= 0 && chr->punch_anim_id != active_anim_id)
+        jo_reset_sprite_anim(chr->punch_anim_id);
+    if (chr->kick_anim_id >= 0 && chr->kick_anim_id != active_anim_id)
+        jo_reset_sprite_anim(chr->kick_anim_id);
+}
+
+static void knuckles_update_for(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    int speed_step;
+
+    if (chr == JO_NULL || phy == JO_NULL)
+        return;
+
+    if (jo_physics_is_standing(phy))
+    {
+        jo_reset_sprite_anim(chr->running1_anim_id);
+        jo_reset_sprite_anim(chr->running2_anim_id);
+
+        if (!jo_is_sprite_anim_stopped(chr->walking_anim_id))
+        {
+            jo_reset_sprite_anim(chr->walking_anim_id);
+            jo_reset_sprite_anim(chr->stand_sprite_id);
+        }
+        else
+        {
+            if (jo_is_sprite_anim_stopped(chr->stand_sprite_id))
+                jo_start_sprite_anim_loop(chr->stand_sprite_id);
+
+            if (jo_get_sprite_anim_frame(chr->stand_sprite_id) == 0)
+                jo_set_sprite_anim_frame_rate(chr->stand_sprite_id, 70);
+            else
+                jo_set_sprite_anim_frame_rate(chr->stand_sprite_id, 2);
+        }
+    }
+    else
+    {
+        if (chr->run == 0)
+        {
+            jo_reset_sprite_anim(chr->running1_anim_id);
+            jo_reset_sprite_anim(chr->running2_anim_id);
+
+            if (jo_is_sprite_anim_stopped(chr->walking_anim_id))
+                jo_start_sprite_anim_loop(chr->walking_anim_id);
+        }
+        else if (chr->run == 1)
+        {
+            jo_reset_sprite_anim(chr->walking_anim_id);
+            jo_reset_sprite_anim(chr->running2_anim_id);
+
+            if (jo_is_sprite_anim_stopped(chr->running1_anim_id))
+                jo_start_sprite_anim_loop(chr->running1_anim_id);
+        }
+        else if (chr->run == 2)
+        {
+            jo_reset_sprite_anim(chr->walking_anim_id);
+            jo_reset_sprite_anim(chr->running1_anim_id);
+
+            if (jo_is_sprite_anim_stopped(chr->running2_anim_id))
+                jo_start_sprite_anim_loop(chr->running2_anim_id);
+        }
+
+        speed_step = (int)JO_ABS(phy->speed);
+
+        if (speed_step >= 6)
+        {
+            jo_set_sprite_anim_frame_rate(chr->running2_anim_id, 3);
+            chr->run = 2;
+        }
+        else if (speed_step >= 5)
+        {
+            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 4);
+            chr->run = 1;
+        }
+        else if (speed_step >= 4)
+        {
+            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 5);
+            chr->run = 1;
+        }
+        else if (speed_step >= 3)
+        {
+            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 6);
+            chr->run = 1;
+        }
+        else if (speed_step >= 2)
+        {
+            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 7);
+            chr->run = 1;
+        }
+        else if (speed_step >= 1)
+        {
+            jo_set_sprite_anim_frame_rate(chr->walking_anim_id, 8);
+            chr->run = 0;
+        }
+        else
+        {
+            jo_set_sprite_anim_frame_rate(chr->walking_anim_id, 9);
+            chr->run = 0;
+        }
+    }
+
+    player_update_punch_state_for_character(chr);
+    player_update_kick_state_for_character(chr);
+}
+
+void knuckles_update_animation_for(character_t *character, jo_sidescroller_physics_params *physics)
+{
+    knuckles_update_for(character, physics);
 }
 
 inline void knuckles_running_animation_handling(void)
 {
-    int speed_step;
-
-    if (jo_physics_is_standing(&physics))
-    {
-        
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-            
-        if (!jo_is_sprite_anim_stopped(character_ref.walking_anim_id)){
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.stand_sprite_id);
-        }else{
-            if (jo_is_sprite_anim_stopped(character_ref.stand_sprite_id)){
-                jo_start_sprite_anim_loop(character_ref.stand_sprite_id);
-            }
-            
-            if (jo_get_sprite_anim_frame(character_ref.stand_sprite_id) == 0)
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 70);
-            else
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 2);
-        }
-    }
-    else
-    {        
-        if (character_ref.run == 0)
-        {
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.walking_anim_id))
-                jo_start_sprite_anim_loop(character_ref.walking_anim_id);
-        }
-        else if (character_ref.run == 1)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running1_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running1_anim_id);
-        }
-        else if (character_ref.run == 2)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running2_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running2_anim_id);
-        }
-        
-        speed_step = (int)JO_ABS(physics.speed);
-
-        if (speed_step >= 6){
-            jo_set_sprite_anim_frame_rate(character_ref.running2_anim_id, 3);
-            character_ref.run = 2;
-        }else if (speed_step >= 5){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 4);
-            character_ref.run = 1;
-        }else if (speed_step >= 4){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 5);    
-            character_ref.run = 1;  
-        }else if (speed_step >= 3){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 6);
-            character_ref.run = 1;
-        }else if (speed_step >= 2){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 7);
-            character_ref.run = 1;
-        }else if (speed_step >= 1){
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 8);
-            character_ref.run = 0;
-        }else{
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 9);
-            character_ref.run = 0;
-        }
-    }
-
-    player_update_punch_state_for_character(&character_ref);
-
-    if (character_ref.charged_kick_enabled && character_ref.kick && !character_ref.kick2)
-    {
-        jo_set_sprite_anim_frame(character_ref.kick_anim_id, 0);
-        jo_start_sprite_anim(character_ref.kick_anim_id);
-    }
-    else if (character_ref.charged_kick_enabled && character_ref.kick2 && character_ref.charged_kick_active)
-    {
-        character_ref.charged_kick_phase_timer++;
-
-        if (character_ref.charged_kick_phase == 1)
-        {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 1);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-            if (character_ref.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE1_FRAMES)
-            {
-                character_ref.charged_kick_phase = 2;
-                character_ref.charged_kick_phase_timer = 0;
-            }
-        }
-        else
-        {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, 2);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-            if (character_ref.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE2_FRAMES)
-            {
-                character_ref.kick2 = false;
-                character_ref.charged_kick_active = false;
-                character_ref.charged_kick_ready = false;
-                character_ref.charged_kick_hold_ms = 0;
-                character_ref.charged_kick_phase = 0;
-                character_ref.charged_kick_phase_timer = 0;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-                jo_reset_sprite_anim(character_ref.kick_anim_id);
-            }
-        }
-    }
-    else if(character_ref.kick){
-        /* Knuckles ground kick has no combo path; only charged release enters kick2. */
-        jo_set_sprite_anim_frame(character_ref.kick_anim_id, 0);
-        jo_start_sprite_anim(character_ref.kick_anim_id);
-        character_ref.kick2_requested = false;
-    } else if (character_ref.kick2 && !character_ref.charged_kick_active && physics.is_in_air) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame < KNUCKLES_COMBO2_START_FRAME) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, KNUCKLES_COMBO2_START_FRAME);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        if (anim_frame >= (KNUCKLES_FRAME_COUNT - 1) && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            character_ref.kick2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-            jo_reset_sprite_anim(character_ref.kick_anim_id);
-        }
-    } else if (character_ref.kick2) {
-        int anim_frame = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
-        if (anim_frame < KNUCKLES_COMBO2_START_FRAME) {
-            jo_set_sprite_anim_frame(character_ref.kick_anim_id, KNUCKLES_COMBO2_START_FRAME);
-            jo_start_sprite_anim(character_ref.kick_anim_id);
-        }
-        if (anim_frame >= (KNUCKLES_FRAME_COUNT - 1) && jo_is_sprite_anim_stopped(character_ref.kick_anim_id)) {
-            character_ref.kick2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-            jo_reset_sprite_anim(character_ref.kick_anim_id);
-        }
-    }
+    knuckles_update_for(&player, &physics);
 }
 
-inline void display_knuckles(void)
+void knuckles_display_for(character_t *chr, jo_sidescroller_physics_params *phy)
 {
-    if (!physics.is_in_air)
+    if (chr == JO_NULL || phy == JO_NULL)
+        return;
+
+    if (!phy->is_in_air)
     {
-        character_ref.spin = false;
-        character_ref.jump = false;
-        character_ref.angle = 0;
+        chr->spin = false;
+        chr->jump = false;
+        chr->angle = 0;
     }
 
-    if (character_ref.flip)
+    if (chr->flip)
         jo_sprite_enable_horizontal_flip();
 
-    if (character_ref.spin)
+    if (chr->spin)
     {
-        knuckles_reset_animation_lists_except(-1);
-        jo_sprite_draw3D_and_rotate2(character_ref.spin_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
-        if (character_ref.flip)
-            character_ref.angle -= CHARACTER_SPIN_SPEED;
+        knuckles_reset_animation_lists_except(chr, -1);
+        jo_sprite_draw3D_and_rotate2(chr->spin_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+        if (chr->flip)
+            chr->angle -= CHARACTER_SPIN_SPEED;
         else
-            character_ref.angle += CHARACTER_SPIN_SPEED;
-    } else if (character_ref.life <= 0 && knuckles_defeated_sprite_id >= 0) {
-        knuckles_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(knuckles_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
-    } else if (character_ref.stun_timer > 0 && knuckles_damage_sprite_id >= 0) {
-        knuckles_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(knuckles_damage_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.punch || character_ref.punch2){
-        knuckles_reset_animation_lists_except(character_ref.punch_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.punch_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.kick || character_ref.kick2){
-        knuckles_reset_animation_lists_except(character_ref.kick_anim_id);
-        if (character_ref.charged_kick_enabled && character_ref.kick && !character_ref.kick2)
+            chr->angle += CHARACTER_SPIN_SPEED;
+    } else if (chr->life <= 0 && knuckles_defeated_sprite_id >= 0) {
+        knuckles_reset_animation_lists_except(chr, -1);
+        jo_sprite_draw3D2(knuckles_defeated_sprite_id, chr->x, chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+    } else if (chr->stun_timer > 0 && knuckles_damage_sprite_id >= 0) {
+        knuckles_reset_animation_lists_except(chr, -1);
+        jo_sprite_draw3D2(knuckles_damage_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+    } else if (chr->punch || chr->punch2){
+        knuckles_reset_animation_lists_except(chr, chr->punch_anim_id);
+        jo_sprite_draw3D2(jo_get_anim_sprite(chr->punch_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
+    } else if (chr->kick || chr->kick2){
+        knuckles_reset_animation_lists_except(chr, chr->kick_anim_id);
+        if (chr->charged_kick_enabled && chr->kick && !chr->kick2)
         {
-            jo_sprite_draw3D2(knuckles_kick_base_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            jo_sprite_draw3D2(knuckles_kick_base_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
-        else if (character_ref.charged_kick_enabled && character_ref.kick2)
+        else if (chr->charged_kick_enabled && chr->kick2)
         {
-            int front_offset = character_ref.flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
+            int front_offset = chr->flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
 
-            if (character_ref.charged_kick_active && character_ref.charged_kick_phase <= 1)
-                jo_sprite_draw3D2(knuckles_kick_base_id + 1, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            if (chr->charged_kick_active && chr->charged_kick_phase <= 1)
+                jo_sprite_draw3D2(knuckles_kick_base_id + 1, chr->x, chr->y, CHARACTER_SPRITE_Z);
             else
             {
-                jo_sprite_draw3D2(knuckles_kick_base_id + KNUCKLES_KICK_PART4_INDEX, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+                jo_sprite_draw3D2(knuckles_kick_base_id + KNUCKLES_KICK_PART4_INDEX, chr->x, chr->y, CHARACTER_SPRITE_Z);
                 jo_sprite_draw3D2(knuckles_kick_base_id + KNUCKLES_KICK_PART3_INDEX,
-                                  character_ref.x + front_offset,
-                                  character_ref.y,
+                                  chr->x + front_offset,
+                                  chr->y,
                                   CHARACTER_SPRITE_Z);
             }
         }
         else
         {
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.kick_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            jo_sprite_draw3D2(jo_get_anim_sprite(chr->kick_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
-    } else if (character_ref.jump){
-        knuckles_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(character_ref.jump_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+    } else if (chr->jump){
+        knuckles_reset_animation_lists_except(chr, -1);
+        jo_sprite_draw3D2(chr->jump_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
     } else {
-        if (character_ref.walk && character_ref.run == 0)
+        if (chr->walk && chr->run == 0)
         {
-            knuckles_reset_animation_lists_except(character_ref.walking_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.walking_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            knuckles_reset_animation_lists_except(chr, chr->walking_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(chr->walking_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
-        else if (character_ref.walk && character_ref.run == 1)
+        else if (chr->walk && chr->run == 1)
         {
-            knuckles_reset_animation_lists_except(character_ref.running1_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running1_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            knuckles_reset_animation_lists_except(chr, chr->running1_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(chr->running1_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
-        else if (character_ref.walk && character_ref.run == 2)
+        else if (chr->walk && chr->run == 2)
         {
-            knuckles_reset_animation_lists_except(character_ref.running2_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running2_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            knuckles_reset_animation_lists_except(chr, chr->running2_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(chr->running2_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
         else
         {
-            knuckles_reset_animation_lists_except(character_ref.stand_sprite_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.stand_sprite_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);        
+            knuckles_reset_animation_lists_except(chr, chr->stand_sprite_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(chr->stand_sprite_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
         }
     }
 
-    if (character_ref.flip)
+    if (chr->flip)
         jo_sprite_disable_horizontal_flip();
+}
 
-    // Barra de vidas textual
-    int life_percent = (character_ref.life * 100) / 50;
-    int bar_max_width = 20; // 20 caracteres
-    int bar_width = (life_percent * bar_max_width) / 100;
-    char bar[bar_max_width + 1];
-    for (int i = 0; i < bar_max_width; ++i)
-        bar[i] = (i < bar_width) ? '#' : '-';
-    bar[bar_max_width] = '\0';
-    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar (temporário)
+inline void display_knuckles(void)
+{
+    knuckles_display_for(&player, &physics);
 }
 
 void load_knuckles(void)

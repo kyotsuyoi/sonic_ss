@@ -1,8 +1,11 @@
 #include <jo/jo.h>
 #include "shadow.h"
+#include "sonic.h"
 #include "player.h"
 #include "game_constants.h"
 #include "character_registry.h"
+
+extern jo_sidescroller_physics_params physics;
 
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
@@ -116,7 +119,76 @@ void shadow_running_animation_handling(void)
 
 void display_shadow(void)
 {
-    display_sonic();
+    if (!physics.is_in_air)
+    {
+        player.spin = false;
+        player.jump = false;
+        player.angle = 0;
+    }
+
+    if (player.flip)
+        jo_sprite_enable_horizontal_flip();
+
+    if (player.spin)
+    {
+        shadow_reset_animation_lists_except(-1);
+        jo_sprite_draw3D_and_rotate2(shadow_spin_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z, player.angle);
+        if (player.flip)
+            player.angle -= CHARACTER_SPIN_SPEED;
+        else
+            player.angle += CHARACTER_SPIN_SPEED;
+    }
+    else if (player.life <= 0 && shadow_defeated_sprite_id >= 0)
+    {
+        shadow_reset_animation_lists_except(-1);
+        jo_sprite_draw3D2(shadow_defeated_sprite_id, player.x, player.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+    }
+    else if (player.stun_timer > 0 && shadow_damage_sprite_id >= 0)
+    {
+        shadow_reset_animation_lists_except(-1);
+        jo_sprite_draw3D2(shadow_damage_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z);
+    }
+    else if (player.punch || player.punch2)
+    {
+        shadow_reset_animation_lists_except(player.punch_anim_id);
+        jo_sprite_draw3D2(jo_get_anim_sprite(player.punch_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+    }
+    else if (player.kick || player.kick2)
+    {
+        shadow_reset_animation_lists_except(player.kick_anim_id);
+        jo_sprite_draw3D2(jo_get_anim_sprite(player.kick_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+    }
+    else if (player.jump)
+    {
+        shadow_reset_animation_lists_except(-1);
+        jo_sprite_draw3D2(player.jump_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z);
+    }
+    else
+    {
+        if (player.walk && player.run == 0)
+        {
+            shadow_reset_animation_lists_except(player.walking_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(player.walking_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        }
+        else if (player.walk && player.run == 1)
+        {
+            shadow_reset_animation_lists_except(player.running1_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(player.running1_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        }
+        else if (player.walk && player.run == 2)
+        {
+            shadow_reset_animation_lists_except(player.running2_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(player.running2_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        }
+        else
+        {
+            shadow_reset_animation_lists_except(player.stand_sprite_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(player.stand_sprite_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        }
+    }
+
+    if (player.flip)
+        jo_sprite_disable_horizontal_flip();
 }
 
 void load_shadow(void)

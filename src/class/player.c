@@ -160,6 +160,10 @@ static void player_input_kick(character_t *controlled_player,
 							  bool c_down,
 							  bool c_hold)
 {
+	/* Keep tracking whether the player is holding kick, even if in air. */
+	if (controlled_player->charged_kick_enabled)
+		controlled_player->charged_kick_button_held = c_hold;
+
 	if (controlled_player->charged_kick_enabled && !physics->is_in_air)
 	{
 		if (c_hold
@@ -583,12 +587,18 @@ void player_update_kick_state(character_t *controlled_player,
 			jo_printf(1, 11, "P1 KICK f=%d t1=%d t2=%d", anim_frame,
 				controlled_player->kick_stage1_ticks,
 				controlled_player->kick_stage2_ticks);
+			jo_printf(1, 12, "P1 C-ck hold=%d ready=%d ms=%d", controlled_player->charged_kick_button_held,
+				controlled_player->charged_kick_ready,
+				controlled_player->charged_kick_hold_ms);
 		}
 		else if (controlled_player == &player2)
 		{
-			jo_printf(1, 12, "P2 KICK f=%d t1=%d t2=%d", anim_frame,
+			jo_printf(1, 13, "P2 KICK f=%d t1=%d t2=%d", anim_frame,
 				controlled_player->kick_stage1_ticks,
 				controlled_player->kick_stage2_ticks);
+			jo_printf(1, 14, "P2 C-ck hold=%d ready=%d ms=%d", controlled_player->charged_kick_button_held,
+				controlled_player->charged_kick_ready,
+				controlled_player->charged_kick_hold_ms);
 		}
 	}
 
@@ -613,6 +623,20 @@ void player_update_kick_state(character_t *controlled_player,
 	if (controlled_player->kick)
 	{
 		/* stage1-specific handling */
+
+		/* While charging, lock the kick sprite to frame 0 until release. */
+		if (controlled_player->charged_kick_enabled
+			&& controlled_player->charged_kick_button_held
+			&& !controlled_player->kick2
+			&& !controlled_player->charged_kick_active)
+		{
+			if (controlled_player->kick_anim_id >= 0)
+			{
+				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, 0);
+				jo_reset_sprite_anim(controlled_player->kick_anim_id);
+			}
+			return;
+		}
 
 		/* keep anim running until stage1 finishes */
 		if (anim_stopped && anim_frame < kick_stage1_last_frame)

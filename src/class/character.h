@@ -47,6 +47,7 @@ typedef struct
     int kick_stage2_ticks; /* hold timer for final stage2 frame */
     bool charged_kick_enabled;
     int charged_kick_hold_ms;
+    bool charged_kick_button_held;
     bool charged_kick_ready;
     bool charged_kick_active;
     int charged_kick_phase;

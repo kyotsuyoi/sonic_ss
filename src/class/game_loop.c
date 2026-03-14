@@ -17,6 +17,7 @@
 #include "game_loop.h"
 #include "damage_fx.h"
 #include "character_registry.h"
+#include "knuckles.h"
 #include "vram_cache.h"
 #include "runtime_log.h"
 #include "world_map.h"
@@ -72,6 +73,8 @@ static int g_runtime_playing_draw_logs = 0;
 #define TAILS_TAIL_OFFSET_X 14
 #define KNUCKLES_CHARGED_KICK_PHASE1_FRAMES 6
 #define KNUCKLES_CHARGED_KICK_PHASE2_FRAMES 10
+#define KNUCKLES_FRAME_COUNT 4
+#define KNUCKLES_COMBO2_START_FRAME 2
 #define KNUCKLES_PUNCH_COMBO2_START_FRAME 2
 #define KNUCKLES_PUNCH_LAST_FRAME 3
 #define KNUCKLES_KICK_PART3_INDEX 3
@@ -621,10 +624,6 @@ static void game_loop_update_player2_animation(void)
     bool is_knuckles;
     int speed_step;
     int anim_frame;
-    int kick_stage1_last_frame;
-    int kick_stage2_start_frame;
-    int kick_stage2_last_frame;
-
     if (!g_player2_active)
         return;
 
@@ -636,31 +635,6 @@ static void game_loop_update_player2_animation(void)
         game_loop_update_player2_tail_loop();
     else
         game_loop_reset_player2_tails_state();
-
-    if (is_tails)
-    {
-        kick_stage1_last_frame = 0;
-        kick_stage2_start_frame = 0;
-        kick_stage2_last_frame = 0;
-    }
-    else if (p2_character == UiCharacterAmy)
-    {
-        kick_stage1_last_frame = 4;
-        kick_stage2_start_frame = 5;
-        kick_stage2_last_frame = 7;
-    }
-    else if (is_knuckles)
-    {
-        kick_stage1_last_frame = 3;
-        kick_stage2_start_frame = 2;
-        kick_stage2_last_frame = 3;
-    }
-    else
-    {
-        kick_stage1_last_frame = 6;
-        kick_stage2_start_frame = 7;
-        kick_stage2_last_frame = 12;
-    }
 
     if (jo_physics_is_standing(&g_player2_physics))
     {
@@ -751,50 +725,8 @@ static void game_loop_update_player2_animation(void)
 
     if (is_knuckles)
     {
-        if (player2.punch)
-        {
-            anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
-            if (anim_frame > KNUCKLES_PUNCH_LAST_FRAME || jo_is_sprite_anim_stopped(player2.punch_anim_id))
-            {
-                jo_set_sprite_anim_frame(player2.punch_anim_id, 0);
-                jo_start_sprite_anim(player2.punch_anim_id);
-                anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
-            }
-
-            if (anim_frame >= KNUCKLES_PUNCH_COMBO2_START_FRAME)
-            {
-                if (player2.punch2_requested)
-                {
-                    player2.punch = false;
-                    player2.punch2 = true;
-                    player2.punch2_requested = false;
-                    player2.perform_punch2 = true;
-                    jo_set_sprite_anim_frame(player2.punch_anim_id, KNUCKLES_PUNCH_COMBO2_START_FRAME);
-                    jo_start_sprite_anim(player2.punch_anim_id);
-                }
-                else if (anim_frame >= KNUCKLES_PUNCH_LAST_FRAME)
-                {
-                    player2.punch = false;
-                    player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                    jo_reset_sprite_anim(player2.punch_anim_id);
-                }
-            }
-        }
-        else if (player2.punch2)
-        {
-            anim_frame = jo_get_sprite_anim_frame(player2.punch_anim_id);
-            if (anim_frame < KNUCKLES_PUNCH_COMBO2_START_FRAME)
-            {
-                jo_set_sprite_anim_frame(player2.punch_anim_id, KNUCKLES_PUNCH_COMBO2_START_FRAME);
-                jo_start_sprite_anim(player2.punch_anim_id);
-            }
-            if (anim_frame >= KNUCKLES_PUNCH_LAST_FRAME && jo_is_sprite_anim_stopped(player2.punch_anim_id))
-            {
-                player2.punch2 = false;
-                player2.attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
-                jo_reset_sprite_anim(player2.punch_anim_id);
-            }
-        }
+        /* Use the same Knuckles animation state machine as player 1 (parameterized for player 2). */
+        knuckles_update_animation_for(&player2, &g_player2_physics);
     }
     else
     {
@@ -874,108 +806,6 @@ static void game_loop_update_player2_animation(void)
             g_player2_tails_kick_total_degrees = 0;
         }
     }
-    // else
-    // {
-    //     if (is_knuckles && player2.charged_kick_enabled)
-    //     {
-    //         if (player2.kick && !player2.kick2)
-    //         {
-    //             jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
-    //             jo_start_sprite_anim(player2.kick_anim_id);
-    //         }
-    //         else if (player2.kick2 && player2.charged_kick_active)
-    //         {
-    //             player2.charged_kick_phase_timer++;
-    //             if (player2.charged_kick_phase == 1)
-    //             {
-    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, 1);
-    //                 jo_start_sprite_anim(player2.kick_anim_id);
-    //                 if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE1_FRAMES)
-    //                 {
-    //                     player2.charged_kick_phase = 2;
-    //                     player2.charged_kick_phase_timer = 0;
-    //                 }
-    //             }
-    //             else
-    //             {
-    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, 2);
-    //                 jo_start_sprite_anim(player2.kick_anim_id);
-    //                 if (player2.charged_kick_phase_timer >= KNUCKLES_CHARGED_KICK_PHASE2_FRAMES)
-    //                 {
-    //                     player2.kick2 = false;
-    //                     player2.charged_kick_active = false;
-    //                     player2.charged_kick_ready = false;
-    //                     player2.charged_kick_hold_ms = 0;
-    //                     player2.charged_kick_phase = 0;
-    //                     player2.charged_kick_phase_timer = 0;
-    //                     player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-    //                     jo_reset_sprite_anim(player2.kick_anim_id);
-    //                 }
-    //             }
-    //         }
-    //         else if (player2.kick2)
-    //         {
-    //             anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
-    //             if (anim_frame < kick_stage2_start_frame)
-    //             {
-    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-    //                 jo_start_sprite_anim(player2.kick_anim_id);
-    //             }
-    //             if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
-    //             {
-    //                 player2.kick2 = false;
-    //                 player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-    //                 jo_reset_sprite_anim(player2.kick_anim_id);
-    //             }
-    //         }
-    //     }
-    //     else if (player2.kick)
-    //     {
-    //         anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
-
-    //         if (anim_frame > kick_stage1_last_frame || jo_is_sprite_anim_stopped(player2.kick_anim_id))
-    //         {
-    //             jo_set_sprite_anim_frame(player2.kick_anim_id, 0);
-    //             jo_start_sprite_anim(player2.kick_anim_id);
-    //             anim_frame = 0;
-    //         }
-
-    //         if (anim_frame >= kick_stage1_last_frame)
-    //         {
-    //             if (player2.kick2_requested)
-    //             {
-    //                 player2.kick = false;
-    //                 player2.kick2 = true;
-    //                 player2.kick2_requested = false;
-    //                 player2.perform_kick2 = true;
-    //                 jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-    //                 jo_start_sprite_anim(player2.kick_anim_id);
-    //             }
-    //             else
-    //             {
-    //                 player2.kick = false;
-    //                 player2.kick2_requested = false;
-    //                 player2.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-    //                 jo_reset_sprite_anim(player2.kick_anim_id);
-    //             }
-    //         }
-    //     }
-    //     else if (player2.kick2)
-    //     {
-    //         anim_frame = jo_get_sprite_anim_frame(player2.kick_anim_id);
-    //         if (anim_frame < kick_stage2_start_frame)
-    //         {
-    //             jo_set_sprite_anim_frame(player2.kick_anim_id, kick_stage2_start_frame);
-    //             jo_start_sprite_anim(player2.kick_anim_id);
-    //         }
-    //         if (anim_frame >= kick_stage2_last_frame && jo_is_sprite_anim_stopped(player2.kick_anim_id))
-    //         {
-    //             player2.kick2 = false;
-    //             player2.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-    //             jo_reset_sprite_anim(player2.kick_anim_id);
-    //         }
-    //     }
-    // }
 }
 
 static void game_loop_update_player2_runtime(void)
@@ -1072,14 +902,6 @@ static void game_loop_draw_player2(void)
     is_tails = (p2_character == UiCharacterTails);
     is_knuckles = (p2_character == UiCharacterKnuckles);
 
-    life_percent = (player2.life * 100) / 50;
-    bar_max_width = 20;
-    bar_width = (life_percent * bar_max_width) / 100;
-    for (index = 0; index < bar_max_width; ++index)
-        bar[index] = (index < bar_width) ? '#' : '-';
-    bar[bar_max_width] = '\0';
-    jo_printf(1, 27, "P2 : [%s] %d%%", bar, life_percent);
-
     player2.x = (int)g_player2_world_x - *g_ctx->map_pos_x;
     player2.y = (int)g_player2_world_y - *g_ctx->map_pos_y;
 
@@ -1100,6 +922,13 @@ static void game_loop_draw_player2(void)
     {
         int tail_x = player2.x + (player2.flip ? TAILS_TAIL_OFFSET_X : -TAILS_TAIL_OFFSET_X);
         jo_sprite_draw3D2(game_flow_get_player2_tail_base_id() + g_player2_tail_frame, tail_x, player2.y, CHARACTER_SPRITE_Z);
+    }
+
+    if (is_knuckles)
+    {
+        /* Use shared Knuckles display logic so P2 matches P1 (charged kick + phase visuals). */
+        knuckles_display_for(&player2, &g_player2_physics);
+        return;
     }
 
     if (player2.spin)
@@ -1138,38 +967,9 @@ static void game_loop_draw_player2(void)
     }
     else if (player2.kick || player2.kick2)
     {
-        if (is_knuckles && player2.kick && !player2.kick2)
-        {
-            if (player2.kick_anim_id >= 0)
-            {
-                int base_id = jo_get_anim_sprite(player2.kick_anim_id) - jo_get_sprite_anim_frame(player2.kick_anim_id);
-                jo_sprite_draw3D2(base_id, player2.x, player2.y, CHARACTER_SPRITE_Z);
-            }
-        }
-        else if (is_knuckles && player2.kick2)
-        {
-            if (player2.kick_anim_id >= 0)
-            {
-                int base_id = jo_get_anim_sprite(player2.kick_anim_id) - jo_get_sprite_anim_frame(player2.kick_anim_id);
-                int front_offset = player2.flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
-                if (player2.charged_kick_active && player2.charged_kick_phase <= 1)
-                    jo_sprite_draw3D2(base_id + 1, player2.x, player2.y, CHARACTER_SPRITE_Z);
-                else
-                {
-                    jo_sprite_draw3D2(base_id + KNUCKLES_KICK_PART4_INDEX, player2.x, player2.y, CHARACTER_SPRITE_Z);
-                    jo_sprite_draw3D2(base_id + KNUCKLES_KICK_PART3_INDEX,
-                                      player2.x + front_offset,
-                                      player2.y,
-                                      CHARACTER_SPRITE_Z);
-                }
-            }
-        }
-        else
-        {
-            anim_sprite_id = (player2.kick_anim_id >= 0) ? jo_get_anim_sprite(player2.kick_anim_id) : -1;
-            if (anim_sprite_id >= 0)
-                jo_sprite_draw3D2(anim_sprite_id, player2.x, player2.y, CHARACTER_SPRITE_Z);
-        }
+        anim_sprite_id = (player2.kick_anim_id >= 0) ? jo_get_anim_sprite(player2.kick_anim_id) : -1;
+        if (anim_sprite_id >= 0)
+            jo_sprite_draw3D2(anim_sprite_id, player2.x, player2.y, CHARACTER_SPRITE_Z);
     }
     else if (player2.jump)
         jo_sprite_draw3D2(player2.jump_sprite_id, player2.x, player2.y, CHARACTER_SPRITE_Z);
@@ -1197,7 +997,7 @@ static void game_loop_draw_health_bars(void)
     /* Draw up to 5 life bars (player + player2 + up to 3 bots), using 3-letter codes. */
     game_loop_draw_life_bar(1, 24, character_short_name(player.character_id), player.life);
 
-    if (g_player2_active)
+    if (g_player2_active && g_ctx->ui_state->menu_multiplayer_versus)
         game_loop_draw_life_bar(1, 25, character_short_name(player2.character_id), player2.life);
 
     int bot_count = bot_get_active_count();

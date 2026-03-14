@@ -306,7 +306,8 @@ void ui_control_reset_menu_sprites(void)
 
 static bool ui_control_character_is_locked(ui_character_choice_t choice)
 {
-    return choice == UiCharacterShadow;
+    (void)choice;
+    return false;
 }
 
 static bool ui_control_is_multiplayer_versus(const ui_control_state_t *state)
@@ -615,26 +616,6 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         return;
     }
 
-    if (state->menu_screen == UiMenuScreenMultiplayerModeSelect)
-    {
-        bool pad2_available = input_mapping_is_player2_available();
-        int p2_port = input_mapping_get_player2_port();
-
-        jo_printf(13, 6, "MULTIPLAYER MODE");
-        jo_printf(8, 10, "%s COOP", state->menu_multiplayer_selected_option == MenuMultiplayerCoop ? "X" : " ");
-        jo_printf(8, 11, "%s VERSUS", state->menu_multiplayer_selected_option == MenuMultiplayerVersus ? ">" : " ");
-
-        if (state->menu_pad2_warning_timer > 0)
-            jo_printf(4, 22, "CONNECT PAD2 TO START VERSUS");
-        if (pad2_available)
-            jo_printf(4, 23, "PAD2: CONNECTED (P%d)", p2_port + 1);
-        else
-            jo_printf(4, 23, "PAD2: DISCONNECTED");
-        jo_printf(4, 24, "UP/DOWN: SELECT");
-        jo_printf(4, 25, "A: CONFIRM");
-        jo_printf(4, 26, "B: BACK");
-        return;
-    }
 
     if (state->menu_screen == UiMenuScreenOptions)
     {
@@ -1023,7 +1004,15 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
                     state->menu_pad2_warning_timer = MENU_PAD2_WARNING_FRAMES;
                     return;
                 }
-                state->menu_screen = UiMenuScreenMultiplayerModeSelect;
+                state->menu_multiplayer_versus = true;
+                state->menu_screen = UiMenuScreenCharacterSelect;
+                state->menu_selecting_player2_character = false;
+                state->menu_player1_confirmed = false;
+                state->menu_player2_confirmed = false;
+                state->menu_cursor_character = state->menu_selected_character;
+                state->menu_cursor_player2_character = state->menu_selected_player2_character;
+                if (state->menu_bot_count < 0)
+                    state->menu_bot_count = 0;
             }
         }
         else if (pressed_b)
@@ -1134,7 +1123,7 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
                 if (state->menu_player1_confirmed)
                     state->menu_player1_confirmed = false;
                 else
-                    state->menu_screen = UiMenuScreenMultiplayerModeSelect;
+                    state->menu_screen = UiMenuScreenBattleModeSelect;
             }
 
             if (pad2_available && pressed_b_p2)

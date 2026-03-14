@@ -138,6 +138,10 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     saved_player = player;
     player2_handlers = character_registry_get(selected_character);
     player2_handlers.load();
+
+    /* Ensure player2 combat stats (including charged kick) match the selected character. */
+    character_registry_apply_combat_profile(&player2, selected_character);
+
     player2_character_loaded = true;
     player2_active_character = selected_character;
 
@@ -183,7 +187,7 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.charged_kick_active = false;
     player2.charged_kick_phase = 0;
     player2.charged_kick_phase_timer = 0;
-    player2.character_id = player.character_id;
+    player2.character_id = selected_character;
     player2.hit_done_punch1 = false;
     player2.hit_done_punch2 = false;
     player2.hit_done_kick1 = false;
