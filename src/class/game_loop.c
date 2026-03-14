@@ -1007,6 +1007,8 @@ static void game_loop_draw_health_bars(void)
         game_loop_draw_life_bar(24, 25, character_short_name(bot_get_character_id(1)), bot_get_life(1));
     if (bot_count > 2)
         game_loop_draw_life_bar(24, 26, character_short_name(bot_get_character_id(2)), bot_get_life(2));
+    if (bot_count > 3)
+        game_loop_draw_life_bar(24, 27, character_short_name(bot_get_character_id(3)), bot_get_life(3));
 }
 
 void game_loop_init(game_loop_context_t *ctx)

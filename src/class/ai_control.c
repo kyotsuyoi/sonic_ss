@@ -479,7 +479,9 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                 *ctx->bot_speed_x_ref = 0.0f;
         }
 
+        /* Only treat as charged attack if the bot actually charged and then released. */
         bool knuckles_charge_attack = (ctx->bot_ref->charged_kick_enabled
+            && ctx->bot_ref->charged_kick_active
             && *ctx->bot_current_attack_ref == AiBotAttackKick2);
         int attack_damage = 0;
         int attack_kind = -1;
@@ -619,6 +621,9 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
 
                 if (can_hit_current || can_hit_flipped)
                 {
+                    /* Mark charged kick as ready so damage uses charged values. */
+                    ctx->bot_ref->charged_kick_ready = true;
+                    ctx->bot_ref->charged_kick_active = false;
                     ctx->start_attack(AiBotAttackKick2, false);
                 }
                 else

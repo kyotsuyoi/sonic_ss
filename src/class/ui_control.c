@@ -406,7 +406,7 @@ void ui_control_init(ui_control_state_t *state)
         state->menu_character_controller[i] = UiControllerNone;
         state->menu_character_group[i] = 0;
     }
-    state->menu_character_controller[UiCharacterSonic] = UiControllerPlayer;
+    state->menu_character_controller[UiCharacterSonic] = UiControllerPlayer1;
     state->menu_group_count = 0;
     state->menu_group_cursor = 0;
     state->menu_selecting_bot_character = false;
@@ -485,11 +485,11 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     jo_printf(4, 27, "START: RESUME");
 }
 
-static int ui_control_get_player_index(const ui_control_state_t *state)
+static int ui_control_get_player1_index(const ui_control_state_t *state)
 {
     for (int i = 0; i < UiCharacterCount; ++i)
     {
-        if (state->menu_character_controller[i] == UiControllerPlayer)
+        if (state->menu_character_controller[i] == UiControllerPlayer1)
             return i;
     }
     return -1;
@@ -509,28 +509,43 @@ static int ui_control_count_cpu(const ui_control_state_t *state)
 static ui_controller_type_t ui_control_next_controller(const ui_control_state_t *state, int cursor_index)
 {
     ui_controller_type_t current = state->menu_character_controller[cursor_index];
-    bool has_player = (ui_control_get_player_index(state) >= 0);
-    int cpu_count = ui_control_count_cpu(state);
-    int active_count = cpu_count + (has_player ? 1 : 0);
+    bool has_p1 = false;
+    bool has_p2 = false;
+    int cpu_count = 0;
+    for (int i = 0; i < UiCharacterCount; ++i)
+    {
+        if (state->menu_character_controller[i] == UiControllerPlayer1)
+            has_p1 = true;
+        if (state->menu_character_controller[i] == UiControllerPlayer2)
+            has_p2 = true;
+        if (state->menu_character_controller[i] == UiControllerCpu)
+            cpu_count++;
+    }
+    int active_count = cpu_count + (has_p1 ? 1 : 0) + (has_p2 ? 1 : 0);
 
-    /* Cycle order: NONE -> CPU -> PLAYER -> NONE */
+    /* Cycle order: NONE -> P1 -> P2 -> CPU -> NONE */
     ui_controller_type_t next;
     if (current == UiControllerNone)
+        next = UiControllerPlayer1;
+    else if (current == UiControllerPlayer1)
+        next = UiControllerPlayer2;
+    else if (current == UiControllerPlayer2)
         next = UiControllerCpu;
-    else if (current == UiControllerCpu)
-        next = UiControllerPlayer;
     else
         next = UiControllerNone;
 
     /* Prevent exceeding 4 total active (Player+CPU). If we're at max and we would switch a None into CPU, skip to Player/None. */
     if (current == UiControllerNone && next == UiControllerCpu && active_count >= 4)
     {
-        /* If we already have Player, skip CPU to allow Player conversion (and free a CPU slot). */
-        if (has_player)
-            next = UiControllerNone;
-        else
-            next = UiControllerPlayer;
+        /* If already 4 active slots (P1+P2+2 CPUs), don’t add more CPUs. */
+        next = UiControllerNone;
     }
+
+    /* Ensure only one Player1 and one Player2 exist at a time. */
+    if (next == UiControllerPlayer1 && has_p1)
+        next = UiControllerPlayer2;
+    if (next == UiControllerPlayer2 && has_p2)
+        next = UiControllerCpu;
 
     return next;
 }
@@ -746,59 +761,34 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
             }
         }
 
-        if (ui_control_is_multiplayer_versus(state))
+        /* Draw selection cursors + controller type label for each character */
+        jo_printf((item_x[idx] / 8) - 2,
+                  (MENU_SPRITE_Y / 8) + 1,
+                  "%s",
+                  is_hovered ? (is_locked ? "X" : ">") : " ");
+
+        const char *controller_label;
+        switch (state->menu_character_controller[idx])
         {
-            if (p1_hovered && p2_hovered)
-            {
-                jo_printf(pointer_base_x, pointer_base_y, "1%s", is_locked ? "X" : ">");
-                jo_printf(pointer_base_x, pointer_base_y + 1, "2%s", is_locked ? "X" : ">");
-            }
-            else
-            {
-                if (p1_hovered)
-                    jo_printf(pointer_base_x, pointer_base_y, "1%s", is_locked ? "X" : ">");
-                if (p2_hovered)
-                    jo_printf(pointer_base_x, pointer_base_y, "2%s", is_locked ? "X" : ">");
-            }
+            case UiControllerPlayer1:
+                controller_label = "P1";
+                break;
+            case UiControllerPlayer2:
+                controller_label = "P2";
+                break;
+            case UiControllerCpu:
+                controller_label = "CPU";
+                break;
+            default:
+                controller_label = "X";
+                break;
         }
-        else
-        {
-            jo_printf((item_x[idx] / 8) - 2,
-                      (MENU_SPRITE_Y / 8) + 1,
-                      "%s",
-                      is_hovered ? (is_locked ? "X" : ">") : " ");
-            const char *controller_label;
-            switch (state->menu_character_controller[idx])
-            {
-                case UiControllerPlayer:
-                    controller_label = "PLAYER";
-                    break;
-                case UiControllerCpu:
-                    controller_label = "CPU";
-                    break;
-                default:
-                    controller_label = "X";
-                    break;
-            }
-            jo_printf((item_x[idx] / 8) - 2,
-                      (MENU_SPRITE_Y / 8) + 5,
-                      "%s",
-                      controller_label);
-        }
+        jo_printf((item_x[idx] / 8) - 2,
+                  (MENU_SPRITE_Y / 8) + 2,
+                  "%s",
+                  controller_label);
     }
 
-    if (ui_control_is_multiplayer_versus(state))
-    {
-        bool blink_visible = ui_control_current_name_visible();
-        bool show_p1 = state->menu_player1_confirmed || blink_visible;
-        bool show_p2 = state->menu_player2_confirmed || blink_visible;
-        const char *p1_name = show_p1 ? character_names[state->menu_cursor_character] : "";
-        const char *p2_name = show_p2 ? character_names[state->menu_cursor_player2_character] : "";
-
-        jo_printf(4, 20, "P1: %-8s P2: %-8s", p1_name, p2_name);
-    }
-
-    jo_printf(4, 21, "CLONE BOTS: %d", state->menu_bot_count);
     if (ui_control_is_multiplayer_versus(state))
     {
         int p2_port = input_mapping_get_player2_port();
@@ -1066,82 +1056,93 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
     {
         if (ui_control_is_multiplayer_versus(state))
         {
-            if (!pad2_available && state->menu_player2_confirmed)
-                state->menu_player2_confirmed = false;
+            if (!pad2_available)
+                state->menu_pad2_warning_timer = MENU_PAD2_WARNING_FRAMES;
 
-            if (pressed_up)
+            /* Navigation: move cursor among characters */
+            if (pressed_up || (pad2_available && pressed_up_p2))
             {
                 if (state->menu_bot_count < 2)
                     state->menu_bot_count++;
             }
-            else if (pressed_down)
+            else if (pressed_down || (pad2_available && pressed_down_p2))
             {
                 if (state->menu_bot_count > 0)
                     state->menu_bot_count--;
             }
-
-            if (!state->menu_player1_confirmed && pressed_left)
+            else if (pressed_left || (pad2_available && pressed_left_p2))
             {
-                ui_character_choice_t *target_cursor = &state->menu_cursor_character;
-                *target_cursor = ui_control_prev_character(*target_cursor);
+                state->menu_cursor_character = ui_control_prev_character(state->menu_cursor_character);
             }
-            if (!state->menu_player1_confirmed && pressed_right)
+            else if (pressed_right || (pad2_available && pressed_right_p2))
             {
-                ui_character_choice_t *target_cursor = &state->menu_cursor_character;
-                *target_cursor = ui_control_next_character(*target_cursor);
+                state->menu_cursor_character = ui_control_next_character(state->menu_cursor_character);
             }
 
-            if (pad2_available && !state->menu_player2_confirmed && pressed_left_p2)
+            /* A cycles controller type (P1/P2/CPU/X) for the highlighted character */
+            if (pressed_a || (pad2_available && pressed_a_p2))
             {
-                state->menu_cursor_player2_character = ui_control_prev_character(state->menu_cursor_player2_character);
-            }
-            if (pad2_available && !state->menu_player2_confirmed && pressed_right_p2)
-            {
-                state->menu_cursor_player2_character = ui_control_next_character(state->menu_cursor_player2_character);
+                ui_character_choice_t cursor = state->menu_cursor_character;
+                state->menu_character_controller[cursor] = ui_control_next_controller(state, cursor);
             }
 
-            if (pressed_a)
+            /* Go to group assignment before starting the fight */
+            if (pressed_start)
             {
-                if (!state->menu_player1_confirmed && !ui_control_character_is_locked(state->menu_cursor_character))
+                int p1_char = -1;
+                int p2_char = -1;
+                int first_cpu_char = -1;
+                int cpu_count = 0;
+                for (int i = 0; i < UiCharacterCount; ++i)
                 {
-                    state->menu_selected_character = state->menu_cursor_character;
-                    state->menu_player1_confirmed = true;
+                    if (state->menu_character_controller[i] == UiControllerPlayer1)
+                        p1_char = i;
+                    else if (state->menu_character_controller[i] == UiControllerPlayer2)
+                        p2_char = i;
+                    else if (state->menu_character_controller[i] == UiControllerCpu)
+                    {
+                        if (cpu_count == 0)
+                            first_cpu_char = i;
+                        cpu_count++;
+                    }
                 }
-            }
 
-            if (pad2_available && pressed_a_p2)
-            {
-                if (!state->menu_player2_confirmed && !ui_control_character_is_locked(state->menu_cursor_player2_character))
+                if (p1_char < 0)
+                    p1_char = (first_cpu_char >= 0) ? first_cpu_char : UiCharacterSonic;
+                if (p2_char < 0)
+                    p2_char = (p1_char == UiCharacterSonic) ? UiCharacterAmy : UiCharacterSonic;
+
+                state->menu_selected_character = (ui_character_choice_t)p1_char;
+                state->menu_selected_player2_character = (ui_character_choice_t)p2_char;
+                state->menu_selected_bot_character = (ui_character_choice_t)(first_cpu_char >= 0 ? first_cpu_char : UiCharacterAmy);
+
+                /* Build group assignment list (for player 1, player 2 and CPU slots) */
+                int count = 0;
+                for (int i = 0; i < UiCharacterCount; ++i)
                 {
-                    state->menu_selected_player2_character = state->menu_cursor_player2_character;
-                    state->menu_player2_confirmed = true;
+                    if (state->menu_character_controller[i] == UiControllerPlayer1
+                        || state->menu_character_controller[i] == UiControllerPlayer2
+                        || state->menu_character_controller[i] == UiControllerCpu)
+                    {
+                        state->menu_group_order[count++] = (ui_character_choice_t)i;
+                        if (state->menu_character_controller[i] == UiControllerPlayer1)
+                            state->menu_character_group[i] = 1;
+                        else if (state->menu_character_controller[i] == UiControllerPlayer2)
+                            state->menu_character_group[i] = 2;
+                        else
+                            state->menu_character_group[i] = 0;
+                    }
                 }
+                state->menu_group_count = count;
+                state->menu_group_cursor = 0;
+                state->menu_screen = UiMenuScreenGroupAssign;
             }
 
-            if (pressed_b)
+            if (pressed_b || (pad2_available && pressed_b_p2))
             {
-                if (state->menu_player1_confirmed)
-                    state->menu_player1_confirmed = false;
-                else
-                    state->menu_screen = UiMenuScreenBattleModeSelect;
+                state->menu_screen = UiMenuScreenBattleModeSelect;
             }
 
-            if (pad2_available && pressed_b_p2)
-            {
-                if (state->menu_player2_confirmed)
-                    state->menu_player2_confirmed = false;
-            }
-
-            if (!pad2_available)
-                state->menu_pad2_warning_timer = MENU_PAD2_WARNING_FRAMES;
-
-            if (pad2_available && state->menu_player1_confirmed && state->menu_player2_confirmed)
-            {
-                state->menu_selected_bot_character = state->menu_selected_player2_character;
-                on_start_game(state->menu_selected_character,
-                              state->menu_selected_player2_character,
-                              user_data);
-            }
             return;
         }
 
@@ -1169,9 +1170,9 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             ui_controller_type_t current = state->menu_character_controller[cursor];
             ui_controller_type_t next = ui_control_next_controller(state, cursor);
 
-            if (next == UiControllerPlayer)
+            if (next == UiControllerPlayer1)
             {
-                int prev_player = ui_control_get_player_index(state);
+                int prev_player = ui_control_get_player1_index(state);
                 if (prev_player >= 0)
                     state->menu_character_controller[prev_player] = UiControllerNone;
             }
@@ -1187,7 +1188,7 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
             for (int i = 0; i < UiCharacterCount; ++i)
             {
-                if (state->menu_character_controller[i] == UiControllerPlayer)
+                if (state->menu_character_controller[i] == UiControllerPlayer1)
                     player_char = i;
                 if (state->menu_character_controller[i] == UiControllerCpu)
                 {
@@ -1201,7 +1202,7 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             {
                 /* No explicit Player selected: promote first CPU to Player to avoid duplicates. */
                 player_char = first_cpu_char;
-                state->menu_character_controller[player_char] = UiControllerPlayer;
+                state->menu_character_controller[player_char] = UiControllerPlayer1;
                 cpu_found--;
             }
 
@@ -1215,7 +1216,7 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             int count = 0;
             for (int i = 0; i < UiCharacterCount; ++i)
             {
-                if (state->menu_character_controller[i] == UiControllerPlayer
+                if (state->menu_character_controller[i] == UiControllerPlayer1
                     || state->menu_character_controller[i] == UiControllerCpu)
                 {
                     state->menu_group_order[count++] = (ui_character_choice_t)i;

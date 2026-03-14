@@ -10,8 +10,8 @@ Compatible with:
 
 Available features:
 
-- Battles against bots (up to 3 vs 3, characters may be cloned due to sprite limits)
-- Player vs Player battles (also up to 3 vs 3 with clones)
+- Battles against bots (4 bots)
+- Player vs Player battles (also up to 4 bots)
 - Audio test menu
 - Joystick mapping menu
 
@@ -21,7 +21,7 @@ Available characters:
 - Amy — OK
 - Tails — OK
 - Knuckles — OK
-- Shadow — Not OK
+- Shadow — OK
 
 ## Screenshots
 
@@ -36,11 +36,16 @@ Available characters:
 ![Battlefield](readme_src/btl_fld02.gif)
 
 
-To fix:
+Next:
 
-- Knuckles bot misses the range of the aerial attack and the super punch.
-- Knuckles incorrectly allows jumping while holding the super punch.
-- Reduce the number of Sonic and Amy sprites.
-- Fix Tails's punch combo sequence.
-- Fix Amy's kick cooldown timing.
-- Create Shadow classes and sprites.
+Camera control.
+Auto camera that stays at a midpoint between the players.
+Allow the camera to follow player 1 or player 2.
+Map selection menu before battles.
+Debug menu to adjust knockback, pulse, and damage in-game.
+Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
+Sprite packing: grouping multiple sprites into the same block to reduce overhead.
+Bot strategy.
+Equalize Shadow’s class.
+Knuckles’ charged attack should allow up to 3 hits before being canceled.
+Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.

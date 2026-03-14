@@ -35,7 +35,8 @@ typedef enum
 typedef enum
 {
     UiControllerNone = 0,
-    UiControllerPlayer,
+    UiControllerPlayer1,
+    UiControllerPlayer2,
     UiControllerCpu,
     UiControllerCount
 } ui_controller_type_t;
@@ -73,7 +74,7 @@ typedef struct
     ui_character_choice_t menu_cursor_player2_character;
     ui_controller_type_t menu_character_controller[UiCharacterCount];
     int menu_character_group[UiCharacterCount];
-    ui_character_choice_t menu_group_order[4];
+    ui_character_choice_t menu_group_order[UiCharacterCount];
     int menu_group_count;
     int menu_group_cursor;
     bool menu_selecting_bot_character;

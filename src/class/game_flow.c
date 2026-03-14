@@ -305,6 +305,10 @@ void game_flow_process_loading(void *user_data)
             setup_player2_character(ctx->ui_state->menu_selected_player2_character);
             //jo_printf(0, 206, "game_flow: setup_player2_character returned");
             runtime_log("game_flow: setup_player2_character returned");
+
+            /* Ensure player/group values are set so bots can identify allies correctly. */
+            player.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character];
+            player2.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_player2_character];
         }
         else
             player2 = (character_t){0};
@@ -319,17 +323,36 @@ void game_flow_process_loading(void *user_data)
 
         if (ctx->ui_state->menu_multiplayer_versus)
         {
-            bot_count = ctx->ui_state->menu_bot_count;
-            if (bot_count > 0)
+            int cpu_characters[UiCharacterCount];
+            int cpu_groups[UiCharacterCount];
+            int cpu_count = 0;
+            int player1_group = 1;
+
+            for (int i = 0; i < UiCharacterCount; ++i)
             {
-                //jo_printf(0, 210, "game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
-                runtime_log("game_flow: calling bot_init_versus selected_char=%d player2_char=%d bot_count=%d", (int)loading_selected_character, (int)ctx->ui_state->menu_selected_player2_character, bot_count);
-                bot_init_versus((int)loading_selected_character,
-                                (int)ctx->ui_state->menu_selected_player2_character,
-                                bot_count,
-                                *ctx->map_pos_x + player.x,
-                                *ctx->map_pos_y + player.y);
-                runtime_log("game_flow: bot_init_versus returned");
+                if (ctx->ui_state->menu_character_controller[i] == UiControllerCpu)
+                {
+                    cpu_characters[cpu_count] = i;
+                    cpu_groups[cpu_count] = ctx->ui_state->menu_character_group[i];
+                    cpu_count++;
+                }
+                else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
+                {
+                    player1_group = ctx->ui_state->menu_character_group[i];
+                }
+            }
+
+            if (cpu_count > 0)
+            {
+                runtime_log("game_flow: calling bot_init_multi (versus) player=%d cpu_count=%d", (int)loading_selected_character, cpu_count);
+                bot_init_multi((int)loading_selected_character,
+                               cpu_characters,
+                               cpu_groups,
+                               cpu_count,
+                               player1_group,
+                               *ctx->map_pos_x + player.x,
+                               *ctx->map_pos_y + player.y);
+                runtime_log("game_flow: bot_init_multi returned");
             }
             else
             {
@@ -352,8 +375,13 @@ void game_flow_process_loading(void *user_data)
                     cpu_groups[cpu_count] = ctx->ui_state->menu_character_group[i];
                     cpu_count++;
                 }
-                else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer)
+                else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
                 {
+                    player_character = (ui_character_choice_t)i;
+                }
+                else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && player_character == loading_selected_character)
+                {
+                    /* If no Player1 found, treat Player2 as Player1 for single-player mode. */
                     player_character = (ui_character_choice_t)i;
                 }
             }
@@ -430,20 +458,52 @@ void game_flow_reset_fight(void *user_data)
 
     if (ctx->ui_state->menu_multiplayer_versus)
     {
-        bot_count = ctx->ui_state->menu_bot_count;
-        if (bot_count > 0)
+        int cpu_characters[UiCharacterCount];
+        int cpu_groups[UiCharacterCount];
+        int cpu_count = 0;
+        int player_character = ctx->ui_state->menu_selected_character;
+        int player1_group = ctx->ui_state->menu_character_group[player_character];
+
+        /* Ensure group values are set for both players so bots can correctly treat allies */
+        player.group = player1_group;
+        player2.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_player2_character];
+
+        for (int i = 0; i < UiCharacterCount; ++i)
         {
-            bot_init_versus((int)ctx->ui_state->menu_selected_character,
-                            (int)ctx->ui_state->menu_selected_player2_character,
-                            bot_count,
-                            *ctx->map_pos_x + player.x,
-                            *ctx->map_pos_y + player.y);
+            if (ctx->ui_state->menu_character_controller[i] == UiControllerCpu)
+            {
+                cpu_characters[cpu_count] = i;
+                cpu_groups[cpu_count] = ctx->ui_state->menu_character_group[i];
+                cpu_count++;
+            }
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
+            {
+                player_character = (ui_character_choice_t)i;
+                player1_group = ctx->ui_state->menu_character_group[i];
+            }
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && player_character == ctx->ui_state->menu_selected_character)
+            {
+                /* If no Player1 selected (or not found), allow Player2 to act as player. */
+                player_character = (ui_character_choice_t)i;
+                player1_group = ctx->ui_state->menu_character_group[i];
+            }
         }
+
+        player.group = ctx->ui_state->menu_character_group[player_character];
+
+        if (cpu_count > 0)
+            bot_init_multi(player_character,
+                           cpu_characters,
+                           cpu_groups,
+                           cpu_count,
+                           player1_group,
+                           *ctx->map_pos_x + player.x,
+                           *ctx->map_pos_y + player.y);
         else
-        {
-            bot_set_active_count(0);
             bot_unload();
-        }
+
+        /* Ensure the selected character for player matches the actual player selection. */
+        ctx->ui_state->menu_selected_character = player_character;
     }
     else
     {
@@ -460,8 +520,13 @@ void game_flow_reset_fight(void *user_data)
                 cpu_groups[cpu_count] = ctx->ui_state->menu_character_group[i];
                 cpu_count++;
             }
-            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer)
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
             {
+                player_character = (ui_character_choice_t)i;
+            }
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && player_character == ctx->ui_state->menu_selected_character)
+            {
+                /* If no Player1 selected (or not found), allow Player2 to act as player. */
                 player_character = (ui_character_choice_t)i;
             }
         }

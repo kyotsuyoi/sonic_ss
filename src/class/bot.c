@@ -901,9 +901,10 @@ static void bot_start_attack(ai_bot_attack_t attack, bool request_combo)
         bot.kick2 = true;
         if (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled)
         {
-            bot.charged_kick_active = true;
-            bot.charged_kick_ready = true;
-            bot.charged_kick_phase = 2;
+            /* Only treat as charged if the bot actually charged it (charging step completed). */
+            bot.charged_kick_active = bot.charged_kick_ready;
+            bot.charged_kick_ready = false;
+            bot.charged_kick_phase = bot.charged_kick_active ? 2 : 0;
             bot.charged_kick_phase_timer = 0;
         }
         game_audio_play_sfx_next_channel(game_audio_get_kick_sfx());
@@ -1228,7 +1229,8 @@ static void process_player_hits(character_t *player_ref,
     float player_knockback_kick1 = player_ref->knockback_kick1;
     float player_knockback_kick2 = player_ref->knockback_kick2;
 
-    combat_profile = character_registry_get_combat_profile_by_character_id(player_ref->character_id);
+    /* Use the bot's combat profile (not the target's) for damage values. */
+    combat_profile = character_registry_get_combat_profile_by_character_id(bot_character);
 
     if (bot_defeated)
         return;
@@ -1668,7 +1670,19 @@ void bot_instance_update(bot_instance_t *instance,
     bot.x = bot_screen_x(map_pos_x);
     bot.y = bot_screen_y(map_pos_y);
 
-    if (!bot_is_ally_flag)
+    bool hit_player1 = true;
+    bool hit_player2 = true;
+
+    if (player_ref->group != 0 && player_ref->group == bot.group)
+        hit_player1 = false;
+
+    if (versus_mode && player2_ref != JO_NULL)
+    {
+        if (player2_ref->group != 0 && player2_ref->group == bot.group)
+            hit_player2 = false;
+    }
+
+    if (hit_player1)
     {
         process_player_hits(player_ref,
                             player_physics,
@@ -1680,7 +1694,7 @@ void bot_instance_update(bot_instance_t *instance,
                             &prev_player_kick2);
     }
 
-    if (versus_mode && player2_ref != JO_NULL && bot_is_ally_flag)
+    if (versus_mode && player2_ref != JO_NULL && hit_player2)
     {
         process_player_hits(player2_ref,
                             player2_physics,
@@ -1836,6 +1850,16 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         jo_sprite_enable_horizontal_flip();
 
     bot_draw_tail();
+
+    /* If bot is defeated, immediately draw defeated sprite (skip charged kick special-case). */
+    if ((bot_defeated || bot.life <= 0) && bot_defeated_sprite_id >= 0)
+    {
+        bot_reset_animation_lists_except(-1);
+        jo_sprite_draw3D2(bot_defeated_sprite_id, bot.x, bot.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+        if (bot.flip)
+            jo_sprite_disable_horizontal_flip();
+        return;
+    }
 
     /* If bot is Knuckles and actively holding Kick1 for charged kick, always show charged sprite part1. */
     if (bot_character == BotCharacterKnuckles && bot.charged_kick_enabled && bot_current_attack == AiBotAttackKick1 && bot_attack_timer > 0)
