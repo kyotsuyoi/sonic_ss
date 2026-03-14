@@ -38,14 +38,14 @@ Available characters:
 
 Next:
 
-Camera control.
-Auto camera that stays at a midpoint between the players.
-Allow the camera to follow player 1 or player 2.
-Map selection menu before battles.
-Debug menu to adjust knockback, pulse, and damage in-game.
-Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
-Sprite packing: grouping multiple sprites into the same block to reduce overhead.
-Bot strategy.
-Equalize Shadow’s class.
-Knuckles’ charged attack should allow up to 3 hits before being canceled.
-Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
+- Camera control.
+- Auto camera that stays at a midpoint between the players.
+- Allow the camera to follow player 1 or player 2.
+- Map selection menu before battles.
+- Debug menu to adjust knockback, pulse, and damage in-game.
+- Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
+- Sprite packing: grouping multiple sprites into the same block to reduce overhead.
+- Bot strategy.
+- Equalize Shadow’s class.
+- Knuckles’ charged attack should allow up to 3 hits before being canceled.
+- Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
