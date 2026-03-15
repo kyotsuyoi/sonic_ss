@@ -27,6 +27,7 @@ typedef enum
     UiPauseOptionResetFight,
     UiPauseOptionCharacterSelect,
     UiPauseOptionDebug,
+    UiPauseOptionBalance,
     UiPauseOptionLogs,
     UiPauseOptionLogPage,
     UiPauseOptionCount
@@ -62,7 +63,8 @@ typedef enum
     UiMenuScreenMapSelect,
     UiMenuScreenOptions,
     UiMenuScreenConfigControls,
-    UiMenuScreenSongTest
+    UiMenuScreenSongTest,
+    UiMenuScreenDebugBalance
 } ui_menu_screen_t;
 
 #define UI_MENU_MAX_MAPS 16
@@ -134,8 +136,18 @@ typedef struct
     bool pause_left_released;
     bool pause_right_released;
     bool pause_a_released;
+    bool pause_b_released;
     bool pause_start_released;
     bool pause_lr_released;
+    bool pause_c_released;
+
+    /* Debug balance submenu state */
+    int debug_balance_selected_row;
+    int debug_balance_selected_col;
+
+    /* Balance submenu hold-repeat counters (for faster adjustments) */
+    int debug_balance_hold_left_frames;
+    int debug_balance_hold_right_frames;
 } ui_control_state_t;
 
 typedef void (*ui_control_start_game_fn)(ui_character_choice_t selected_character,

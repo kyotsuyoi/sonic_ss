@@ -311,6 +311,12 @@ static void game_loop_process_player_attack(character_t *attacker,
 
     combat_profile = character_registry_get_combat_profile_by_character_id(attacker->character_id);
 
+    /* Use debug balance values for players to keep in-sync with the in-game tuning menu. */
+    float attacker_knockback_punch1 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackPunch1);
+    float attacker_knockback_punch2 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackPunch2);
+    float attacker_knockback_kick1 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackKick1);
+    float attacker_knockback_kick2 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackKick2);
+
     if (attacker->punch
         && !attacker->hit_done_punch1
         && game_loop_attack_reached_hit_frame(attacker, 0)
@@ -331,18 +337,19 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
         else
         {
-            target->life -= combat_profile.damage_punch1;
+            int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackPunch1);
+            target->life -= damage;
             if (attacker == &player || attacker == &player2)
             {
-                debug_track_player_damage_dealt(target->character_id, combat_profile.damage_punch1);
-                debug_track_player_knockback_dealt((int)attacker->knockback_punch1);
+                debug_track_player_damage_dealt(target->character_id, damage);
+                debug_track_player_knockback_dealt(attacker_knockback_punch1);
             }
             if (target == &player || target == &player2)
             {
-                debug_track_player_damage_received(attacker->character_id, combat_profile.damage_punch1);
-                debug_track_player_knockback_received((int)attacker->knockback_punch1);
+                debug_track_player_damage_received(attacker->character_id, damage);
+                debug_track_player_knockback_received(attacker_knockback_punch1);
             }
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch1, STUN_LIGHT_FRAMES);
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch1, STUN_LIGHT_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
         }
@@ -368,12 +375,13 @@ static void game_loop_process_player_attack(character_t *attacker,
         }
         else
         {
-            target->life -= combat_profile.damage_punch2;
+            int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackPunch2);
+            target->life -= damage;
             if (attacker == &player || attacker == &player2)
-                debug_track_player_damage_dealt(target->character_id, combat_profile.damage_punch2);
+                debug_track_player_damage_dealt(target->character_id, damage);
             if (target == &player || target == &player2)
-                debug_track_player_damage_received(attacker->character_id, combat_profile.damage_punch2);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch2, STUN_HEAVY_FRAMES);
+                debug_track_player_damage_received(attacker->character_id, damage);
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch2, STUN_HEAVY_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
         }
@@ -405,18 +413,19 @@ static void game_loop_process_player_attack(character_t *attacker,
             }
             else
             {
-                target->life -= combat_profile.damage_kick1;
+                int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackKick1);
+                target->life -= damage;
                 if (attacker == &player || attacker == &player2)
                 {
-                    debug_track_player_damage_dealt(target->character_id, combat_profile.damage_kick1);
-                    debug_track_player_knockback_dealt((int)attacker->knockback_kick1);
+                    debug_track_player_damage_dealt(target->character_id, damage);
+                    debug_track_player_knockback_dealt(attacker_knockback_kick1);
                 }
                 if (target == &player || target == &player2)
                 {
-                    debug_track_player_damage_received(attacker->character_id, combat_profile.damage_kick1);
-                    debug_track_player_knockback_received((int)attacker->knockback_kick1);
+                    debug_track_player_damage_received(attacker->character_id, damage);
+                    debug_track_player_knockback_received(attacker_knockback_kick1);
                 }
-                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1, STUN_LIGHT_FRAMES);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_kick1, STUN_LIGHT_FRAMES);
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
             }
@@ -449,7 +458,7 @@ static void game_loop_process_player_attack(character_t *attacker,
                 ? (attacker->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
                 : attacker->knockback_kick2;
             int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus) : STUN_HEAVY_FRAMES;
-            int kick2_damage = charged_kick ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
+            int kick2_damage = debug_balance_get_damage(attacker->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
 
             if (target->spin)
             {
@@ -464,12 +473,12 @@ static void game_loop_process_player_attack(character_t *attacker,
                 if (attacker == &player || attacker == &player2)
                 {
                     debug_track_player_damage_dealt(target->character_id, kick2_damage);
-                    debug_track_player_knockback_dealt((int)kick2_knockback);
+                    debug_track_player_knockback_dealt(kick2_knockback);
                 }
                 if (target == &player || target == &player2)
                 {
                     debug_track_player_damage_received(attacker->character_id, kick2_damage);
-                    debug_track_player_knockback_received((int)kick2_knockback);
+                    debug_track_player_knockback_received(kick2_knockback);
                 }
                 game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, kick2_stun);
                 damage_fx_trigger_world(target_world_x, target_world_y);

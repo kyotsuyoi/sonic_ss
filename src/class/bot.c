@@ -1228,12 +1228,13 @@ static void process_player_hits(character_t *player_ref,
         player_hit_range_kick1 += 10;
         player_hit_range_kick2 += 10;
     }
-    float player_knockback_punch1 = player_ref->knockback_punch1;
-    float player_knockback_punch2 = player_ref->knockback_punch2;
-    float player_knockback_kick1 = player_ref->knockback_kick1;
-    float player_knockback_kick2 = player_ref->knockback_kick2;
+    float player_knockback_punch1 = debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackPunch1);
+    float player_knockback_punch2 = debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackPunch2);
+    float player_knockback_kick1 = debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackKick1);
+    float player_knockback_kick2 = debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackKick2);
 
-    /* Use the attacker's combat profile for damage values so player attacks match PvP behavior. */
+    /* Use the attacker's combat profile for non-adjusted values (e.g., charged-kick multiplier).
+       Use the debug balance profile for damage/knockback values when the attacker is a player. */
     combat_profile = character_registry_get_combat_profile_by_character_id(player_ref->character_id);
 
     if (bot_defeated)
@@ -1264,8 +1265,8 @@ static void process_player_hits(character_t *player_ref,
             return;
         }
 
-        apply_damage_to_bot(combat_profile.damage_punch1);
-        debug_track_player_knockback_dealt((int)player_knockback_punch1);
+        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch1));
+        debug_track_player_knockback_dealt(player_knockback_punch1);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch1, BOT_TAKEN_STUN_LIGHT_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -1284,8 +1285,8 @@ static void process_player_hits(character_t *player_ref,
             return;
         }
 
-        apply_damage_to_bot(combat_profile.damage_punch2);
-        debug_track_player_knockback_dealt((int)player_knockback_punch2);
+        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch2));
+        debug_track_player_knockback_dealt(player_knockback_punch2);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch2, BOT_TAKEN_STUN_HEAVY_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -1305,8 +1306,8 @@ static void process_player_hits(character_t *player_ref,
             return;
         }
 
-        apply_damage_to_bot(combat_profile.damage_kick1);
-        debug_track_player_knockback_dealt((int)player_knockback_kick1);
+        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackKick1));
+        debug_track_player_knockback_dealt(player_knockback_kick1);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_kick1, BOT_TAKEN_STUN_LIGHT_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -1324,12 +1325,12 @@ static void process_player_hits(character_t *player_ref,
         bool charged_kick = combat_profile.charged_kick_enabled
             && (player_ref->charged_kick_active || player_ref->charged_kick_phase > 0);
         float kick2_knockback = charged_kick
-            ? (player_knockback_kick2 * combat_profile.charged_kick_knockback_mult)
+            ? (player_knockback_kick2 * debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackCharged))
             : player_knockback_kick2;
         int kick2_stun = charged_kick
             ? (BOT_TAKEN_STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus)
             : BOT_TAKEN_STUN_HEAVY_FRAMES;
-        int kick2_damage = charged_kick ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
+        int kick2_damage = debug_balance_get_damage(player_ref->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
 
         if (bot.spin)
         {
@@ -1341,7 +1342,7 @@ static void process_player_hits(character_t *player_ref,
         }
 
         apply_damage_to_bot(kick2_damage);
-        debug_track_player_knockback_dealt((int)kick2_knockback);
+        debug_track_player_knockback_dealt(kick2_knockback);
         apply_hit_effect_to_bot(player_ref->flip, kick2_knockback, kick2_stun);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());

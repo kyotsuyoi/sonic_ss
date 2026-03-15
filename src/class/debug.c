@@ -2,6 +2,7 @@
 #include "player.h"
 #include "bot.h"
 #include "game_loop.h"
+#include "character_registry.h"
 #include <math.h>
 
 /* globals exposed via debug.h */
@@ -32,14 +33,116 @@ void debug_track_player_damage_received(int attacker_id, int damage)
     g_debug_last_damage_received_from = attacker_id;
 }
 
-void debug_track_player_knockback_dealt(int knockback)
+void debug_track_player_knockback_dealt(float knockback)
 {
-    g_debug_last_knockback_dealt = knockback;
+    /* Store in centi-units to match balance display (e.g., 1.70 -> 170) */
+    g_debug_last_knockback_dealt = (int)(knockback * 100.0f + 0.5f);
 }
 
-void debug_track_player_knockback_received(int knockback)
+void debug_track_player_knockback_received(float knockback)
 {
-    g_debug_last_knockback_received = knockback;
+    g_debug_last_knockback_received = (int)(knockback * 100.0f + 0.5f);
+}
+
+/* Balance tuning */
+static debug_balance_profile_t g_debug_balance_profiles[CHARACTER_ID_SHADOW + 1];
+
+static void fill_balance_profile(debug_balance_profile_t *out, const character_combat_profile_t *src)
+{
+    if (out == JO_NULL || src == JO_NULL)
+        return;
+
+    /* damage */
+    out->damage[DebugBalanceAttackPunch1] = src->damage_punch1;
+    out->damage[DebugBalanceAttackPunch2] = src->damage_punch2;
+    out->damage[DebugBalanceAttackKick1] = src->damage_kick1;
+    out->damage[DebugBalanceAttackKick2] = src->damage_kick2;
+    out->damage[DebugBalanceAttackAir] = src->damage_kick2; /* air uses same base as K2 */
+    out->damage[DebugBalanceAttackCharged] = src->charged_kick_damage;
+
+    /* knockback (scaled by 100 for display) */
+    out->knockback[DebugBalanceAttackPunch1] = (int)(src->knockback_punch1 * 100.0f + 0.5f);
+    out->knockback[DebugBalanceAttackPunch2] = (int)(src->knockback_punch2 * 100.0f + 0.5f);
+    out->knockback[DebugBalanceAttackKick1] = (int)(src->knockback_kick1 * 100.0f + 0.5f);
+    out->knockback[DebugBalanceAttackKick2] = (int)(src->knockback_kick2 * 100.0f + 0.5f);
+    out->knockback[DebugBalanceAttackAir] = out->knockback[DebugBalanceAttackKick2]; /* air uses same base as K2 */
+    out->knockback[DebugBalanceAttackCharged] = (int)(src->charged_kick_knockback_mult * 100.0f + 0.5f);
+
+    /* impulse (scaled by 100 for display) */
+    out->impulse[DebugBalanceAttackPunch1] = (int)(src->attack_forward_impulse_light * 100.0f + 0.5f);
+    out->impulse[DebugBalanceAttackPunch2] = (int)(src->attack_forward_impulse_heavy * 100.0f + 0.5f);
+    out->impulse[DebugBalanceAttackKick1] = out->impulse[DebugBalanceAttackPunch1];
+    out->impulse[DebugBalanceAttackKick2] = out->impulse[DebugBalanceAttackPunch2];
+    out->impulse[DebugBalanceAttackAir] = out->impulse[DebugBalanceAttackPunch2];
+    out->impulse[DebugBalanceAttackCharged] = out->impulse[DebugBalanceAttackPunch2];
+}
+
+void debug_balance_init(void)
+{
+    for (int cid = CHARACTER_ID_SONIC; cid <= CHARACTER_ID_SHADOW; ++cid)
+    {
+        character_combat_profile_t profile = character_registry_get_combat_profile_by_character_id(cid);
+        fill_balance_profile(&g_debug_balance_profiles[cid], &profile);
+    }
+}
+
+void debug_balance_reset_profile(int character_id)
+{
+    if (character_id < CHARACTER_ID_SONIC || character_id > CHARACTER_ID_SHADOW)
+        return;
+
+    character_combat_profile_t profile = character_registry_get_combat_profile_by_character_id(character_id);
+    fill_balance_profile(&g_debug_balance_profiles[character_id], &profile);
+}
+
+debug_balance_profile_t *debug_balance_get_profile(int character_id)
+{
+    if (character_id < CHARACTER_ID_SONIC || character_id > CHARACTER_ID_SHADOW)
+        return JO_NULL;
+    return &g_debug_balance_profiles[character_id];
+}
+
+void debug_balance_apply_to_character(character_t *character)
+{
+    if (character == JO_NULL)
+        return;
+
+    debug_balance_profile_t *profile = debug_balance_get_profile(character->character_id);
+    if (profile == JO_NULL)
+        return;
+
+    /* Apply impulse/knockback defaults so the player feels the updated balance in-game.
+       Note: damage values are applied where attacks are resolved (game_loop / bot). */
+    character->attack_forward_impulse_light = debug_balance_get_impulse(character->character_id, DebugBalanceAttackPunch1);
+    character->attack_forward_impulse_heavy = debug_balance_get_impulse(character->character_id, DebugBalanceAttackPunch2);
+    character->knockback_punch1 = debug_balance_get_knockback(character->character_id, DebugBalanceAttackPunch1);
+    character->knockback_punch2 = debug_balance_get_knockback(character->character_id, DebugBalanceAttackPunch2);
+    character->knockback_kick1 = debug_balance_get_knockback(character->character_id, DebugBalanceAttackKick1);
+    character->knockback_kick2 = debug_balance_get_knockback(character->character_id, DebugBalanceAttackKick2);
+}
+
+int debug_balance_get_damage(int character_id, debug_balance_attack_t attack)
+{
+    debug_balance_profile_t *profile = debug_balance_get_profile(character_id);
+    if (profile == JO_NULL || attack < 0 || attack >= DebugBalanceAttackCount)
+        return 0;
+    return profile->damage[attack];
+}
+
+float debug_balance_get_knockback(int character_id, debug_balance_attack_t attack)
+{
+    debug_balance_profile_t *profile = debug_balance_get_profile(character_id);
+    if (profile == JO_NULL || attack < 0 || attack >= DebugBalanceAttackCount)
+        return 0.0f;
+    return (float)profile->knockback[attack] / 100.0f;
+}
+
+float debug_balance_get_impulse(int character_id, debug_balance_attack_t attack)
+{
+    debug_balance_profile_t *profile = debug_balance_get_profile(character_id);
+    if (profile == JO_NULL || attack < 0 || attack >= DebugBalanceAttackCount)
+        return 0.0f;
+    return (float)profile->impulse[attack] / 100.0f;
 }
 
 static volatile int frame_counter = 0;
@@ -71,6 +174,9 @@ void debug_init(void)
 {
     jo_core_add_vblank_callback(vblank_callback);
     asm volatile ("mov r15, %0" : "=r" (initial_stack));
+
+    /* Initialize the in-game balance tuning profiles from defaults */
+    debug_balance_init();
 }
 
 void debug_frame(void)

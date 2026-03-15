@@ -1,4 +1,6 @@
 #include "character_registry.h"
+#include "debug.h"
+#include "player.h"
 #include "sonic.h"
 #include "amy.h"
 #include "tails.h"
@@ -175,6 +177,12 @@ void character_registry_apply_combat_profile(character_t *character, ui_characte
     character->knockback_kick1 = profile.knockback_kick1;
     character->knockback_kick2 = profile.knockback_kick2;
     character->charged_kick_enabled = profile.charged_kick_enabled;
+
+    /* If player is selected, apply the in-game adjustable combat balance overrides. */
+    if (character == &player || character == &player2)
+    {
+        debug_balance_apply_to_character(character);
+    }
 
     switch (choice)
     {

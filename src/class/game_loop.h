@@ -26,4 +26,8 @@ void game_loop_reset_player2_runtime(void);
 void game_loop_debug_frame(void);
 bool game_loop_debug_get_player2_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot);
 
+/* Helpers used by debug display */
+int game_loop_get_map_pos_x(void);
+int game_loop_get_map_pos_y(void);
+
 #endif

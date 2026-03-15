@@ -2,6 +2,7 @@
 #define DEBUG_H
 
 #include <jo/jo.h>
+#include "character_registry.h"
 
 typedef enum
 {
@@ -48,8 +49,37 @@ void debug_track_player_damage_dealt(int target_id, int damage);
 void debug_track_player_damage_received(int attacker_id, int damage);
 
 /* Track last knockback dealt/received for the local player */
-void debug_track_player_knockback_dealt(int knockback);
-void debug_track_player_knockback_received(int knockback);
+void debug_track_player_knockback_dealt(float knockback);
+void debug_track_player_knockback_received(float knockback);
+
+/* Balance tuning (in-game adjustable combat parameters) */
+
+typedef enum
+{
+    DebugBalanceAttackPunch1 = 0,
+    DebugBalanceAttackPunch2,
+    DebugBalanceAttackKick1,
+    DebugBalanceAttackKick2,
+    DebugBalanceAttackAir,
+    DebugBalanceAttackCharged,
+    DebugBalanceAttackCount
+} debug_balance_attack_t;
+
+typedef struct
+{
+    int damage[DebugBalanceAttackCount];
+    int knockback[DebugBalanceAttackCount];
+    int impulse[DebugBalanceAttackCount];
+} debug_balance_profile_t;
+
+void debug_balance_init(void);
+debug_balance_profile_t *debug_balance_get_profile(int character_id);
+void debug_balance_apply_to_character(character_t *character);
+void debug_balance_reset_profile(int character_id);
+
+int debug_balance_get_damage(int character_id, debug_balance_attack_t attack);
+float debug_balance_get_knockback(int character_id, debug_balance_attack_t attack);
+float debug_balance_get_impulse(int character_id, debug_balance_attack_t attack);
 
 void debug_frame(void);
 void debug_set_display_mode(debug_display_mode_t mode);

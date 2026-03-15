@@ -95,7 +95,6 @@ static int menu_remap_swap_action_a = -1;
 static int menu_remap_swap_action_b = -1;
 static int menu_remap_swap_message_timer = 0;
 static bool menu_main_bgm_playing = false;
-static int menu_current_blink_timer = 0;
 
 static const char *menu_remap_action_names[MENU_REMAP_ACTION_COUNT] =
 {
@@ -316,14 +315,6 @@ static bool ui_control_is_multiplayer_versus(const ui_control_state_t *state)
     return state->menu_multiplayer_versus;
 }
 
-static bool ui_control_current_name_visible(void)
-{
-    ++menu_current_blink_timer;
-    if (menu_current_blink_timer >= 30)
-        menu_current_blink_timer = 0;
-    return menu_current_blink_timer < 15;
-}
-
 static ui_character_choice_t ui_control_prev_character(ui_character_choice_t choice)
 {
     if (choice == UiCharacterSonic)
@@ -492,6 +483,10 @@ void ui_control_init(ui_control_state_t *state)
     state->debug_enabled = false;
     state->debug_mode = UiDebugModeOff;
     state->log_mode = RuntimeLogModeOff;
+    state->debug_balance_selected_row = 0;
+    state->debug_balance_selected_col = 0;
+    state->debug_balance_hold_left_frames = 0;
+    state->debug_balance_hold_right_frames = 0;
 
     state->menu_map_count = 0;
     state->menu_map_cursor = 0;
@@ -507,7 +502,9 @@ void ui_control_init(ui_control_state_t *state)
     state->pause_left_released = true;
     state->pause_right_released = true;
     state->pause_a_released = true;
+    state->pause_b_released = true;
     state->pause_start_released = true;
+    state->pause_c_released = true;
     state->pause_lr_released = true;
 }
 
@@ -526,14 +523,43 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
 
     jo_printf(17, 6, "PAUSED");
+
+    if (state->menu_screen == UiMenuScreenDebugBalance)
+    {
+        static const char *character_names[] = {"SONIC", "AMY", "TAILS", "KNUCKLES", "SHADOW"};
+        static const char *attack_names[] = {"P01", "P02", "K01", "K02", "AIR", "CHG"};
+        debug_balance_profile_t *profile = debug_balance_get_profile(player.character_id);
+
+        int row = state->debug_balance_selected_row;
+        int col = state->debug_balance_selected_col;
+
+        jo_printf(6, 8, "BALANCE: %s", character_names[player.character_id]);
+        jo_printf(4, 10, "ROW  DMG   KB    IMP");
+
+        for (int i = 0; i < DebugBalanceAttackCount; ++i)
+        {
+            int y = 12 + i;
+            const char *marker = (i == row) ? ">" : " ";
+            int dmg = profile ? profile->damage[i] : 0;
+            int kb = profile ? profile->knockback[i] : 0;
+            int imp = profile ? profile->impulse[i] : 0;
+            jo_printf(2, y, "%s %s   %2d   %3d   %3d", marker, attack_names[i], dmg, kb, imp);
+        }
+
+        jo_printf(2, 19, "LEFT/RIGHT: +/-  UP/DOWN: row");
+        jo_printf(2, 20, "A: cycle field  B: back  C: reset");
+        return;
+    }
+
     jo_printf(8, 9, "%s CONTINUE", state->pause_selected_option == UiPauseOptionContinue ? ">" : " ");
     
     jo_printf(8, 11, "%s RESET FIGHT", state->pause_selected_option == UiPauseOptionResetFight ? ">" : " ");
     jo_printf(8, 12, "%s CHARACTER SELECT", state->pause_selected_option == UiPauseOptionCharacterSelect ? ">" : " ");
     jo_printf(8, 14, "%s DEBUG: %s", state->pause_selected_option == UiPauseOptionDebug ? ">" : " ", debug_mode_label[state->debug_mode]);
-    jo_printf(8, 15, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
+    jo_printf(8, 15, "%s BALANCE", state->pause_selected_option == UiPauseOptionBalance ? ">" : " ");
+    jo_printf(8, 16, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
     if (state->log_mode == RuntimeLogModeSprite)
-        jo_printf(8, 16, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
+        jo_printf(8, 17, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
 
     if (state->debug_mode == UiDebugModeDamage)
     {
@@ -572,14 +598,41 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     jo_printf(4, 27, "START: RESUME");
 }
 
-static int ui_control_get_player1_index(const ui_control_state_t *state)
+static void ui_control_balance_adjust(ui_control_state_t *state, int delta)
 {
-    for (int i = 0; i < UiCharacterCount; ++i)
+    debug_balance_profile_t *profile = debug_balance_get_profile(player.character_id);
+    if (profile == JO_NULL)
+        return;
+
+    int row = state->debug_balance_selected_row;
+    int col = state->debug_balance_selected_col;
+
+    if (col == 0)
     {
-        if (state->menu_character_controller[i] == UiControllerPlayer1)
-            return i;
+        int value = profile->damage[row];
+        value += delta;
+        if (value < 0)
+            value = 0;
+        profile->damage[row] = value;
     }
-    return -1;
+    else if (col == 1)
+    {
+        int value = profile->knockback[row];
+        value += delta;
+        if (value < 0)
+            value = 0;
+        profile->knockback[row] = value;
+    }
+    else if (col == 2)
+    {
+        int value = profile->impulse[row];
+        value += delta;
+        if (value < 0)
+            value = 0;
+        profile->impulse[row] = value;
+    }
+
+    debug_balance_apply_to_character(&player);
 }
 
 static int ui_control_count_cpu(const ui_control_state_t *state)
@@ -1544,6 +1597,138 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                                    ui_control_action_fn on_character_select,
                                    void *user_data)
 {
+    if (state->menu_screen == UiMenuScreenDebugBalance)
+    {
+        bool handled = false;
+
+        if (jo_is_pad1_key_down(JO_KEY_UP))
+        {
+            if (state->pause_up_released)
+            {
+                state->debug_balance_selected_row = (state->debug_balance_selected_row + 5) % 6;
+                handled = true;
+            }
+            state->pause_up_released = false;
+        }
+        else
+        {
+            state->pause_up_released = true;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_DOWN))
+        {
+            if (state->pause_down_released)
+            {
+                state->debug_balance_selected_row = (state->debug_balance_selected_row + 1) % 6;
+                handled = true;
+            }
+            state->pause_down_released = false;
+        }
+        else
+        {
+            state->pause_down_released = true;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_LEFT))
+        {
+            if (state->pause_left_released)
+            {
+                ui_control_balance_adjust(state, -1);
+                handled = true;
+                state->debug_balance_hold_left_frames = 0;
+            }
+            else
+            {
+                state->debug_balance_hold_left_frames++;
+                if (state->debug_balance_hold_left_frames >= 60 && (state->debug_balance_hold_left_frames % 4) == 0)
+                {
+                    ui_control_balance_adjust(state, -1);
+                    handled = true;
+                }
+            }
+            state->pause_left_released = false;
+        }
+        else
+        {
+            state->pause_left_released = true;
+            state->debug_balance_hold_left_frames = 0;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_RIGHT))
+        {
+            if (state->pause_right_released)
+            {
+                ui_control_balance_adjust(state, 1);
+                handled = true;
+                state->debug_balance_hold_right_frames = 0;
+            }
+            else
+            {
+                state->debug_balance_hold_right_frames++;
+                if (state->debug_balance_hold_right_frames >= 60 && (state->debug_balance_hold_right_frames % 4) == 0)
+                {
+                    ui_control_balance_adjust(state, 1);
+                    handled = true;
+                }
+            }
+            state->pause_right_released = false;
+        }
+        else
+        {
+            state->pause_right_released = true;
+            state->debug_balance_hold_right_frames = 0;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_A))
+        {
+            if (state->pause_a_released)
+            {
+                state->debug_balance_selected_col = (state->debug_balance_selected_col + 1) % 3;
+                handled = true;
+            }
+            state->pause_a_released = false;
+        }
+        else
+        {
+            state->pause_a_released = true;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_B))
+        {
+            if (state->pause_b_released)
+            {
+                /* Back to pause menu */
+                state->menu_screen = UiMenuScreenMain;
+                handled = true;
+            }
+            state->pause_b_released = false;
+        }
+        else
+        {
+            state->pause_b_released = true;
+        }
+
+        if (jo_is_pad1_key_down(JO_KEY_C))
+        {
+            if (state->pause_c_released)
+            {
+                debug_balance_reset_profile(player.character_id);
+                debug_balance_apply_to_character(&player);
+                handled = true;
+            }
+            state->pause_c_released = false;
+        }
+        else
+        {
+            state->pause_c_released = true;
+        }
+
+        if (handled)
+            debug_balance_apply_to_character(&player);
+
+        return;
+    }
+
     if (jo_is_pad1_key_down(JO_KEY_RIGHT))
     {
         if (state->pause_right_released)
@@ -1576,6 +1761,10 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 if (next_page >= page_count)
                     next_page = 0;
                 runtime_log_set_sprite_page(next_page);
+            }
+            else if (state->pause_selected_option == UiPauseOptionBalance)
+            {
+                /* balance submenu does not change debug toggles */
             }
             else
             {
@@ -1620,6 +1809,14 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 if (prev_page < 0)
                     prev_page = page_count - 1;
                 runtime_log_set_sprite_page(prev_page);
+            }
+            else if (state->pause_selected_option == UiPauseOptionBalance)
+            {
+                /* balance submenu does not change debug toggles */
+            }
+            else if (state->pause_selected_option == UiPauseOptionBalance)
+            {
+                /* balance submenu does not change debug toggles */
             }
             else
             {
@@ -1709,6 +1906,13 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->menu_cursor_player2_character = state->menu_selected_player2_character;
                 state->pause_selected_option = UiPauseOptionContinue;
                 state->menu_a_released = false;
+            }
+            else if (state->pause_selected_option == UiPauseOptionBalance)
+            {
+                state->menu_screen = UiMenuScreenDebugBalance;
+                state->debug_balance_selected_row = 0;
+                state->debug_balance_selected_col = 0;
+                state->pause_a_released = false;
             }
         }
 
