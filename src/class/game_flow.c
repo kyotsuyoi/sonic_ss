@@ -13,6 +13,9 @@
 #include "runtime_log.h"
 #include "rotating_sprite_pool.h"
 
+/* Indicates that the loading screen should be drawn before processing the heavy loading work. */
+bool g_loading_just_started = false;
+
 static character_handlers_t active_handlers;
 static ui_character_choice_t active_character = UiCharacterSonic;
 static bool active_character_loaded = false;
@@ -265,9 +268,13 @@ void game_flow_start_from_menu(ui_character_choice_t selected_character,
     if (ctx->ui_state->menu_selected_map_name[0] != '\0')
         world_map_set_filename(ctx->ui_state->menu_selected_map_name);
 
-    world_map_load();
+    /* Start the loading state immediately so the next frame can draw the loading screen. */
     ctx->ui_state->game_paused = false;
     ctx->ui_state->current_game_state = UiGameStateLoading;
+    g_loading_just_started = true;
+
+    /* The actual loading work happens in game_flow_process_loading (on the next frame). */
+    world_map_load();
 }
 
 void game_flow_process_loading(void *user_data)

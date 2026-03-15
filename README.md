@@ -50,4 +50,5 @@ Next:
 - Equalize Shadow’s class.
 - Knuckles’ charged attack should allow up to 3 hits before being canceled.
 - Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
-- Assign characters to specific locations on the map using the Map Editor (only P1 is currently working)
+- Assign characters to specific locations on the map using the Map Editor (only P1 is currently working).
+- Adjust damage and knockback debugging for PvP (currently only works correctly on bots).

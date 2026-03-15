@@ -2,6 +2,7 @@
 #include "world_collision.h"
 #include "debug.h"
 #include "game_constants.h"
+#include "world_map.h"
 #include "jo_ext/jo_map_ext.h"
 
 static inline float world_collision_fabs(float x)
@@ -169,6 +170,21 @@ void world_handle_character_collision(jo_sidescroller_physics_params *physics,
     }
 
     g_dbg_knock_dx = *map_pos_x - prev_map_x;
+
+    if (world_map_is_ready())
+    {
+        int world_y = map_pos_y + controlled_character->y;
+        int max_bottom = world_map_get_max_tile_bottom();
+        if (max_bottom > 0 && world_y > max_bottom)
+        {
+            int new_world_top = world_map_get_max_tile_top();
+            controlled_character->y = new_world_top - CHARACTER_HEIGHT - map_pos_y;
+            controlled_character->can_jump = true;
+            physics->speed = 0.0f;
+            physics->speed_y = 0.0f;
+            physics->is_in_air = false;
+        }
+    }
 }
 
 void world_handle_player_collision(jo_sidescroller_physics_params *physics,

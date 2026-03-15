@@ -10,4 +10,7 @@ bool world_map_is_ready(void);
 int world_map_get_player_start_x(void);
 int world_map_get_player_start_y(void);
 
+int world_map_get_max_tile_bottom(void);
+int world_map_get_max_tile_top(void);
+
 #endif

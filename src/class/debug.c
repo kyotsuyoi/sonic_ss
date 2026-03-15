@@ -10,6 +10,38 @@ float g_dbg_knock_force = 0.0f;
 float g_dbg_knock_speed = 0.0f;
 int g_dbg_knock_dx = 0;
 
+/* globals for debug damage tracking */
+int g_debug_last_damage_dealt = 0;
+int g_debug_last_damage_dealt_target = -1;
+int g_debug_last_damage_received = 0;
+int g_debug_last_damage_received_from = -1;
+
+/* globals for debug knockback tracking */
+int g_debug_last_knockback_dealt = 0;
+int g_debug_last_knockback_received = 0;
+
+void debug_track_player_damage_dealt(int target_id, int damage)
+{
+    g_debug_last_damage_dealt = damage;
+    g_debug_last_damage_dealt_target = target_id;
+}
+
+void debug_track_player_damage_received(int attacker_id, int damage)
+{
+    g_debug_last_damage_received = damage;
+    g_debug_last_damage_received_from = attacker_id;
+}
+
+void debug_track_player_knockback_dealt(int knockback)
+{
+    g_debug_last_knockback_dealt = knockback;
+}
+
+void debug_track_player_knockback_received(int knockback)
+{
+    g_debug_last_knockback_received = knockback;
+}
+
 static volatile int frame_counter = 0;
 static int fps = 0;
 static int last_frame_count = 0;

@@ -57,6 +57,10 @@ static char world_map_filename[JO_MAX_FILENAME_LENGTH] = "GHS.MAP";
 static int world_map_player_start_x = WORLD_CAMERA_TARGET_X;
 static int world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
 
+/* Track the vertical extent of the map so characters falling off the bottom can be teleported back onto the last tile. */
+static int world_map_max_tile_bottom = 0;
+static int world_map_max_tile_top = 0;
+
 static world_map_asset_t world_assets[JO_MAX_FILE_IN_IMAGE_PACK];
 
 void world_map_set_filename(const char *filename)
@@ -134,6 +138,8 @@ static void world_map_reset_tiles(void)
     world_map_tile_count = 0;
     world_map_player_start_x = WORLD_CAMERA_TARGET_X;
     world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
+    world_map_max_tile_bottom = 0;
+    world_map_max_tile_top = 0;
 }
 
 static int world_map_count_tiles(const char *stream)
@@ -611,24 +617,38 @@ static bool world_map_build_runtime_map(void)
     for (map_index = 0; map_index < world_map_tile_count; ++map_index)
     {
         int tile_i = tile_order[map_index];
+        int tile_height;
+        int tile_bottom;
 
         world_tiles[tile_i].tile_index = (unsigned short)map_index;
         if (world_tiles[tile_i].is_animated)
         {
+            int sprite_id = jo_get_anim_sprite(world_tiles[tile_i].anim_id);
+            tile_height = __jo_sprite_def[sprite_id].height;
+
             jo_map_add_animated_tile_ext(WORLD_MAP_ID,
                                          world_tiles[tile_i].x,
                                          world_tiles[tile_i].y,
                                          world_tiles[tile_i].anim_id,
                                          world_tiles[tile_i].attribute);
-            continue;
         }
-
-        world_tiles[tile_i].applied_sprite_id = world_assets[world_tiles[tile_i].asset_index].fallback_sprite_id;
-        jo_map_add_tile_ext(WORLD_MAP_ID,
+        else
+        {
+            tile_height = world_tiles[tile_i].height;
+            world_tiles[tile_i].applied_sprite_id = world_assets[world_tiles[tile_i].asset_index].fallback_sprite_id;
+            jo_map_add_tile_ext(WORLD_MAP_ID,
                     world_tiles[tile_i].x,
                     world_tiles[tile_i].y,
                     world_tiles[tile_i].applied_sprite_id,
                     world_tiles[tile_i].attribute);
+        }
+
+        tile_bottom = world_tiles[tile_i].y + tile_height;
+        if (tile_bottom > world_map_max_tile_bottom)
+        {
+            world_map_max_tile_bottom = tile_bottom;
+            world_map_max_tile_top = world_tiles[tile_i].y;
+        }
     }
 
     jo_free(tile_order);
@@ -706,6 +726,16 @@ int world_map_get_player_start_x(void)
 int world_map_get_player_start_y(void)
 {
     return world_map_player_start_y;
+}
+
+int world_map_get_max_tile_bottom(void)
+{
+    return world_map_max_tile_bottom;
+}
+
+int world_map_get_max_tile_top(void)
+{
+    return world_map_max_tile_top;
 }
 
 bool world_map_do_load_step(void)

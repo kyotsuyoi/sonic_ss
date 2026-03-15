@@ -332,6 +332,16 @@ static void game_loop_process_player_attack(character_t *attacker,
         else
         {
             target->life -= combat_profile.damage_punch1;
+            if (attacker == &player || attacker == &player2)
+            {
+                debug_track_player_damage_dealt(target->character_id, combat_profile.damage_punch1);
+                debug_track_player_knockback_dealt((int)attacker->knockback_punch1);
+            }
+            if (target == &player || target == &player2)
+            {
+                debug_track_player_damage_received(attacker->character_id, combat_profile.damage_punch1);
+                debug_track_player_knockback_received((int)attacker->knockback_punch1);
+            }
             game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch1, STUN_LIGHT_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -359,6 +369,10 @@ static void game_loop_process_player_attack(character_t *attacker,
         else
         {
             target->life -= combat_profile.damage_punch2;
+            if (attacker == &player || attacker == &player2)
+                debug_track_player_damage_dealt(target->character_id, combat_profile.damage_punch2);
+            if (target == &player || target == &player2)
+                debug_track_player_damage_received(attacker->character_id, combat_profile.damage_punch2);
             game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch2, STUN_HEAVY_FRAMES);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -392,6 +406,16 @@ static void game_loop_process_player_attack(character_t *attacker,
             else
             {
                 target->life -= combat_profile.damage_kick1;
+                if (attacker == &player || attacker == &player2)
+                {
+                    debug_track_player_damage_dealt(target->character_id, combat_profile.damage_kick1);
+                    debug_track_player_knockback_dealt((int)attacker->knockback_kick1);
+                }
+                if (target == &player || target == &player2)
+                {
+                    debug_track_player_damage_received(attacker->character_id, combat_profile.damage_kick1);
+                    debug_track_player_knockback_received((int)attacker->knockback_kick1);
+                }
                 game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1, STUN_LIGHT_FRAMES);
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -437,6 +461,16 @@ static void game_loop_process_player_attack(character_t *attacker,
             else
             {
                 target->life -= kick2_damage;
+                if (attacker == &player || attacker == &player2)
+                {
+                    debug_track_player_damage_dealt(target->character_id, kick2_damage);
+                    debug_track_player_knockback_dealt((int)kick2_knockback);
+                }
+                if (target == &player || target == &player2)
+                {
+                    debug_track_player_damage_received(attacker->character_id, kick2_damage);
+                    debug_track_player_knockback_received((int)kick2_knockback);
+                }
                 game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, kick2_stun);
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -1011,6 +1045,8 @@ static void game_loop_draw_health_bars(void)
         game_loop_draw_life_bar(24, 27, character_short_name(bot_get_character_id(3)), bot_get_life(3));
 }
 
+extern bool g_loading_just_started;
+
 void game_loop_init(game_loop_context_t *ctx)
 {
     g_ctx = ctx;
@@ -1027,6 +1063,13 @@ void game_loop_update(void)
 
     if (g_ctx->ui_state->current_game_state == UiGameStateLoading)
     {
+        if (g_loading_just_started)
+        {
+            /* Let the next frame draw the loading screen before doing the heavy loading work. */
+            g_loading_just_started = false;
+            return;
+        }
+
         g_runtime_playing_update_logs = 0;
         g_runtime_playing_draw_logs = 0;
         g_player2_initialized = false;

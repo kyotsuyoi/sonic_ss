@@ -47,6 +47,7 @@ typedef enum
     UiDebugModeHardware,
     UiDebugModePlayer,
     UiDebugModeAttack,
+    UiDebugModeDamage,
     UiDebugModeCount
 } ui_debug_mode_t;
 

@@ -30,8 +30,26 @@ extern float g_dbg_knock_force;
 extern float g_dbg_knock_speed;
 extern int g_dbg_knock_dx;
 
+/* debug info for damage tracking */
+extern int g_debug_last_damage_dealt;
+extern int g_debug_last_damage_dealt_target;
+extern int g_debug_last_damage_received;
+extern int g_debug_last_damage_received_from;
+
+/* debug info for knockback tracking */
+extern int g_debug_last_knockback_dealt;
+extern int g_debug_last_knockback_received;
+
 /* Inicializa debug (se precisar) */
 void debug_init(void);
+
+/* Track last damage dealt/received for the local player */
+void debug_track_player_damage_dealt(int target_id, int damage);
+void debug_track_player_damage_received(int attacker_id, int damage);
+
+/* Track last knockback dealt/received for the local player */
+void debug_track_player_knockback_dealt(int knockback);
+void debug_track_player_knockback_received(int knockback);
 
 void debug_frame(void);
 void debug_set_display_mode(debug_display_mode_t mode);

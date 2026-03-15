@@ -143,6 +143,8 @@ character_combat_profile_t character_registry_get_combat_profile(ui_character_ch
         profile.knockback_kick1 = 2.4f;
         profile.knockback_kick2 = 3.6f;
         profile.charged_kick_enabled = true;
+        /* Ensure Knuckles charged kick is noticeably stronger (matching PvP behavior). */
+        profile.charged_kick_damage = 15;
     }
 
     return profile;

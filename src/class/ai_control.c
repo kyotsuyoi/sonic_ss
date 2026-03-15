@@ -3,6 +3,7 @@
 #include "control.h"
 #include "game_audio.h"
 #include "damage_fx.h"
+#include "debug.h"
 #include "game_constants.h"
 #include "character_registry.h"
 #include "jo_ext/jo_map_ext.h"
@@ -480,9 +481,11 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         }
 
         /* Only treat as charged attack if the bot actually charged and then released. */
-        bool knuckles_charge_attack = (ctx->bot_ref->charged_kick_enabled
-            && ctx->bot_ref->charged_kick_active
-            && *ctx->bot_current_attack_ref == AiBotAttackKick2);
+        bool knuckles_charge_attack = false;
+        if (ctx->bot_ref->charged_kick_enabled && *ctx->bot_current_attack_ref == AiBotAttackKick2)
+        {
+            knuckles_charge_attack = ctx->bot_ref->charged_kick_active || ctx->bot_ref->charged_kick_phase > 0;
+        }
         int attack_damage = 0;
         int attack_kind = -1;
         int attack_range = combat_profile.hit_range_punch1;
@@ -569,6 +572,8 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
             else
             {
                 ctx->player->life -= attack_damage;
+                debug_track_player_damage_received(ctx->bot_ref->character_id, attack_damage);
+                debug_track_player_knockback_received((int)attack_knockback);
                 ctx->apply_hit_effect_to_player(ctx->player, ctx->bot_ref->flip, attack_knockback, attack_stun);
                 damage_fx_trigger_world(ctx->player_world_x, ctx->player_world_y);
 
@@ -619,22 +624,19 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                 if (can_hit_flipped)
                     ctx->bot_ref->flip = desired_flip;
 
+                /* A charged kick should be treated as charged whether or not the target
+                   is currently in range (similar to player behavior). */
+                ctx->bot_ref->charged_kick_ready = true;
+                ctx->bot_ref->charged_kick_active = false;
+
                 if (can_hit_current || can_hit_flipped)
                 {
-                    /* Mark charged kick as ready so damage uses charged values. */
-                    ctx->bot_ref->charged_kick_ready = true;
-                    ctx->bot_ref->charged_kick_active = false;
                     ctx->start_attack(AiBotAttackKick2, false);
                 }
                 else
                 {
-                    /* Out of range after charge: cancel by releasing attack. */
-                    *ctx->bot_current_attack_ref = AiBotAttackNone;
-                    *ctx->bot_attack_timer_ref = 0;
-                    *ctx->bot_combo_requested_ref = false;
-                    ctx->bot_ref->kick = false;
-                    ctx->bot_ref->kick2 = false;
-                    *ctx->bot_attack_cooldown_ref = ATTACK_COOLDOWN_FRAMES;
+                    /* Still start the kick animation even if the target is out of range. */
+                    ctx->start_attack(AiBotAttackKick2, false);
                 }
             }
             else

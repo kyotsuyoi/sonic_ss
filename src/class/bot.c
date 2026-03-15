@@ -2,6 +2,7 @@
 #include "bot.h"
 #include "player.h"
 #include "game_constants.h"
+#include "debug.h"
 #include "ai_control.h"
 #include "game_audio.h"
 #include "damage_fx.h"
@@ -1119,6 +1120,9 @@ static void apply_damage_to_bot(int damage)
     if (bot_defeated)
         return;
 
+    /* Track player damage for debug display when a human player hits the bot */
+    debug_track_player_damage_dealt(bot.character_id, damage);
+
     bot.life -= damage;
     if (bot.life <= 0)
     {
@@ -1229,8 +1233,8 @@ static void process_player_hits(character_t *player_ref,
     float player_knockback_kick1 = player_ref->knockback_kick1;
     float player_knockback_kick2 = player_ref->knockback_kick2;
 
-    /* Use the bot's combat profile (not the target's) for damage values. */
-    combat_profile = character_registry_get_combat_profile_by_character_id(bot_character);
+    /* Use the attacker's combat profile for damage values so player attacks match PvP behavior. */
+    combat_profile = character_registry_get_combat_profile_by_character_id(player_ref->character_id);
 
     if (bot_defeated)
         return;
@@ -1261,6 +1265,7 @@ static void process_player_hits(character_t *player_ref,
         }
 
         apply_damage_to_bot(combat_profile.damage_punch1);
+        debug_track_player_knockback_dealt((int)player_knockback_punch1);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch1, BOT_TAKEN_STUN_LIGHT_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -1280,6 +1285,7 @@ static void process_player_hits(character_t *player_ref,
         }
 
         apply_damage_to_bot(combat_profile.damage_punch2);
+        debug_track_player_knockback_dealt((int)player_knockback_punch2);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch2, BOT_TAKEN_STUN_HEAVY_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -1300,6 +1306,7 @@ static void process_player_hits(character_t *player_ref,
         }
 
         apply_damage_to_bot(combat_profile.damage_kick1);
+        debug_track_player_knockback_dealt((int)player_knockback_kick1);
         apply_hit_effect_to_bot(player_ref->flip, player_knockback_kick1, BOT_TAKEN_STUN_LIGHT_FRAMES);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
@@ -1334,6 +1341,7 @@ static void process_player_hits(character_t *player_ref,
         }
 
         apply_damage_to_bot(kick2_damage);
+        debug_track_player_knockback_dealt((int)kick2_knockback);
         apply_hit_effect_to_bot(player_ref->flip, kick2_knockback, kick2_stun);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
