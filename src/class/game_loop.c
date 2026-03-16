@@ -338,15 +338,15 @@ static void game_loop_process_player_attack(character_t *attacker,
 
             if (attacker == &player)
             {
-                debug_track_player_damage_received(target->character_id, spin_damage);
-                debug_track_player_knockback_received(spin_knockback);
-                debug_track_player_stun_received(target->character_id, spin_stun);
+                debug_track_player_damage_dealt(target->character_id, spin_damage);
+                debug_track_player_knockback_dealt(spin_knockback);
+                debug_track_player_stun_dealt(target->character_id, spin_stun);
             }
             if (target == &player)
             {
-                debug_track_player_damage_dealt(attacker->character_id, spin_damage);
-                debug_track_player_knockback_dealt(spin_knockback);
-                debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                debug_track_player_damage_received(attacker->character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(attacker->character_id, spin_stun);
             }
 
             if (spin_damage > 0)
@@ -403,15 +403,15 @@ static void game_loop_process_player_attack(character_t *attacker,
 
             if (attacker == &player)
             {
-                debug_track_player_damage_received(target->character_id, spin_damage);
-                debug_track_player_knockback_received(spin_knockback);
-                debug_track_player_stun_received(target->character_id, spin_stun);
+                debug_track_player_damage_dealt(target->character_id, spin_damage);
+                debug_track_player_knockback_dealt(spin_knockback);
+                debug_track_player_stun_dealt(target->character_id, spin_stun);
             }
             if (target == &player)
             {
-                debug_track_player_damage_dealt(attacker->character_id, spin_damage);
-                debug_track_player_knockback_dealt(spin_knockback);
-                debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                debug_track_player_damage_received(attacker->character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(attacker->character_id, spin_stun);
             }
 
             if (spin_damage > 0)
@@ -472,15 +472,15 @@ static void game_loop_process_player_attack(character_t *attacker,
 
                 if (attacker == &player)
                 {
-                    debug_track_player_damage_received(target->character_id, spin_damage);
-                    debug_track_player_knockback_received(spin_knockback);
-                    debug_track_player_stun_received(target->character_id, spin_stun);
+                    debug_track_player_damage_dealt(target->character_id, spin_damage);
+                    debug_track_player_knockback_dealt(spin_knockback);
+                    debug_track_player_stun_dealt(target->character_id, spin_stun);
                 }
                 if (target == &player)
                 {
-                    debug_track_player_damage_dealt(attacker->character_id, spin_damage);
-                    debug_track_player_knockback_dealt(spin_knockback);
-                    debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                    debug_track_player_damage_received(attacker->character_id, spin_damage);
+                    debug_track_player_knockback_received(spin_knockback);
+                    debug_track_player_stun_received(attacker->character_id, spin_stun);
                 }
 
                 if (spin_damage > 0)
@@ -555,15 +555,15 @@ static void game_loop_process_player_attack(character_t *attacker,
 
                 if (attacker == &player)
                 {
-                    debug_track_player_damage_received(target->character_id, spin_damage);
-                    debug_track_player_knockback_received(spin_knockback);
-                    debug_track_player_stun_received(target->character_id, spin_stun);
+                    debug_track_player_damage_dealt(target->character_id, spin_damage);
+                    debug_track_player_knockback_dealt(spin_knockback);
+                    debug_track_player_stun_dealt(target->character_id, spin_stun);
                 }
                 if (target == &player)
                 {
-                    debug_track_player_damage_dealt(attacker->character_id, spin_damage);
-                    debug_track_player_knockback_dealt(spin_knockback);
-                    debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                    debug_track_player_damage_received(attacker->character_id, spin_damage);
+                    debug_track_player_knockback_received(spin_knockback);
+                    debug_track_player_stun_received(attacker->character_id, spin_stun);
                 }
 
                 if (spin_damage > 0)

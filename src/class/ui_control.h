@@ -87,7 +87,6 @@ typedef struct
     ui_character_choice_t menu_group_order[UiCharacterCount];
     int menu_group_count;
     int menu_group_cursor;
-    int menu_group_error_timer;
     bool menu_selecting_bot_character;
     bool menu_selecting_player2_character;
     bool menu_player1_confirmed;

@@ -1278,9 +1278,15 @@ static void process_player_hits(character_t *player_ref,
 
         {
             int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch1);
+            int stun = debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackPunch1);
             debug_battle_add_damage(player_ref->character_id, damage);
             player_ref->battle_damage_dealt += damage;
             apply_damage_to_bot(damage);
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_dealt(bot.character_id, damage);
+                debug_track_player_stun_dealt(bot.character_id, stun);
+            }
         }
         if (player_ref == &player)
             debug_track_player_knockback_dealt(player_knockback_punch1);
@@ -1318,9 +1324,15 @@ static void process_player_hits(character_t *player_ref,
 
         {
             int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch2);
+            int stun = debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackPunch2);
             debug_battle_add_damage(player_ref->character_id, damage);
             player_ref->battle_damage_dealt += damage;
             apply_damage_to_bot(damage);
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_dealt(bot.character_id, damage);
+                debug_track_player_stun_dealt(bot.character_id, stun);
+            }
         }
         if (player_ref == &player)
             debug_track_player_knockback_dealt(player_knockback_punch2);
@@ -1349,9 +1361,15 @@ static void process_player_hits(character_t *player_ref,
 
         {
             int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackKick1);
+            int stun = debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackKick1);
             debug_battle_add_damage(player_ref->character_id, damage);
             player_ref->battle_damage_dealt += damage;
             apply_damage_to_bot(damage);
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_dealt(bot.character_id, damage);
+                debug_track_player_stun_dealt(bot.character_id, stun);
+            }
         }
         if (player_ref == &player)
             debug_track_player_knockback_dealt(player_knockback_kick1);
@@ -1392,9 +1410,15 @@ static void process_player_hits(character_t *player_ref,
 
         {
             int damage = kick2_damage;
+            int stun = kick2_stun;
             debug_battle_add_damage(player_ref->character_id, damage);
             player_ref->battle_damage_dealt += damage;
             apply_damage_to_bot(damage);
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_dealt(bot.character_id, damage);
+                debug_track_player_stun_dealt(bot.character_id, stun);
+            }
         }
         if (player_ref == &player)
             debug_track_player_knockback_dealt(kick2_knockback);

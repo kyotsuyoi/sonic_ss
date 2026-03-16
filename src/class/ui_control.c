@@ -462,7 +462,6 @@ void ui_control_init(ui_control_state_t *state)
     state->menu_character_controller[UiCharacterSonic] = UiControllerPlayer1;
     state->menu_group_count = 0;
     state->menu_group_cursor = 0;
-    state->menu_group_error_timer = 0;
     state->menu_selecting_bot_character = false;
     state->menu_selecting_player2_character = false;
     state->menu_player1_confirmed = false;
@@ -882,8 +881,6 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf(4, 25, "LEFT/RIGHT: GROUP");
         jo_printf(4, 26, "A: MAP");
         jo_printf(4, 27, "B: BACK");
-        if (state->menu_group_error_timer > 0)
-            jo_printf(4, 22, "ASSIGN AT LEAST 1");
         return;
     }
 
@@ -1071,7 +1068,7 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf((item_x[idx] / 8) - 2,
                   (MENU_SPRITE_Y / 8) + 1,
                   "%s",
-                  is_hovered ? (is_locked ? "X" : ">") : " ");
+                  is_hovered ? (is_locked ? ">" : ">") : " ");
 
         const char *controller_label;
         switch (state->menu_character_controller[idx])
@@ -1491,7 +1488,6 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
                 if (!any_selected)
                 {
-                    state->menu_group_error_timer = 60; /* ~1 second */
                     return;
                 }
 
@@ -1546,7 +1542,6 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
                 if (count == 0)
                 {
                     /* No characters are actually participating in the battle. */
-                    state->menu_group_error_timer = 60; /* ~1 second */
                     return;
                 }
 
@@ -1583,12 +1578,11 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
         }
         else if (pressed_a)
         {
-            /* Prevent entering group assignment when all characters are out-of-combat (X). */
+            /* Prevent entering group assignment when all characters are out-of-combat (OUT). */
             bool any_selected = false;
             for (int i = 0; i < UiCharacterCount; ++i)
             {
-                if (state->menu_character_controller[i] != UiControllerNone
-                    && !ui_control_character_is_locked(state, (ui_character_choice_t)i))
+                if (state->menu_character_controller[i] != UiControllerNone)
                 {
                     any_selected = true;
                     break;
@@ -1597,7 +1591,6 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
             if (!any_selected)
             {
-                state->menu_group_error_timer = 60; /* ~1 second */
                 return;
             }
 
@@ -1656,9 +1649,6 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
     if (state->menu_screen == UiMenuScreenGroupAssign)
     {
-        if (state->menu_group_error_timer > 0)
-            state->menu_group_error_timer--;
-
         if (state->menu_group_count > 0)
         {
             if (pressed_up)
@@ -1692,24 +1682,6 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             }
             else if (pressed_a)
             {
-                /* Ensure at least one character is assigned to a group before continuing. */
-                bool any_assigned = false;
-                for (int i = 0; i < state->menu_group_count; ++i)
-                {
-                    int char_id = state->menu_group_order[i];
-                    if (state->menu_character_group[char_id] != 0)
-                    {
-                        any_assigned = true;
-                        break;
-                    }
-                }
-
-                if (!any_assigned)
-                {
-                    state->menu_group_error_timer = 60; /* ~1 second */
-                    return;
-                }
-
                 /* Move to map selection before starting the battle */
                 state->menu_map_cursor = 0;
                 if (state->menu_map_count > 0)
