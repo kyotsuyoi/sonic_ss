@@ -26,8 +26,9 @@ typedef enum
     UiPauseOptionContinue = 0,
     UiPauseOptionResetFight,
     UiPauseOptionCharacterSelect,
-    UiPauseOptionDebug,
     UiPauseOptionBalance,
+    UiPauseOptionPauseBots,
+    UiPauseOptionDebug,
     UiPauseOptionLogs,
     UiPauseOptionLogPage,
     UiPauseOptionCount
@@ -48,7 +49,8 @@ typedef enum
     UiDebugModeHardware,
     UiDebugModePlayer,
     UiDebugModeAttack,
-    UiDebugModeDamage,
+    //UiDebugModeDamage,
+    UiDebugModeSpawn,
     UiDebugModeCount
 } ui_debug_mode_t;
 
@@ -127,6 +129,7 @@ typedef struct
     char menu_selected_map_name[UI_MENU_MAX_MAP_NAME_LEN];
 
     bool game_paused;
+    bool pause_bots;
     bool debug_enabled;
     ui_debug_mode_t debug_mode;
     runtime_log_mode_t log_mode;
@@ -140,6 +143,7 @@ typedef struct
     bool pause_start_released;
     bool pause_lr_released;
     bool pause_c_released;
+    bool pause_text_dirty;
 
     /* Debug balance submenu state */
     int debug_balance_selected_row;

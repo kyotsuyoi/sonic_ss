@@ -15,6 +15,7 @@ static const char g_runtime_log_blank_line[] = "                                
 
 /* Toggle these runtime checkpoints on/off for future tests. */
 static runtime_log_mode_t g_runtime_log_mode = RuntimeLogModeOff;
+static bool g_runtime_log_verbose_enabled = false;
 static char g_runtime_log_lines[RUNTIME_LOG_LINES][RUNTIME_LOG_LINE_SIZE];
 static int g_runtime_log_count = 0;
 static int g_runtime_log_next = 0;
@@ -104,8 +105,17 @@ void runtime_log_set_mode(runtime_log_mode_t mode)
     g_runtime_log_mode = mode;
     if (g_runtime_log_mode != RuntimeLogModeSprite)
         g_runtime_log_sprite_page = 0;
+
     if (g_runtime_log_mode == RuntimeLogModeSystem)
+    {
+        g_runtime_log_verbose_enabled = false;
         runtime_log("runtime log enabled");
+    }
+    else if (g_runtime_log_mode == RuntimeLogModeSystemVerbose)
+    {
+        g_runtime_log_verbose_enabled = true;
+        runtime_log("runtime log enabled (verbose)");
+    }
 }
 
 runtime_log_mode_t runtime_log_get_mode(void)
@@ -180,7 +190,25 @@ void runtime_log(const char *fmt, ...)
     int line_index;
     va_list ap;
 
-    if (g_runtime_log_mode != RuntimeLogModeSystem)
+    if (g_runtime_log_mode != RuntimeLogModeSystem && g_runtime_log_mode != RuntimeLogModeSystemVerbose)
+        return;
+
+    line_index = g_runtime_log_next;
+    va_start(ap, fmt);
+    vsnprintf(g_runtime_log_lines[line_index], RUNTIME_LOG_LINE_SIZE, fmt, ap);
+    va_end(ap);
+
+    g_runtime_log_next = (g_runtime_log_next + 1) % RUNTIME_LOG_LINES;
+    if (g_runtime_log_count < RUNTIME_LOG_LINES)
+        ++g_runtime_log_count;
+}
+
+void runtime_log_verbose(const char *fmt, ...)
+{
+    int line_index;
+    va_list ap;
+
+    if (g_runtime_log_mode != RuntimeLogModeSystemVerbose)
         return;
 
     line_index = g_runtime_log_next;

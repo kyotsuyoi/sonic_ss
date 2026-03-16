@@ -316,6 +316,7 @@ static void game_loop_process_player_attack(character_t *attacker,
     float attacker_knockback_punch2 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackPunch2);
     float attacker_knockback_kick1 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackKick1);
     float attacker_knockback_kick2 = debug_balance_get_knockback(attacker->character_id, DebugBalanceAttackKick2);
+    (void)attacker_knockback_kick2;
 
     if (attacker->punch
         && !attacker->hit_done_punch1
@@ -330,26 +331,53 @@ static void game_loop_process_player_attack(character_t *attacker,
         attacker->hit_done_punch1 = true;
         if (target->spin)
         {
-            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, attacker->knockback_punch1, COUNTER_STUN_FRAMES);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch1 * 2.0f, 0);
+            int spin_damage = debug_balance_get_damage(target->character_id, DebugBalanceAttackSpin);
+            float spin_knockback = debug_balance_get_knockback(target->character_id, DebugBalanceAttackSpin);
+            int spin_stun = debug_balance_get_stun(target->character_id, DebugBalanceAttackSpin);
+
+            if (attacker == &player)
+            {
+                debug_track_player_damage_received(target->character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(target->character_id, spin_stun);
+            }
+            if (target == &player)
+            {
+                debug_track_player_damage_dealt(attacker->character_id, spin_damage);
+                debug_track_player_knockback_dealt(spin_knockback);
+                debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+            }
+
+            if (spin_damage > 0)
+            {
+                debug_battle_add_damage(target->character_id, spin_damage);
+                attacker->life -= spin_damage;
+            }
+
+            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, spin_knockback, spin_stun);
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, spin_knockback * 2.0f, 0);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
         }
         else
         {
             int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackPunch1);
+            debug_battle_add_damage(attacker->character_id, damage);
+            attacker->battle_damage_dealt += damage;
             target->life -= damage;
-            if (attacker == &player || attacker == &player2)
+            if (attacker == &player)
             {
                 debug_track_player_damage_dealt(target->character_id, damage);
                 debug_track_player_knockback_dealt(attacker_knockback_punch1);
+                debug_track_player_stun_dealt(target->character_id, STUN_LIGHT_FRAMES);
             }
-            if (target == &player || target == &player2)
+            if (target == &player)
             {
                 debug_track_player_damage_received(attacker->character_id, damage);
                 debug_track_player_knockback_received(attacker_knockback_punch1);
+                debug_track_player_stun_received(attacker->character_id, STUN_LIGHT_FRAMES);
             }
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch1, STUN_LIGHT_FRAMES);
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch1, debug_balance_get_stun(attacker->character_id, DebugBalanceAttackPunch1));
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
         }
@@ -368,20 +396,51 @@ static void game_loop_process_player_attack(character_t *attacker,
         attacker->hit_done_punch2 = true;
         if (target->spin)
         {
-            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, attacker->knockback_punch2, COUNTER_STUN_FRAMES);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_punch2 * 2.0f, 0);
+            int spin_damage = debug_balance_get_damage(target->character_id, DebugBalanceAttackSpin);
+            float spin_knockback = debug_balance_get_knockback(target->character_id, DebugBalanceAttackSpin);
+            int spin_stun = debug_balance_get_stun(target->character_id, DebugBalanceAttackSpin);
+
+            if (attacker == &player)
+            {
+                debug_track_player_damage_received(target->character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(target->character_id, spin_stun);
+            }
+            if (target == &player)
+            {
+                debug_track_player_damage_dealt(attacker->character_id, spin_damage);
+                debug_track_player_knockback_dealt(spin_knockback);
+                debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+            }
+
+            if (spin_damage > 0)
+            {
+                debug_battle_add_damage(target->character_id, spin_damage);
+                attacker->life -= spin_damage;
+            }
+
+            game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, spin_knockback, spin_stun);
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, spin_knockback * 2.0f, 0);
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
         }
         else
         {
             int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackPunch2);
+            debug_battle_add_damage(attacker->character_id, damage);
+            attacker->battle_damage_dealt += damage;
             target->life -= damage;
-            if (attacker == &player || attacker == &player2)
+            if (attacker == &player)
+            {
                 debug_track_player_damage_dealt(target->character_id, damage);
-            if (target == &player || target == &player2)
+                debug_track_player_stun_dealt(target->character_id, STUN_HEAVY_FRAMES);
+            }
+            if (target == &player)
+            {
                 debug_track_player_damage_received(attacker->character_id, damage);
-            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch2, STUN_HEAVY_FRAMES);
+                debug_track_player_stun_received(attacker->character_id, STUN_HEAVY_FRAMES);
+            }
+            game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_punch2, debug_balance_get_stun(attacker->character_id, DebugBalanceAttackPunch2));
             damage_fx_trigger_world(target_world_x, target_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
         }
@@ -406,26 +465,53 @@ static void game_loop_process_player_attack(character_t *attacker,
             attacker->hit_done_kick1 = true;
             if (target->spin)
             {
-                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, attacker->knockback_kick1, COUNTER_STUN_FRAMES);
-                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker->knockback_kick1 * 2.0f, 0);
+                int spin_damage = debug_balance_get_damage(target->character_id, DebugBalanceAttackSpin);
+                float spin_knockback = debug_balance_get_knockback(target->character_id, DebugBalanceAttackSpin);
+                int spin_stun = debug_balance_get_stun(target->character_id, DebugBalanceAttackSpin);
+
+                if (attacker == &player)
+                {
+                    debug_track_player_damage_received(target->character_id, spin_damage);
+                    debug_track_player_knockback_received(spin_knockback);
+                    debug_track_player_stun_received(target->character_id, spin_stun);
+                }
+                if (target == &player)
+                {
+                    debug_track_player_damage_dealt(attacker->character_id, spin_damage);
+                    debug_track_player_knockback_dealt(spin_knockback);
+                    debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                }
+
+                if (spin_damage > 0)
+                {
+                    debug_battle_add_damage(target->character_id, spin_damage);
+                    attacker->life -= spin_damage;
+                }
+
+                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, spin_knockback, spin_stun);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, spin_knockback * 2.0f, 0);
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             }
             else
             {
                 int damage = debug_balance_get_damage(attacker->character_id, DebugBalanceAttackKick1);
+                debug_battle_add_damage(attacker->character_id, damage);
+                attacker->battle_damage_dealt += damage;
                 target->life -= damage;
-                if (attacker == &player || attacker == &player2)
+                if (attacker == &player)
                 {
                     debug_track_player_damage_dealt(target->character_id, damage);
                     debug_track_player_knockback_dealt(attacker_knockback_kick1);
+                    debug_track_player_stun_dealt(target->character_id, STUN_LIGHT_FRAMES);
                 }
-                if (target == &player || target == &player2)
+                if (target == &player)
                 {
                     debug_track_player_damage_received(attacker->character_id, damage);
                     debug_track_player_knockback_received(attacker_knockback_kick1);
+                    debug_track_player_stun_received(attacker->character_id, STUN_LIGHT_FRAMES);
                 }
-                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_kick1, STUN_LIGHT_FRAMES);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, attacker_knockback_kick1, debug_balance_get_stun(attacker->character_id, DebugBalanceAttackKick1));
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
             }
@@ -457,30 +543,57 @@ static void game_loop_process_player_attack(character_t *attacker,
             float kick2_knockback = charged_kick
                 ? (attacker->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
                 : attacker->knockback_kick2;
-            int kick2_stun = charged_kick ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus) : STUN_HEAVY_FRAMES;
+            int kick2_stun = debug_balance_get_stun(attacker->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
             int kick2_damage = debug_balance_get_damage(attacker->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
 
             if (target->spin)
             {
-                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, kick2_knockback, COUNTER_STUN_FRAMES);
-                game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback * 2.0f, 0);
+                int spin_damage = debug_balance_get_damage(target->character_id, DebugBalanceAttackSpin);
+                float spin_knockback = debug_balance_get_knockback(target->character_id, DebugBalanceAttackSpin);
+                int spin_stun = debug_balance_get_stun(target->character_id, DebugBalanceAttackSpin);
+
+                if (attacker == &player)
+                {
+                    debug_track_player_damage_received(target->character_id, spin_damage);
+                    debug_track_player_knockback_received(spin_knockback);
+                    debug_track_player_stun_received(target->character_id, spin_stun);
+                }
+                if (target == &player)
+                {
+                    debug_track_player_damage_dealt(attacker->character_id, spin_damage);
+                    debug_track_player_knockback_dealt(spin_knockback);
+                    debug_track_player_stun_dealt(attacker->character_id, spin_stun);
+                }
+
+                if (spin_damage > 0)
+                {
+                    debug_battle_add_damage(target->character_id, spin_damage);
+                    attacker->life -= spin_damage;
+                }
+
+                game_loop_apply_hit_effect(attacker, attacker_physics, !attacker->flip, spin_knockback, spin_stun);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, spin_knockback * 2.0f, 0);
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             }
             else
             {
+                debug_battle_add_damage(attacker->character_id, kick2_damage);
+                attacker->battle_damage_dealt += kick2_damage;
                 target->life -= kick2_damage;
-                if (attacker == &player || attacker == &player2)
+                if (attacker == &player)
                 {
                     debug_track_player_damage_dealt(target->character_id, kick2_damage);
                     debug_track_player_knockback_dealt(kick2_knockback);
+                    debug_track_player_stun_dealt(target->character_id, kick2_stun);
                 }
-                if (target == &player || target == &player2)
+                if (target == &player)
                 {
                     debug_track_player_damage_received(attacker->character_id, kick2_damage);
                     debug_track_player_knockback_received(kick2_knockback);
+                    debug_track_player_stun_received(attacker->character_id, kick2_stun);
                 }
-                game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, kick2_stun);
+                game_loop_apply_hit_effect(target, target_physics, attacker->flip, kick2_knockback, debug_balance_get_stun(attacker->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2));
                 damage_fx_trigger_world(target_world_x, target_world_y);
                 game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             }
@@ -646,11 +759,17 @@ static void game_loop_init_player2_runtime(void)
     g_player2_jump_cooldown = 0;
     g_p2_jump_hold_ms = 0;
     g_p2_jump_cut_applied = false;
-    g_player2_world_x = (float)(*g_ctx->map_pos_x + player.x + 96);
-    g_player2_world_y = (float)(*g_ctx->map_pos_y + player.y);
+    /* Initialize world position for player2 from the configured start marker (group-based). */
+    g_player2_world_x = world_map_get_player_start_x(1, player2.group);
+    g_player2_world_y = world_map_get_player_start_y(1, player2.group);
 
     player2.x = (int)g_player2_world_x - *g_ctx->map_pos_x;
     player2.y = (int)g_player2_world_y - *g_ctx->map_pos_y;
+    runtime_log("PLAYER2 INIT (world): (%d,%d) -> screen (%d,%d)",
+                (int)g_player2_world_x,
+                (int)g_player2_world_y,
+                player2.x,
+                player2.y);
     player2.flip = true;
     player2.can_jump = true;
     if (player2.life <= 0)
@@ -666,7 +785,6 @@ static void game_loop_update_player2_animation(void)
     bool is_tails;
     bool is_knuckles;
     int speed_step;
-    int anim_frame;
     if (!g_player2_active)
         return;
 
@@ -913,6 +1031,85 @@ static const char *character_short_name(int character_id)
     }
 }
 
+static void game_loop_draw_battle_end_stats(void)
+{
+    typedef struct {
+        const char *name;
+        int life;
+        int damage;
+        int group;
+    } battle_stat_t;
+
+    battle_stat_t stats[2 + BOT_MAX_DEFAULT_COUNT];
+    int stat_count = 0;
+
+    stats[stat_count++] = (battle_stat_t){character_short_name(player.character_id), player.life, player.battle_damage_dealt, player.group};
+
+    if (g_player2_active)
+    {
+        stats[stat_count++] = (battle_stat_t){character_short_name(player2.character_id), player2.life, player2.battle_damage_dealt, player2.group};
+    }
+
+    int bot_count = bot_get_active_count();
+    int max_stats = (int)(sizeof(stats) / sizeof(stats[0]));
+    for (int i = 0; i < bot_count && stat_count < max_stats; ++i)
+    {
+        const char *name = character_short_name(bot_get_character_id(i));
+        int life = bot_get_life(i);
+        int group = bot_get_group(i);
+        int damage = debug_battle_damage_dealt(bot_get_character_id(i));
+        stats[stat_count++] = (battle_stat_t){name, life, damage, group};
+    }
+
+    bool g1_alive = false;
+    bool g2_alive = false;
+    int total_g1 = 0;
+    int total_g2 = 0;
+
+    for (int i = 0; i < stat_count; ++i)
+    {
+        if (stats[i].group == 1)
+        {
+            total_g1 += stats[i].damage;
+            if (stats[i].life > 0)
+                g1_alive = true;
+        }
+        else if (stats[i].group == 2)
+        {
+            total_g2 += stats[i].damage;
+            if (stats[i].life > 0)
+                g2_alive = true;
+        }
+    }
+
+    const char *result_label = "DRAW";
+    if (g1_alive && !g2_alive)
+        result_label = "G1 WINS";
+    else if (!g1_alive && g2_alive)
+        result_label = "G2 WINS";
+    else if (!g1_alive && !g2_alive)
+        result_label = "G1/G2 LOST";
+    else if (total_g1 > total_g2)
+        result_label = "G1 WINS";
+    else if (total_g2 > total_g1)
+        result_label = "G2 WINS";
+
+    const char *clear_line = "                                        ";
+    for (int y = 2; y < 2 + 6 + stat_count; ++y)
+        jo_printf(0, y, "%s", clear_line);
+
+    jo_printf(14, 2, "END BATTLE");
+    jo_printf(2, 8, " #  NAME  LIFE  DMG  GRP");
+
+    for (int i = 0; i < stat_count; ++i)
+    {
+        jo_printf(2, 9 + i, "%2d  %-4s  %3d   %4d  G%d", i + 1, stats[i].name, stats[i].life, stats[i].damage, stats[i].group);
+    }
+
+    jo_printf(2, 9 + stat_count + 1, "TOTAL -> G1:%d  G2:%d", total_g1, total_g2);
+    jo_printf(2, 9 + stat_count + 2, "%s", result_label);
+}
+
 static void game_loop_draw_life_bar(int x, int y, const char *label, int life)
 {
     int life_percent = (life * 100) / 50;
@@ -928,11 +1125,6 @@ static void game_loop_draw_life_bar(int x, int y, const char *label, int life)
 
 static void game_loop_draw_player2(void)
 {
-    int life_percent;
-    int bar_max_width;
-    int bar_width;
-    char bar[21];
-    int index;
     int anim_sprite_id;
     ui_character_choice_t p2_character;
     bool is_tails;
@@ -1098,8 +1290,7 @@ void game_loop_update(void)
 
     if (g_runtime_playing_update_logs < 4)
     {
-        runtime_log("upd: begin");
-        ++g_runtime_playing_update_logs;
+        runtime_log_verbose("upd: begin");
     }
 
     world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
@@ -1113,23 +1304,25 @@ void game_loop_update(void)
 
     if (g_runtime_playing_update_logs < 5)
     {
-        runtime_log("upd: hits done");
-        ++g_runtime_playing_update_logs;
+        runtime_log_verbose("upd: hits done");
     }
 
-    bot_update(&player,
-               g_ctx->player_defeated,
-               g_ctx->physics,
-               g_player2_active ? &player2 : JO_NULL,
-               g_player2_active ? &g_player2_defeated : JO_NULL,
-               g_player2_active ? &g_player2_physics : JO_NULL,
-               g_player2_active,
-               *g_ctx->map_pos_x,
-               *g_ctx->map_pos_y);
+    if (!g_ctx->ui_state->pause_bots)
+    {
+        bot_update(&player,
+                   g_ctx->player_defeated,
+                   g_ctx->physics,
+                   g_player2_active ? &player2 : JO_NULL,
+                   g_player2_active ? &g_player2_defeated : JO_NULL,
+                   g_player2_active ? &g_player2_physics : JO_NULL,
+                   g_player2_active,
+                   *g_ctx->map_pos_x,
+                   *g_ctx->map_pos_y);
+    }
 
     if (g_runtime_playing_update_logs < 6)
     {
-        runtime_log("upd: bot done");
+        runtime_log_verbose("upd: bot done");
         ++g_runtime_playing_update_logs;
     }
 }
@@ -1150,8 +1343,16 @@ void game_loop_reset_player2_runtime(void)
     g_player2_tail_timer = 0;
     if (g_ctx != JO_NULL && g_ctx->map_pos_x != JO_NULL && g_ctx->map_pos_y != JO_NULL)
     {
-        g_player2_world_x = (float)(*g_ctx->map_pos_x + player.x + 96);
-        g_player2_world_y = (float)(*g_ctx->map_pos_y + player.y);
+        /* Use the current player2 screen position (set by reset_fight), not an offset from player1. */
+        g_player2_world_x = (float)(*g_ctx->map_pos_x + player2.x);
+        g_player2_world_y = (float)(*g_ctx->map_pos_y + player2.y);
+        runtime_log("PLAYER2 INIT: world=(%d,%d) screen=(%d,%d) map=(%d,%d)",
+                    (int)g_player2_world_x,
+                    (int)g_player2_world_y,
+                    player2.x,
+                    player2.y,
+                    *g_ctx->map_pos_x,
+                    *g_ctx->map_pos_y);
     }
 }
 
@@ -1183,9 +1384,41 @@ int game_loop_get_map_pos_y(void)
 void game_loop_draw(void)
 {
     int prev_y;
+    static bool g_ui_text_dirty = true;
+    static bool g_prev_need_text_layer = false;
+    static ui_menu_screen_t g_prev_menu_screen = UiMenuScreenMain;
+    static ui_game_state_t g_prev_game_state = UiGameStateMenu;
+    static bool g_prev_game_paused = false;
+    bool need_text_layer = (g_ctx->ui_state->current_game_state != UiGameStatePlaying)
+        || g_ctx->ui_state->game_paused
+        || g_ctx->ui_state->debug_enabled
+        || (runtime_log_get_mode() != RuntimeLogModeOff)
+        || g_ctx->ui_state->pause_bots;
+
+    /* Force redraw when the need for a text layer changes (enter/exit pause/loading/logs). */
+    if (need_text_layer != g_prev_need_text_layer)
+        g_ui_text_dirty = true;
+
+    /* Force redraw when entering/exiting pause or changing menu/game state. */
+    if (g_ctx->ui_state->game_paused != g_prev_game_paused
+        || g_ctx->ui_state->menu_screen != g_prev_menu_screen
+        || g_ctx->ui_state->current_game_state != g_prev_game_state)
+    {
+        g_ui_text_dirty = true;
+    }
+
+    g_prev_need_text_layer = need_text_layer;
+    g_prev_menu_screen = g_ctx->ui_state->menu_screen;
+    g_prev_game_state = g_ctx->ui_state->current_game_state;
+    g_prev_game_paused = g_ctx->ui_state->game_paused;
 
     jo_vdp2_move_nbg0(0, 0);
-    ui_control_clear_text_layer();
+
+    if (g_ui_text_dirty)
+    {
+        ui_control_clear_text_layer();
+        g_ui_text_dirty = false;
+    }
 
     if (g_ctx->ui_state->current_game_state == UiGameStateLoading)
     {
@@ -1227,13 +1460,13 @@ void game_loop_draw(void)
     world_background_set_gameplay();
     if (g_runtime_playing_draw_logs < 1)
     {
-        runtime_log("draw: bg mode");
+        runtime_log_verbose("draw: bg mode");
         ++g_runtime_playing_draw_logs;
     }
     world_background_draw_parallax(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
     if (g_runtime_playing_draw_logs < 2)
     {
-        runtime_log("draw: parallax");
+        runtime_log_verbose("draw: parallax");
         ++g_runtime_playing_draw_logs;
     }
 
@@ -1243,7 +1476,7 @@ void game_loop_draw(void)
     vram_cache_do_uploads();
     if (g_runtime_playing_draw_logs < 3)
     {
-        runtime_log("draw: uploads");
+        runtime_log_verbose("draw: uploads");
         ++g_runtime_playing_draw_logs;
     }
 
@@ -1252,7 +1485,7 @@ void game_loop_draw(void)
     jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
     if (g_runtime_playing_draw_logs < 4)
     {
-        runtime_log("draw: map");
+        runtime_log_verbose("draw: map");
         ++g_runtime_playing_draw_logs;
     }
     prev_y = player.y;
@@ -1260,7 +1493,7 @@ void game_loop_draw(void)
     world_camera_handle(&player, prev_y, g_ctx->map_pos_y);
     if (g_runtime_playing_draw_logs < 5)
     {
-        runtime_log("draw: camera");
+        runtime_log_verbose("draw: camera");
         ++g_runtime_playing_draw_logs;
     }
     game_loop_sync_player2_mode();
@@ -1296,14 +1529,12 @@ void game_loop_draw(void)
     game_loop_draw_health_bars();
     if (g_runtime_playing_draw_logs < 6)
     {
-        runtime_log("draw: chars");
+        runtime_log_verbose("draw: chars");
         ++g_runtime_playing_draw_logs;
     }
 
-    if (*g_ctx->player_defeated)
-        jo_printf(14, 2, "PLAYER KO");
-    else if (bot_is_defeated())
-        jo_printf(16, 2, "BOT KO");
+    if (*g_ctx->player_defeated || bot_is_defeated())
+        game_loop_draw_battle_end_stats();
 
     if (g_ctx->ui_state->debug_mode == UiDebugModeHardware)
         debug_set_display_mode(DebugDisplayHardware);

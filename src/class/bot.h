@@ -56,5 +56,6 @@ bool bot_debug_get_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot);
 
 int bot_get_life(int index);
 int bot_get_character_id(int index);
+int bot_get_group(int index);
 
 #endif

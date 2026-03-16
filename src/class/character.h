@@ -75,6 +75,7 @@ typedef struct
     int speed;
     int life;
     int group; /* 0 = no group, 1 = group1, 2 = group2 */
+    int battle_damage_dealt; /* accumulated damage dealt in the current fight */
 } character_t;
 
 #endif

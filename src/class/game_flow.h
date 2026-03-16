@@ -30,4 +30,7 @@ int game_flow_cdda_debug_attempts_left(void);
 void game_flow_debug_force_cdda_play(void);
 void game_flow_debug_force_cdda_stop(void);
 
+void game_flow_get_last_player1_start(int *group, int *start_x, int *start_y, int *map_x, int *map_y, int *screen_x, int *screen_y);
+void game_flow_get_last_player1_reset_info(int *effective_player, int *effective_group, int *menu_player, int *menu_group);
+
 #endif

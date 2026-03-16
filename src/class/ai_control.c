@@ -490,38 +490,38 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
         int attack_kind = -1;
         int attack_range = combat_profile.hit_range_punch1;
         float attack_knockback = ctx->bot_ref->knockback_punch1;
-        int attack_stun = STUN_LIGHT_FRAMES;
+        int attack_stun = debug_balance_get_stun(ctx->bot_ref->character_id, DebugBalanceAttackPunch1);
 
         if (*ctx->bot_current_attack_ref == AiBotAttackPunch1)
         {
             attack_damage = combat_profile.damage_punch1;
-            attack_kind = 0;
+            attack_kind = DebugBalanceAttackPunch1;
             attack_range = combat_profile.hit_range_punch1;
             attack_knockback = ctx->bot_ref->knockback_punch1;
-            attack_stun = STUN_LIGHT_FRAMES;
+            attack_stun = debug_balance_get_stun(ctx->bot_ref->character_id, DebugBalanceAttackPunch1);
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackPunch2)
         {
             attack_damage = combat_profile.damage_punch2;
-            attack_kind = 1;
+            attack_kind = DebugBalanceAttackPunch2;
             attack_range = combat_profile.hit_range_punch2;
             attack_knockback = ctx->bot_ref->knockback_punch2;
-            attack_stun = STUN_HEAVY_FRAMES;
+            attack_stun = debug_balance_get_stun(ctx->bot_ref->character_id, DebugBalanceAttackPunch2);
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick1)
         {
             attack_damage = ctx->bot_ref->charged_kick_enabled ? 0 : combat_profile.damage_kick1;
-            attack_kind = ctx->bot_ref->charged_kick_enabled ? -1 : 2;
+            attack_kind = ctx->bot_ref->charged_kick_enabled ? -1 : DebugBalanceAttackKick1;
             attack_range = combat_profile.hit_range_kick1;
             if (ctx->bot_ref->character_id == CHARACTER_ID_TAILS)
                 attack_range += 10; /* Tails has extra reach */
             attack_knockback = ctx->bot_ref->knockback_kick1;
-            attack_stun = STUN_LIGHT_FRAMES;
+            attack_stun = debug_balance_get_stun(ctx->bot_ref->character_id, DebugBalanceAttackKick1);
         }
         else if (*ctx->bot_current_attack_ref == AiBotAttackKick2)
         {
             attack_damage = knuckles_charge_attack ? combat_profile.charged_kick_damage : combat_profile.damage_kick2;
-            attack_kind = 3;
+            attack_kind = DebugBalanceAttackKick2;
             attack_range = knuckles_charge_attack
                 ? (combat_profile.hit_range_kick2 + combat_profile.charged_kick_range_bonus)
                 : combat_profile.hit_range_kick2;
@@ -530,9 +530,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
             attack_knockback = knuckles_charge_attack
                 ? (ctx->bot_ref->knockback_kick2 * combat_profile.charged_kick_knockback_mult)
                 : ctx->bot_ref->knockback_kick2;
-            attack_stun = knuckles_charge_attack
-                ? (STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus)
-                : STUN_HEAVY_FRAMES;
+            attack_stun = debug_balance_get_stun(ctx->bot_ref->character_id, knuckles_charge_attack ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
         }
 
         if (!*ctx->bot_attack_damage_done_ref
@@ -555,6 +553,7 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
                 int defender_direction = ctx->bot_ref->flip ? -1 : 1;
                 int attacker_direction = -defender_direction;
 
+                debug_track_player_stun_received(ctx->bot_ref->character_id, COUNTER_STUN_FRAMES);
                 ctx->apply_hit_effect_to_player(ctx->player, ctx->bot_ref->flip, attack_knockback * 2.0f, 0);
                 *ctx->bot_speed_x_ref = (float)attacker_direction * attack_knockback;
                 ctx->bot_ref->stun_timer = COUNTER_STUN_FRAMES;
@@ -571,9 +570,12 @@ void ai_control_handle_bot_commands(ai_bot_context_t *ctx)
             }
             else
             {
+                debug_battle_add_damage(ctx->bot_ref->character_id, attack_damage);
+                ctx->bot_ref->battle_damage_dealt += attack_damage;
                 ctx->player->life -= attack_damage;
                 debug_track_player_damage_received(ctx->bot_ref->character_id, attack_damage);
                 debug_track_player_knockback_received((int)attack_knockback);
+                debug_track_player_stun_received(ctx->bot_ref->character_id, attack_stun);
                 ctx->apply_hit_effect_to_player(ctx->player, ctx->bot_ref->flip, attack_knockback, attack_stun);
                 damage_fx_trigger_world(ctx->player_world_x, ctx->player_world_y);
 

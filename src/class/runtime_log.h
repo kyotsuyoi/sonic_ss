@@ -7,9 +7,13 @@ typedef enum
 {
 	RuntimeLogModeOff = 0,
 	RuntimeLogModeSystem,
+	RuntimeLogModeSystemVerbose,
 	RuntimeLogModeSprite,
 	RuntimeLogModeCount
 } runtime_log_mode_t;
+
+// Logs that are considered "verbose" (high frequency, can be toggled separately).
+void runtime_log_verbose(const char *fmt, ...);
 
 // Runtime logger backed by an in-memory ring buffer rendered on-screen.
 void runtime_log_init(void);

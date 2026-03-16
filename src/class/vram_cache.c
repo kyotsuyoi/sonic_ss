@@ -217,14 +217,16 @@ void vram_cache_do_uploads(void)
                 continue;
             }
             p->read_offset += got;
-            jo_printf(0, 35, "vram_cache: loading '%s' %u/%u bytes", p->pack_name, (unsigned)p->read_offset, (unsigned)p->size);
+            if (runtime_log_get_mode() != RuntimeLogModeOff)
+                jo_printf(0, 35, "vram_cache: loading '%s' %u/%u bytes", p->pack_name, (unsigned)p->read_offset, (unsigned)p->size);
             if (p->read_offset >= p->size) {
                 // leitura completa
                 fclose(p->file);
                 p->file = NULL;
                 p->loading = false;
                 p->scheduled = true; // marcar para upload no mesmo ou próximo vblank
-                jo_printf(0, 36, "vram_cache: finished loading '%s' into WRAM", p->pack_name);
+                if (runtime_log_get_mode() != RuntimeLogModeOff)
+                    jo_printf(0, 36, "vram_cache: finished loading '%s' into WRAM", p->pack_name);
                 runtime_log("vram_cache: finished loading '%s' into WRAM", p->pack_name);
             }
         }
@@ -247,7 +249,8 @@ void vram_cache_do_uploads(void)
             // plataforma. Aqui apenas logamos a operação. Substitua o
             // conteúdo abaixo por uma chamada à API de transferências da
             // sua versão do jo engine quando disponível.
-            jo_printf(0, 23, "vram_cache: upload tile %d -> slot %d", tile_slots[i].tileId, i);
+            if (runtime_log_get_mode() != RuntimeLogModeOff)
+                jo_printf(0, 23, "vram_cache: upload tile %d -> slot %d", tile_slots[i].tileId, i);
             runtime_log("vram_cache: upload tile %d -> slot %d", tile_slots[i].tileId, i);
             ++vc_total_tile_uploads;
             tile_slots[i].inVram = true;

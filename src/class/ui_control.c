@@ -6,6 +6,7 @@
 #include "rotating_sprite_pool.h"
 #include "runtime_log.h"
 #include "debug.h"
+#include "world_map.h"
 
 #define MENU_SPRITE_Y 88
 #define MENU_NAME_Y 6
@@ -506,6 +507,7 @@ void ui_control_init(ui_control_state_t *state)
     state->pause_start_released = true;
     state->pause_c_released = true;
     state->pause_lr_released = true;
+    state->pause_text_dirty = true;
 }
 
 void ui_control_clear_text_layer(void)
@@ -517,8 +519,10 @@ void ui_control_clear_text_layer(void)
 
 void ui_control_draw_pause_menu(const ui_control_state_t *state)
 {
-    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATTACK", "DAMAGE"};
-    static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "SPRITE"};
+    ui_control_clear_text_layer();
+
+    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATK SPRITE", "SPAWN"};
+    static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "VERBOSE", "SPRITE"};
     int sprite_log_page = runtime_log_get_sprite_page() + 1;
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
 
@@ -527,14 +531,14 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     if (state->menu_screen == UiMenuScreenDebugBalance)
     {
         static const char *character_names[] = {"SONIC", "AMY", "TAILS", "KNUCKLES", "SHADOW"};
-        static const char *attack_names[] = {"P01", "P02", "K01", "K02", "AIR", "CHG"};
+        static const char *attack_names[DebugBalanceAttackCount] = {"P01", "P02", "K01", "K02", "AIR", "CHG", "SPN"};
         debug_balance_profile_t *profile = debug_balance_get_profile(player.character_id);
 
         int row = state->debug_balance_selected_row;
         int col = state->debug_balance_selected_col;
 
         jo_printf(6, 8, "BALANCE: %s", character_names[player.character_id]);
-        jo_printf(4, 10, "ROW  DMG   KB    IMP");
+        jo_printf(4, 10, "ROW  DMG   KB    STN   IMP");
 
         for (int i = 0; i < DebugBalanceAttackCount; ++i)
         {
@@ -542,27 +546,11 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
             const char *marker = (i == row) ? ">" : " ";
             int dmg = profile ? profile->damage[i] : 0;
             int kb = profile ? profile->knockback[i] : 0;
+            int stn = profile ? profile->stun[i] : 0;
             int imp = profile ? profile->impulse[i] : 0;
-            jo_printf(2, y, "%s %s   %2d   %3d   %3d", marker, attack_names[i], dmg, kb, imp);
-        }
+            jo_printf(2, y, "%s %s   %2d   %3d   %3d   %3d", marker, attack_names[i], dmg, kb, stn, imp);
+        } 
 
-        jo_printf(2, 19, "LEFT/RIGHT: +/-  UP/DOWN: row");
-        jo_printf(2, 20, "A: cycle field  B: back  C: reset");
-        return;
-    }
-
-    jo_printf(8, 9, "%s CONTINUE", state->pause_selected_option == UiPauseOptionContinue ? ">" : " ");
-    
-    jo_printf(8, 11, "%s RESET FIGHT", state->pause_selected_option == UiPauseOptionResetFight ? ">" : " ");
-    jo_printf(8, 12, "%s CHARACTER SELECT", state->pause_selected_option == UiPauseOptionCharacterSelect ? ">" : " ");
-    jo_printf(8, 14, "%s DEBUG: %s", state->pause_selected_option == UiPauseOptionDebug ? ">" : " ", debug_mode_label[state->debug_mode]);
-    jo_printf(8, 15, "%s BALANCE", state->pause_selected_option == UiPauseOptionBalance ? ">" : " ");
-    jo_printf(8, 16, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
-    if (state->log_mode == RuntimeLogModeSprite)
-        jo_printf(8, 17, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
-
-    if (state->debug_mode == UiDebugModeDamage)
-    {
         const char *target_name = "?";
         const char *attacker_name = "?";
 
@@ -574,9 +562,7 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
             case CHARACTER_ID_KNUCKLES: target_name = "KNK"; break;
             case CHARACTER_ID_SHADOW: target_name = "SDW"; break;
             default: target_name = "?"; break;
-        }
-
-        jo_printf(2, 18, "LAST DMG/KG DEALT: %2d/%2d (-> %s)", g_debug_last_damage_dealt, g_debug_last_knockback_dealt, target_name);
+        }      
 
         switch (g_debug_last_damage_received_from)
         {
@@ -588,8 +574,90 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
             default: attacker_name = "?"; break;
         }
 
-        //Last Damage and Knockback received and dealt
-        jo_printf(2, 19, "LAST DMG/KG RECEI: %2d/%2d (<- %s)", g_debug_last_damage_received, g_debug_last_knockback_received, attacker_name);
+        //Last Damage, Knockback and Stun received and dealt
+        jo_printf(2, 20, "DMG/KB/STN DEALT: %2d/%2d/%2d (-> %s)", g_debug_last_damage_dealt, g_debug_last_knockback_dealt, g_debug_last_stun_dealt, target_name);
+        jo_printf(2, 21, "DMG/KB/STN RECEI: %2d/%2d/%2d (<- %s)", g_debug_last_damage_received, g_debug_last_knockback_received, g_debug_last_stun_received, attacker_name);
+        
+        jo_printf(2, 23, "LEFT/RIGHT: +/-  UP/DOWN: ROW");
+        jo_printf(2, 24, "A: COL  B: BACK  C: RESET");    
+        
+        return;
+    }
+
+    jo_printf(8, 9, "%s CONTINUE", state->pause_selected_option == UiPauseOptionContinue ? ">" : " ");   
+    jo_printf(8, 10, "%s RESET FIGHT", state->pause_selected_option == UiPauseOptionResetFight ? ">" : " ");
+    jo_printf(8, 11, "%s CHARACTER SELECT", state->pause_selected_option == UiPauseOptionCharacterSelect ? ">" : " ");
+    
+    jo_printf(8, 13, "%s BALANCE", state->pause_selected_option == UiPauseOptionBalance ? ">" : " ");
+    jo_printf(8, 14, "%s FREEZE BOTS: %s", state->pause_selected_option == UiPauseOptionPauseBots ? ">" : " ", state->pause_bots ? "ON" : "OFF");
+    jo_printf(8, 15, "%s DEBUG: %s", state->pause_selected_option == UiPauseOptionDebug ? ">" : " ", debug_mode_label[state->debug_mode]);
+    jo_printf(8, 16, "%s LOGS: %s", state->pause_selected_option == UiPauseOptionLogs ? ">" : " ", log_mode_label[state->log_mode]);
+    if (state->log_mode == RuntimeLogModeSprite)
+        jo_printf(8, 17, "%s LOG PAGE: %d/%d", state->pause_selected_option == UiPauseOptionLogPage ? ">" : " ", sprite_log_page, sprite_log_page_count);
+
+    // if (state->debug_mode == UiDebugModeDamage)
+    // {
+    //     const char *target_name = "?";
+    //     const char *attacker_name = "?";
+
+    //     switch (g_debug_last_damage_dealt_target)
+    //     {
+    //         case CHARACTER_ID_SONIC: target_name = "SNC"; break;
+    //         case CHARACTER_ID_AMY: target_name = "AMY"; break;
+    //         case CHARACTER_ID_TAILS: target_name = "TLS"; break;
+    //         case CHARACTER_ID_KNUCKLES: target_name = "KNK"; break;
+    //         case CHARACTER_ID_SHADOW: target_name = "SDW"; break;
+    //         default: target_name = "?"; break;
+    //     }
+
+    //     jo_printf(2, 18, "LAST DMG/KG DEALT: %2d/%2d (-> %s)", g_debug_last_damage_dealt, g_debug_last_knockback_dealt, target_name);
+
+    //     switch (g_debug_last_damage_received_from)
+    //     {
+    //         case CHARACTER_ID_SONIC: attacker_name = "SNC"; break;
+    //         case CHARACTER_ID_AMY: attacker_name = "AMY"; break;
+    //         case CHARACTER_ID_TAILS: attacker_name = "TLS"; break;
+    //         case CHARACTER_ID_KNUCKLES: attacker_name = "KNK"; break;
+    //         case CHARACTER_ID_SHADOW: attacker_name = "SDW"; break;
+    //         default: attacker_name = "?"; break;
+    //     }
+
+    //     //Last Damage and Knockback received and dealt
+    //     jo_printf(2, 19, "LAST DMG/KG RECEI: %2d/%2d (<- %s)", g_debug_last_damage_received, g_debug_last_knockback_received, attacker_name);
+    // }
+    // else 
+    if (state->debug_mode == UiDebugModeSpawn)
+    {
+        int p1x = world_map_get_player_start_x(0, player.group);
+        int p1y = world_map_get_player_start_y(0, player.group);
+        int p2x = world_map_get_player_start_x(1, player2.group);
+        int p2y = world_map_get_player_start_y(1, player2.group);
+        int mapx = game_loop_get_map_pos_x();
+        int mapy = game_loop_get_map_pos_y();
+        int world_p1_x = mapx + player.x;
+        int world_p1_y = mapy + player.y;
+        int world_p2_x = mapx + player2.x;
+        int world_p2_y = mapy + player2.y;
+
+        jo_printf(2, 16, "MAP POS: (%4d,%4d)", mapx, mapy);
+        jo_printf(2, 17, "SPAWN P1: (%4d,%4d) G%d", p1x, p1y, player.group);
+        jo_printf(2, 18, "SPAWN P2: (%4d,%4d) G%d", p2x, p2y, player2.group);
+        jo_printf(2, 19, "WORLD P1: (%4d,%4d)", world_p1_x, world_p1_y);
+        jo_printf(2, 20, "WORLD P2: (%4d,%4d)", world_p2_x, world_p2_y);
+        jo_printf(2, 21, "CURR  P1: (%4d,%4d)", player.x, player.y);
+        jo_printf(2, 22, "CURR  P2: (%4d,%4d)", player2.x, player2.y);
+
+        /* Provide a stable view of what reset_fight() used for P1 spawn calculation. */
+        if (state->debug_mode == UiDebugModeSpawn)
+        {
+            int grp, sx, sy, mx, my, px, py;
+            game_flow_get_last_player1_start(&grp, &sx, &sy, &mx, &my, &px, &py);
+            jo_printf(2, 22, "RESET: G%d start=(%4d,%4d) map=(%4d,%4d)", grp, sx, sy, mx, my);
+
+            int eff_player, eff_group, menu_player, menu_group;
+            game_flow_get_last_player1_reset_info(&eff_player, &eff_group, &menu_player, &menu_group);
+            jo_printf(2, 23, "RESET: eff=%d g=%d  menu=%d g=%d", eff_player, eff_group, menu_player, menu_group);
+        }
     }
 
     jo_printf(4, 24, "UP/DOWN: SELECT");
@@ -625,6 +693,14 @@ static void ui_control_balance_adjust(ui_control_state_t *state, int delta)
     }
     else if (col == 2)
     {
+        int value = profile->stun[row];
+        value += delta;
+        if (value < 0)
+            value = 0;
+        profile->stun[row] = value;
+    }
+    else if (col == 3)
+    {
         int value = profile->impulse[row];
         value += delta;
         if (value < 0)
@@ -635,16 +711,16 @@ static void ui_control_balance_adjust(ui_control_state_t *state, int delta)
     debug_balance_apply_to_character(&player);
 }
 
-static int ui_control_count_cpu(const ui_control_state_t *state)
-{
-    int count = 0;
-    for (int i = 0; i < UiCharacterCount; ++i)
-    {
-        if (state->menu_character_controller[i] == UiControllerCpu)
-            count++;
-    }
-    return count;
-}
+// static int ui_control_count_cpu(const ui_control_state_t *state)
+// {
+//     int count = 0;
+//     for (int i = 0; i < UiCharacterCount; ++i)
+//     {
+//         if (state->menu_character_controller[i] == UiControllerCpu)
+//             count++;
+//     }
+//     return count;
+// }
 
 static void ui_control_build_available_controllers(const ui_control_state_t *state, int cursor_index, ui_controller_type_t out_list[4], int *out_count)
 {
@@ -1597,6 +1673,8 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                                    ui_control_action_fn on_character_select,
                                    void *user_data)
 {
+    bool pause_interacted = false;
+
     if (state->menu_screen == UiMenuScreenDebugBalance)
     {
         bool handled = false;
@@ -1605,8 +1683,9 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
         {
             if (state->pause_up_released)
             {
-                state->debug_balance_selected_row = (state->debug_balance_selected_row + 5) % 6;
+                state->debug_balance_selected_row = (state->debug_balance_selected_row + DebugBalanceAttackCount - 1) % DebugBalanceAttackCount;
                 handled = true;
+                pause_interacted = true;
             }
             state->pause_up_released = false;
         }
@@ -1619,8 +1698,9 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
         {
             if (state->pause_down_released)
             {
-                state->debug_balance_selected_row = (state->debug_balance_selected_row + 1) % 6;
+                state->debug_balance_selected_row = (state->debug_balance_selected_row + 1) % DebugBalanceAttackCount;
                 handled = true;
+                pause_interacted = true;
             }
             state->pause_down_released = false;
         }
@@ -1635,6 +1715,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
             {
                 ui_control_balance_adjust(state, -1);
                 handled = true;
+                pause_interacted = true;
                 state->debug_balance_hold_left_frames = 0;
             }
             else
@@ -1660,6 +1741,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
             {
                 ui_control_balance_adjust(state, 1);
                 handled = true;
+                pause_interacted = true;
                 state->debug_balance_hold_right_frames = 0;
             }
             else
@@ -1683,7 +1765,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
         {
             if (state->pause_a_released)
             {
-                state->debug_balance_selected_col = (state->debug_balance_selected_col + 1) % 3;
+                state->debug_balance_selected_col = (state->debug_balance_selected_col + 1) % 4;
                 handled = true;
             }
             state->pause_a_released = false;
@@ -1724,7 +1806,13 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
         }
 
         if (handled)
+        {
             debug_balance_apply_to_character(&player);
+            pause_interacted = true;
+        }
+
+        if (pause_interacted)
+            state->pause_text_dirty = true;
 
         return;
     }
@@ -1743,6 +1831,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 /* Only show player debug when in PLAYER/HARDWARE modes. */
                 state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
                 g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionLogs)
             {
@@ -1752,6 +1841,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                     state->log_mode = (runtime_log_mode_t)(state->log_mode + 1);
 
                 runtime_log_set_mode(state->log_mode);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionLogPage)
             {
@@ -1761,14 +1851,17 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 if (next_page >= page_count)
                     next_page = 0;
                 runtime_log_set_sprite_page(next_page);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionBalance)
             {
                 /* balance submenu does not change debug toggles */
+                pause_interacted = true;
             }
             else
             {
                 state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+                pause_interacted = true;
             }
         }
         state->pause_right_released = false;
@@ -1792,6 +1885,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 /* Only show player debug when in PLAYER/HARDWARE modes. */
                 state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
                 g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionLogs)
             {
@@ -1801,6 +1895,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                     state->log_mode = (runtime_log_mode_t)(state->log_mode - 1);
 
                 runtime_log_set_mode(state->log_mode);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionLogPage)
             {
@@ -1809,18 +1904,17 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 if (prev_page < 0)
                     prev_page = page_count - 1;
                 runtime_log_set_sprite_page(prev_page);
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionBalance)
             {
                 /* balance submenu does not change debug toggles */
-            }
-            else if (state->pause_selected_option == UiPauseOptionBalance)
-            {
-                /* balance submenu does not change debug toggles */
+                pause_interacted = true;
             }
             else
             {
                 state->debug_enabled = (state->debug_mode != UiDebugModeOff);
+                pause_interacted = true;
             }
         }
         state->pause_left_released = false;
@@ -1838,6 +1932,8 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->pause_selected_option = (ui_pause_option_t)(UiPauseOptionCount - 1);
             else
                 state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option - 1);
+
+            pause_interacted = true;
 
             /* Skip LOG PAGE when sprite logs are not active */
             while (state->pause_selected_option == UiPauseOptionLogPage && state->log_mode != RuntimeLogModeSprite)
@@ -1864,6 +1960,8 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
             else
                 state->pause_selected_option = (ui_pause_option_t)(state->pause_selected_option + 1);
 
+            pause_interacted = true;
+
             /* Skip LOG PAGE when sprite logs are not active */
             while (state->pause_selected_option == UiPauseOptionLogPage && state->log_mode != RuntimeLogModeSprite)
             {
@@ -1885,11 +1983,20 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
         if (state->pause_a_released)
         {
             if (state->pause_selected_option == UiPauseOptionContinue)
+            {
                 state->game_paused = false;
+                pause_interacted = true;
+            }
+            else if (state->pause_selected_option == UiPauseOptionPauseBots)
+            {
+                state->pause_bots = !state->pause_bots;
+                pause_interacted = true;
+            }
             else if (state->pause_selected_option == UiPauseOptionResetFight)
             {
                 on_reset_fight(user_data);
                 state->game_paused = false;
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionCharacterSelect)
             {
@@ -1906,6 +2013,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->menu_cursor_player2_character = state->menu_selected_player2_character;
                 state->pause_selected_option = UiPauseOptionContinue;
                 state->menu_a_released = false;
+                pause_interacted = true;
             }
             else if (state->pause_selected_option == UiPauseOptionBalance)
             {
@@ -1913,6 +2021,7 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 state->debug_balance_selected_row = 0;
                 state->debug_balance_selected_col = 0;
                 state->pause_a_released = false;
+                pause_interacted = true;
             }
         }
 
@@ -1926,7 +2035,10 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
     if (jo_is_pad1_key_down(JO_KEY_START))
     {
         if (state->pause_start_released)
+        {
             state->game_paused = false;
+            pause_interacted = true;
+        }
 
         state->pause_start_released = false;
     }
@@ -1934,6 +2046,9 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
     {
         state->pause_start_released = true;
     }
+
+    if (pause_interacted)
+        state->pause_text_dirty = true;
 }
 
 void ui_control_handle_start_toggle(ui_control_state_t *state)

@@ -37,9 +37,23 @@ extern int g_debug_last_damage_dealt_target;
 extern int g_debug_last_damage_received;
 extern int g_debug_last_damage_received_from;
 
+/* cumulative damage dealt by each character for the current fight */
+extern int g_debug_battle_damage_dealt[CHARACTER_ID_SHADOW + 1];
+
+/* Battle-end stats */
+void debug_battle_stats_reset(void);
+int debug_battle_damage_dealt(int character_id);
+void debug_battle_add_damage(int attacker_id, int damage);
+
 /* debug info for knockback tracking */
 extern int g_debug_last_knockback_dealt;
 extern int g_debug_last_knockback_received;
+
+/* debug info for stun tracking */
+extern int g_debug_last_stun_dealt;
+extern int g_debug_last_stun_dealt_target;
+extern int g_debug_last_stun_received;
+extern int g_debug_last_stun_received_from;
 
 /* Inicializa debug (se precisar) */
 void debug_init(void);
@@ -52,6 +66,10 @@ void debug_track_player_damage_received(int attacker_id, int damage);
 void debug_track_player_knockback_dealt(float knockback);
 void debug_track_player_knockback_received(float knockback);
 
+/* Track last stun dealt/received for the local player */
+void debug_track_player_stun_dealt(int target_id, int stun_frames);
+void debug_track_player_stun_received(int attacker_id, int stun_frames);
+
 /* Balance tuning (in-game adjustable combat parameters) */
 
 typedef enum
@@ -62,6 +80,7 @@ typedef enum
     DebugBalanceAttackKick2,
     DebugBalanceAttackAir,
     DebugBalanceAttackCharged,
+    DebugBalanceAttackSpin,
     DebugBalanceAttackCount
 } debug_balance_attack_t;
 
@@ -69,6 +88,7 @@ typedef struct
 {
     int damage[DebugBalanceAttackCount];
     int knockback[DebugBalanceAttackCount];
+    int stun[DebugBalanceAttackCount];
     int impulse[DebugBalanceAttackCount];
 } debug_balance_profile_t;
 
@@ -79,6 +99,7 @@ void debug_balance_reset_profile(int character_id);
 
 int debug_balance_get_damage(int character_id, debug_balance_attack_t attack);
 float debug_balance_get_knockback(int character_id, debug_balance_attack_t attack);
+int debug_balance_get_stun(int character_id, debug_balance_attack_t attack);
 float debug_balance_get_impulse(int character_id, debug_balance_attack_t attack);
 
 void debug_frame(void);

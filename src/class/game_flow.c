@@ -96,7 +96,39 @@ static void unload_battle_assets(void)
     player2_kick_sprite_id = -1;
 }
 
-static void reset_fight(int *map_pos_x, int *map_pos_y)
+static int g_last_player1_start_group = 0;
+static int g_last_player1_start_x = 0;
+static int g_last_player1_start_y = 0;
+static int g_last_player1_map_x = 0;
+static int g_last_player1_map_y = 0;
+static int g_last_player1_screen_x = 0;
+static int g_last_player1_screen_y = 0;
+
+static int g_last_reset_effective_player = 0;
+static int g_last_reset_effective_group = 0;
+static int g_last_reset_menu_player = 0;
+static int g_last_reset_menu_group = 0;
+
+void game_flow_get_last_player1_start(int *group, int *start_x, int *start_y, int *map_x, int *map_y, int *screen_x, int *screen_y)
+{
+    if (group) *group = g_last_player1_start_group;
+    if (start_x) *start_x = g_last_player1_start_x;
+    if (start_y) *start_y = g_last_player1_start_y;
+    if (map_x) *map_x = g_last_player1_map_x;
+    if (map_y) *map_y = g_last_player1_map_y;
+    if (screen_x) *screen_x = g_last_player1_screen_x;
+    if (screen_y) *screen_y = g_last_player1_screen_y;
+}
+
+void game_flow_get_last_player1_reset_info(int *effective_player, int *effective_group, int *menu_player, int *menu_group)
+{
+    if (effective_player) *effective_player = g_last_reset_effective_player;
+    if (effective_group) *effective_group = g_last_reset_effective_group;
+    if (menu_player) *menu_player = g_last_reset_menu_player;
+    if (menu_group) *menu_group = g_last_reset_menu_group;
+}
+
+static void reset_fight(int *map_pos_x, int *map_pos_y, int group)
 {
     /* Player screen position (where the player is drawn on-screen) */
     player.x = 160 - CHARACTER_WIDTH / 2;
@@ -106,10 +138,25 @@ static void reset_fight(int *map_pos_x, int *map_pos_y)
     player.spin = false;
     player.can_jump = true;
     player.life = 50;
+    player.group = group;
 
-     /* Center camera on configured world coordinate where the player should appear. */
-     *map_pos_x = world_map_get_player_start_x() - player.x;
-     *map_pos_y = world_map_get_player_start_y() - player.y;
+    /* Center camera on configured world coordinate where the player should appear. */
+    int start_x = world_map_get_player_start_x(0, group);
+    int start_y = world_map_get_player_start_y(0, group);
+    *map_pos_x = start_x - player.x;
+    *map_pos_y = start_y - player.y;
+
+    /* Save most recent spawn info so the Pause menu can display it. */
+    g_last_player1_start_group = group;
+    g_last_player1_start_x = start_x;
+    g_last_player1_start_y = start_y;
+    g_last_player1_map_x = *map_pos_x;
+    g_last_player1_map_y = *map_pos_y;
+    g_last_player1_screen_x = player.x;
+    g_last_player1_screen_y = player.y;
+
+    runtime_log("PLAYER1 START: group=%d start=(%d,%d) map=(%d,%d) screen=(%d,%d)",
+                group, start_x, start_y, *map_pos_x, *map_pos_y, player.x, player.y);
 }
 
 static void select_active_character(ui_character_choice_t selected_character)
@@ -327,8 +374,12 @@ void game_flow_process_loading(void *user_data)
 
         runtime_log("game_flow: world_physics_init_character");
         world_physics_init_character(ctx->physics);
+
+        /* Ensure the player group is correct before positioning, even in single-player. */
+        player.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character];
+
         runtime_log("game_flow: reset_fight");
-        reset_fight(ctx->map_pos_x, ctx->map_pos_y);
+        reset_fight(ctx->map_pos_x, ctx->map_pos_y, ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character]);
         runtime_log("game_flow: damage_fx_reset");
         damage_fx_reset();
         *ctx->player_defeated = false;
@@ -429,7 +480,7 @@ void game_flow_process_loading(void *user_data)
         return;
 
     /* The map is now fully parsed, so re-apply the start marker position. */
-    reset_fight(ctx->map_pos_x, ctx->map_pos_y);
+    reset_fight(ctx->map_pos_x, ctx->map_pos_y, ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character]);
 
     loading_pending = false;
     loading_assets_ready = false;
@@ -440,21 +491,138 @@ void game_flow_process_loading(void *user_data)
     runtime_log("game_flow: switching to playing");
 }
 
+static void reset_player_runtime(character_t *p)
+{
+    p->walk = false;
+    p->run = 0;
+    p->spin = false;
+    p->jump = false;
+    p->falling = false;
+    p->punch = false;
+    p->punch2 = false;
+    p->punch2_requested = false;
+    p->perform_punch2 = false;
+    p->kick = false;
+    p->kick2 = false;
+    p->kick2_requested = false;
+    p->perform_kick2 = false;
+    p->air_kick_used = false;
+    p->attack_cooldown = 0;
+    p->stun_timer = 0;
+    p->can_jump = true;
+    p->angle = 0;
+    p->speed = 0;
+    p->life = 50;
+    p->battle_damage_dealt = 0;
+}
+
 void game_flow_reset_fight(void *user_data)
 {
     game_flow_context_t *ctx = (game_flow_context_t *)user_data;
     int bot_count;
 
-    player = (character_t){0};
-    player2 = (character_t){0};
-    ensure_active_character_loaded(ctx->ui_state->menu_selected_character);
-    if (ctx->ui_state->menu_multiplayer_versus)
-        setup_player2_character(ctx->ui_state->menu_selected_player2_character);
-    reset_fight(ctx->map_pos_x, ctx->map_pos_y);
+    /* Keep sprite/animation IDs intact to avoid leaking resources on repeated resets. */
+    reset_player_runtime(&player);
+    reset_player_runtime(&player2);
+
+    /* Determine which character is acting as the "primary" player (P1) for this match.
+       In some setups, Player1 may not be explicitly assigned, so we fallback to Player2. */
+    ui_character_choice_t effective_player = ctx->ui_state->menu_selected_character;
+    bool found_player1 = false;
+    for (int i = 0; i < UiCharacterCount; ++i)
+    {
+        if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
+        {
+            effective_player = (ui_character_choice_t)i;
+            found_player1 = true;
+            break;
+        }
+    }
+    if (!found_player1)
+    {
+        for (int i = 0; i < UiCharacterCount; ++i)
+        {
+            if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2)
+            {
+                effective_player = (ui_character_choice_t)i;
+                break;
+            }
+        }
+    }
+
+    /* Determine the group that should be used for the reset spawn (must be stable before calling reset_fight). */
+    int player_character = (int)effective_player;
+    int player1_group = ctx->ui_state->menu_character_group[player_character];
+
     if (ctx->ui_state->menu_multiplayer_versus)
     {
-        player2.x = player.x + 96;
-        player2.y = player.y;
+        bool found_p1 = false;
+        for (int i = 0; i < UiCharacterCount; ++i)
+        {
+            if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
+            {
+                player_character = i;
+                player1_group = ctx->ui_state->menu_character_group[i];
+                found_p1 = true;
+                break;
+            }
+        }
+        if (!found_p1)
+        {
+            for (int i = 0; i < UiCharacterCount; ++i)
+            {
+                if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2)
+                {
+                    player_character = i;
+                    player1_group = ctx->ui_state->menu_character_group[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    effective_player = (ui_character_choice_t)player_character;
+
+    /* Apply group settings before positioning, so start markers are read correctly. */
+    player.group = player1_group;
+    ctx->ui_state->menu_selected_character = effective_player;
+
+    /* Keep the UI state consistent with actual runtime group (so debug matches). */
+    ctx->ui_state->menu_character_group[effective_player] = player1_group;
+
+    /* Save reset info for debug display. */
+    g_last_reset_effective_player = (int)effective_player;
+    g_last_reset_effective_group = player.group;
+    g_last_reset_menu_player = (int)ctx->ui_state->menu_selected_character;
+    g_last_reset_menu_group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character];
+
+    runtime_log("RESET-FIGHT: eff=%d group_assigned=%d menu_group=%d", effective_player, player.group, ctx->ui_state->menu_character_group[effective_player]);
+
+    if (ctx->ui_state->menu_multiplayer_versus)
+        player2.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_player2_character];
+
+    ensure_active_character_loaded(effective_player);
+    if (ctx->ui_state->menu_multiplayer_versus)
+        setup_player2_character(ctx->ui_state->menu_selected_player2_character);
+
+    /* Reset physics state so the camera doesn't drift after a previous match. */
+    world_physics_init_character(ctx->physics);
+
+    reset_fight(ctx->map_pos_x, ctx->map_pos_y, player1_group);
+    if (ctx->ui_state->menu_multiplayer_versus)
+    {
+        /* Position player2 using its configured start marker (group-specific). */
+        int start_x_p2 = world_map_get_player_start_x(1, player2.group);
+        int start_y_p2 = world_map_get_player_start_y(1, player2.group);
+        player2.x = start_x_p2 - *ctx->map_pos_x;
+        player2.y = start_y_p2 - *ctx->map_pos_y;
+        runtime_log("PLAYER2 START: group=%d start=(%d,%d) map=(%d,%d) screen=(%d,%d)",
+                    player2.group, start_x_p2, start_y_p2, *ctx->map_pos_x, *ctx->map_pos_y, player2.x, player2.y);
+
+        /* Debug: capture the screen coordinate after reset_fight but before runtime update. */
+        runtime_log("PLAYER2 BEFORE RUNTIME: screen=(%d,%d) world=(%d,%d)",
+                    player2.x, player2.y, start_x_p2, start_y_p2);
+
         player2.flip = true;
         player2.can_jump = true;
         player2.life = 50;
@@ -478,6 +646,7 @@ void game_flow_reset_fight(void *user_data)
         int cpu_count = 0;
         int player_character = ctx->ui_state->menu_selected_character;
         int player1_group = ctx->ui_state->menu_character_group[player_character];
+        bool found_player1 = false;
 
         /* Ensure group values are set for both players so bots can correctly treat allies */
         player.group = player1_group;
@@ -495,16 +664,34 @@ void game_flow_reset_fight(void *user_data)
             {
                 player_character = (ui_character_choice_t)i;
                 player1_group = ctx->ui_state->menu_character_group[i];
+                found_player1 = true;
             }
-            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && player_character == ctx->ui_state->menu_selected_character)
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && !found_player1)
             {
                 /* If no Player1 selected (or not found), allow Player2 to act as player. */
                 player_character = (ui_character_choice_t)i;
                 player1_group = ctx->ui_state->menu_character_group[i];
+                found_player1 = true;
             }
         }
 
         player.group = ctx->ui_state->menu_character_group[player_character];
+
+        /* If the effective selected player differs from the menu selection, reapply spawn positioning. */
+        if (player_character != ctx->ui_state->menu_selected_character
+            || player.group != ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character])
+        {
+            ctx->ui_state->menu_selected_character = player_character;
+            reset_fight(ctx->map_pos_x, ctx->map_pos_y, player1_group);
+
+            if (ctx->ui_state->menu_multiplayer_versus)
+            {
+                int start_x_p2 = world_map_get_player_start_x(1, player2.group);
+                int start_y_p2 = world_map_get_player_start_y(1, player2.group);
+                player2.x = start_x_p2 - *ctx->map_pos_x;
+                player2.y = start_y_p2 - *ctx->map_pos_y;
+            }
+        }
 
         if (cpu_count > 0)
             bot_init_multi(player_character,
@@ -526,6 +713,7 @@ void game_flow_reset_fight(void *user_data)
         int cpu_groups[UiCharacterCount];
         int cpu_count = 0;
         int player_character = ctx->ui_state->menu_selected_character;
+        bool found_player1 = false;
 
         for (int i = 0; i < UiCharacterCount; ++i)
         {
@@ -538,11 +726,13 @@ void game_flow_reset_fight(void *user_data)
             else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer1)
             {
                 player_character = (ui_character_choice_t)i;
+                found_player1 = true;
             }
-            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && player_character == ctx->ui_state->menu_selected_character)
+            else if (ctx->ui_state->menu_character_controller[i] == UiControllerPlayer2 && !found_player1)
             {
                 /* If no Player1 selected (or not found), allow Player2 to act as player. */
                 player_character = (ui_character_choice_t)i;
+                found_player1 = true;
             }
         }
 
@@ -562,6 +752,9 @@ void game_flow_reset_fight(void *user_data)
         /* Ensure the selected character for player matches the actual player selection. */
         ctx->ui_state->menu_selected_character = player_character;
     }
+
+    /* Reset per-fight stats (damage dealt, etc.) */
+    debug_battle_stats_reset();
 }
 
 void game_flow_return_to_character_select(void *user_data)

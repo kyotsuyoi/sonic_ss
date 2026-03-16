@@ -3,6 +3,7 @@
 #include "bot.h"
 #include "game_loop.h"
 #include "character_registry.h"
+#include "game_constants.h"
 #include <math.h>
 
 /* globals exposed via debug.h */
@@ -17,9 +18,18 @@ int g_debug_last_damage_dealt_target = -1;
 int g_debug_last_damage_received = 0;
 int g_debug_last_damage_received_from = -1;
 
+/* cumulative per-character damage dealt during the current fight */
+int g_debug_battle_damage_dealt[CHARACTER_ID_SHADOW + 1] = {0};
+
 /* globals for debug knockback tracking */
 int g_debug_last_knockback_dealt = 0;
 int g_debug_last_knockback_received = 0;
+
+/* globals for debug stun tracking */
+int g_debug_last_stun_dealt = 0;
+int g_debug_last_stun_dealt_target = -1;
+int g_debug_last_stun_received = 0;
+int g_debug_last_stun_received_from = -1;
 
 void debug_track_player_damage_dealt(int target_id, int damage)
 {
@@ -27,10 +37,36 @@ void debug_track_player_damage_dealt(int target_id, int damage)
     g_debug_last_damage_dealt_target = target_id;
 }
 
+void debug_battle_add_damage(int attacker_id, int damage)
+{
+    //From first to last character, to avoid out-of-bounds if character_id is invalid
+    if (attacker_id < CHARACTER_ID_SONIC || attacker_id > CHARACTER_ID_SHADOW)
+        return;
+    if (damage <= 0)
+        return;
+
+    g_debug_battle_damage_dealt[attacker_id] += damage;
+}
+
+void debug_track_player_stun_dealt(int target_id, int stun_frames)
+{
+    g_debug_last_stun_dealt = stun_frames;
+    g_debug_last_stun_dealt_target = target_id;
+}
+
+void debug_track_player_stun_received(int attacker_id, int stun_frames)
+{
+    g_debug_last_stun_received = stun_frames;
+    g_debug_last_stun_received_from = attacker_id;
+}
+
 void debug_track_player_damage_received(int attacker_id, int damage)
 {
     g_debug_last_damage_received = damage;
     g_debug_last_damage_received_from = attacker_id;
+
+    if (attacker_id >= CHARACTER_ID_SONIC && attacker_id <= CHARACTER_ID_SHADOW)
+        g_debug_battle_damage_dealt[attacker_id] += damage;
 }
 
 void debug_track_player_knockback_dealt(float knockback)
@@ -68,6 +104,14 @@ static void fill_balance_profile(debug_balance_profile_t *out, const character_c
     out->knockback[DebugBalanceAttackAir] = out->knockback[DebugBalanceAttackKick2]; /* air uses same base as K2 */
     out->knockback[DebugBalanceAttackCharged] = (int)(src->charged_kick_knockback_mult * 100.0f + 0.5f);
 
+    /* stun */
+    out->stun[DebugBalanceAttackPunch1] = STUN_LIGHT_FRAMES;
+    out->stun[DebugBalanceAttackPunch2] = STUN_HEAVY_FRAMES;
+    out->stun[DebugBalanceAttackKick1] = STUN_LIGHT_FRAMES;
+    out->stun[DebugBalanceAttackKick2] = STUN_HEAVY_FRAMES;
+    out->stun[DebugBalanceAttackAir] = STUN_LIGHT_FRAMES;
+    out->stun[DebugBalanceAttackCharged] = STUN_HEAVY_FRAMES + src->charged_kick_stun_bonus;
+
     /* impulse (scaled by 100 for display) */
     out->impulse[DebugBalanceAttackPunch1] = (int)(src->attack_forward_impulse_light * 100.0f + 0.5f);
     out->impulse[DebugBalanceAttackPunch2] = (int)(src->attack_forward_impulse_heavy * 100.0f + 0.5f);
@@ -75,6 +119,12 @@ static void fill_balance_profile(debug_balance_profile_t *out, const character_c
     out->impulse[DebugBalanceAttackKick2] = out->impulse[DebugBalanceAttackPunch2];
     out->impulse[DebugBalanceAttackAir] = out->impulse[DebugBalanceAttackPunch2];
     out->impulse[DebugBalanceAttackCharged] = out->impulse[DebugBalanceAttackPunch2];
+
+    /* SPIN defaults (counter hit behavior) */
+    out->damage[DebugBalanceAttackSpin] = 0;
+    out->knockback[DebugBalanceAttackSpin] = 200;
+    out->stun[DebugBalanceAttackSpin] = COUNTER_STUN_FRAMES;
+    out->impulse[DebugBalanceAttackSpin] = 0;
 }
 
 void debug_balance_init(void)
@@ -135,6 +185,14 @@ float debug_balance_get_knockback(int character_id, debug_balance_attack_t attac
     if (profile == JO_NULL || attack < 0 || attack >= DebugBalanceAttackCount)
         return 0.0f;
     return (float)profile->knockback[attack] / 100.0f;
+}
+
+int debug_balance_get_stun(int character_id, debug_balance_attack_t attack)
+{
+    debug_balance_profile_t *profile = debug_balance_get_profile(character_id);
+    if (profile == JO_NULL || attack < 0 || attack >= DebugBalanceAttackCount)
+        return 0;
+    return profile->stun[attack];
 }
 
 float debug_balance_get_impulse(int character_id, debug_balance_attack_t attack)
@@ -269,6 +327,19 @@ static void debug_draw_player(void)
         debug_draw_hitbox_snapshot("HITBOX DBG", &snapshot);
 
     jo_printf(0, 15 + DEBUG_SAFE_TOP_LINES, "P:%3d,%3d M:%4d,%4d", player.x, player.y, game_loop_get_map_pos_x(), game_loop_get_map_pos_y());
+}
+
+void debug_battle_stats_reset(void)
+{
+    for (int i = CHARACTER_ID_SONIC; i <= CHARACTER_ID_SHADOW; ++i)
+        g_debug_battle_damage_dealt[i] = 0;
+}
+
+int debug_battle_damage_dealt(int character_id)
+{
+    if (character_id < CHARACTER_ID_SONIC || character_id > CHARACTER_ID_SHADOW)
+        return 0;
+    return g_debug_battle_damage_dealt[character_id];
 }
 
 static void debug_draw_hitbox_snapshot(const char *title, const debug_hitbox_snapshot_t *snapshot)

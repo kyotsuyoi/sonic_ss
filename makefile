@@ -17,7 +17,7 @@ COMPILER_DIR=../../Compiler
 include $(COMPILER_DIR)/COMMON/jo_engine_makefile
 
 # Include headers moved into src/class plus jo_audio_ext in src/
-CCFLAGS += -Isrc/class -Isrc
+CCFLAGS += -Isrc/class -Isrc -Isrc/class/character
 
 VPATH += $(sort $(dir $(SRCS)))
 

@@ -53,9 +53,17 @@ static char *world_map_stream = JO_NULL;
 static char *world_tiles_stream = JO_NULL;
 static char world_map_filename[JO_MAX_FILENAME_LENGTH] = "GHS.MAP";
 
-/* Player start position marker (from `SNC_SRT.TGA` or attribute 255 entries). */
-static int world_map_player_start_x = WORLD_CAMERA_TARGET_X;
-static int world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
+/* Player start position marker (from `STP10.TGA`/`STP11.TGA`/`STP12.TGA` for P1 or `STP20.TGA`/`STP21.TGA`/`STP22.TGA` for P2, or attribute 255 entries). */
+static int world_map_player_start_x[2][3] =
+{
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X},
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X}
+};
+static int world_map_player_start_y[2][3] =
+{
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y},
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y}
+};
 
 /* Track the vertical extent of the map so characters falling off the bottom can be teleported back onto the last tile. */
 static int world_map_max_tile_bottom = 0;
@@ -136,8 +144,14 @@ static void world_map_reset_tiles(void)
         world_tiles = JO_NULL;
     }
     world_map_tile_count = 0;
-    world_map_player_start_x = WORLD_CAMERA_TARGET_X;
-    world_map_player_start_y = WORLD_CAMERA_TARGET_Y;
+    for (int player = 0; player < 2; ++player)
+    {
+        for (int group = 0; group < 3; ++group)
+        {
+            world_map_player_start_x[player][group] = WORLD_CAMERA_TARGET_X;
+            world_map_player_start_y[player][group] = WORLD_CAMERA_TARGET_Y;
+        }
+    }
     world_map_max_tile_bottom = 0;
     world_map_max_tile_top = 0;
 }
@@ -344,13 +358,53 @@ static bool world_map_parse_entries_from_stream(const char *stream)
         }
         y_buf[char_index] = '\0';
 
+        /* Ignore malformed lines with missing coordinates. */
+        if (x_buf[0] == '\0' || y_buf[0] == '\0')
+        {
+            runtime_log("world_map: malformed tile line (missing coords): %s", sprite);
+            while (*stream && *stream != '\n')
+                ++stream;
+            continue;
+        }
+
+        /* Marker by sprite name: set player start position and skip tile creation. */
         /* Marker by sprite name: set player start position and skip tile creation. */
         if (strcmp(sprite, "SNC_SRT.TGA") == 0)
         {
-            world_map_player_start_x = jo_tools_atoi(x_buf);
-            world_map_player_start_y = jo_tools_atoi(y_buf);
-            runtime_log("world_map: start marker sprite at %d,%d", world_map_player_start_x, world_map_player_start_y);
+            int start_x = jo_tools_atoi(x_buf);
+            int start_y = jo_tools_atoi(y_buf);
+            for (int player = 0; player < 2; ++player)
+            {
+                for (int group = 0; group < 3; ++group)
+                {
+                    world_map_player_start_x[player][group] = start_x;
+                    world_map_player_start_y[player][group] = start_y;
+                }
+            }
+            runtime_log("world_map: start marker sprite at %d,%d", start_x, start_y);
             /* Skip remaining fields on this line (e.g. attribute) so we don't reprocess it. */
+            while (*stream && *stream != '\n')
+                ++stream;
+            continue;
+        }
+
+        /* New marker format: STP1X.TGA / STP2X.TGA where X is the player group (0-2) */
+        if ((strncmp(sprite, "STP1", 4) == 0 || strncmp(sprite, "STP2", 4) == 0) && strlen(sprite) >= 6)
+        {
+            int player_index = (sprite[3] - '0') - 1; /* '1' -> 0, '2' -> 1 */
+            int group_id = sprite[4] - '0';
+            if (player_index >= 0 && player_index < 2 && group_id >= 0 && group_id < 3)
+            {
+                world_map_player_start_x[player_index][group_id] = jo_tools_atoi(x_buf);
+                world_map_player_start_y[player_index][group_id] = jo_tools_atoi(y_buf);
+                runtime_log("world_map: start marker sprite %s at %d,%d (player %d group %d)",
+                            sprite,
+                            world_map_player_start_x[player_index][group_id],
+                            world_map_player_start_y[player_index][group_id],
+                            player_index + 1,
+                            group_id);
+            }
+            /* Skip remaining fields on this line */
             while (*stream && *stream != '\n')
                 ++stream;
             continue;
@@ -373,9 +427,17 @@ static bool world_map_parse_entries_from_stream(const char *stream)
             /* Marker by attribute: 255 (captures start position and skip tile). */
             if (strcmp(attribute_buf, "255") == 0)
             {
-                world_map_player_start_x = jo_tools_atoi(x_buf);
-                world_map_player_start_y = jo_tools_atoi(y_buf);
-                runtime_log("world_map: start marker attr at %d,%d", world_map_player_start_x, world_map_player_start_y);
+                int start_x = jo_tools_atoi(x_buf);
+                int start_y = jo_tools_atoi(y_buf);
+                for (int player = 0; player < 2; ++player)
+                {
+                    for (int group = 0; group < 3; ++group)
+                    {
+                        world_map_player_start_x[player][group] = start_x;
+                        world_map_player_start_y[player][group] = start_y;
+                    }
+                }
+                runtime_log("world_map: start marker attr at %d,%d", start_x, start_y);
                 continue;
             }
 
@@ -444,6 +506,18 @@ static bool world_map_parse_entries_from_stream(const char *stream)
 
     world_map_tile_count = tile_index;
     runtime_log("world_map: parsed tiles %d", world_map_tile_count);
+
+    /* Debug: log the configured start markers for both players/groups */
+    for (int player = 0; player < 2; ++player)
+    {
+        for (int group = 0; group < 3; ++group)
+        {
+            runtime_log("world_map: start marker (P%d G%d) = %d,%d", player + 1, group,
+                        world_map_player_start_x[player][group],
+                        world_map_player_start_y[player][group]);
+        }
+    }
+
     return world_map_tile_count > 0;
 }
 
@@ -718,14 +792,27 @@ bool world_map_is_ready(void)
     return deferred_load_completed;
 }
 
-int world_map_get_player_start_x(void)
+static int world_map_sanitize_group(int group)
 {
-    return world_map_player_start_x;
+    if (group < 0)
+        group = 0;
+    if (group > 2)
+        group = 2;
+    return group;
 }
 
-int world_map_get_player_start_y(void)
+int world_map_get_player_start_x(int player_index, int group)
 {
-    return world_map_player_start_y;
+    player_index = (player_index < 0) ? 0 : (player_index > 1 ? 1 : player_index);
+    group = world_map_sanitize_group(group);
+    return world_map_player_start_x[player_index][group];
+}
+
+int world_map_get_player_start_y(int player_index, int group)
+{
+    player_index = (player_index < 0) ? 0 : (player_index > 1 ? 1 : player_index);
+    group = world_map_sanitize_group(group);
+    return world_map_player_start_y[player_index][group];
 }
 
 int world_map_get_max_tile_bottom(void)

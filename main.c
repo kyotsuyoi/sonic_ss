@@ -26,8 +26,10 @@ static jo_img ini_screen_img;
 static bool ini_screen_loaded = false;
 static bool splash_track_playing = false;
 static bool splash_start_released = true;
+static bool splash_text_dirty = true;
 static bool show_ram_cart_screen = true;
 static bool ram_cart_start_released = true;
+static bool ram_cart_text_dirty = true;
 static ram_cart_status_t ram_cart_status = RamCartStatusNotDetected;
 static int sprite_anim_bootstrap_id = -1;
 
@@ -156,7 +158,11 @@ void display_initial_screen(void)
 {
     if (show_initial_screen)
     {
-        ui_control_clear_text_layer();
+        if (splash_text_dirty)
+        {
+            ui_control_clear_text_layer();
+            splash_text_dirty = false;
+        }
 
         if (!splash_track_playing)
         {
@@ -181,6 +187,7 @@ void display_initial_screen(void)
                 }
                 ui_state.current_game_state = UiGameStateMenu;
                 ui_state.menu_screen = UiMenuScreenMain;
+                splash_text_dirty = true;
             }
         }
         else
@@ -194,13 +201,22 @@ void main_draw_callback(void)
 {
     if (show_boot_loading)
     {
+        /* Ensure no runtime log is shown while loading */
+        runtime_log_set_mode(RuntimeLogModeOff);
+        runtime_log_clear();
+
         ui_control_draw_loading();
-        runtime_log_draw(0, 20);
         return;
     }
 
     if (show_ram_cart_screen)
     {
+        if (ram_cart_text_dirty)
+        {
+            ui_control_clear_text_layer();
+            ram_cart_text_dirty = false;
+        }
+
         display_ram_cart_screen();
         runtime_log_draw(0, 20);
         return;

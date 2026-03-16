@@ -1120,9 +1120,6 @@ static void apply_damage_to_bot(int damage)
     if (bot_defeated)
         return;
 
-    /* Track player damage for debug display when a human player hits the bot */
-    debug_track_player_damage_dealt(bot.character_id, damage);
-
     bot.life -= damage;
     if (bot.life <= 0)
     {
@@ -1258,16 +1255,36 @@ static void process_player_hits(character_t *player_ref,
         player_ref->hit_done_punch1 = true;
         if (bot.spin)
         {
-            apply_spin_knockback_to_bot(player_ref->flip, player_knockback_punch1 * 2.0f);
-            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, player_knockback_punch1, COUNTER_STUN_FRAMES);
+            int spin_damage = debug_balance_get_damage(bot.character_id, DebugBalanceAttackSpin);
+            float spin_knockback = debug_balance_get_knockback(bot.character_id, DebugBalanceAttackSpin);
+            int spin_stun = debug_balance_get_stun(bot.character_id, DebugBalanceAttackSpin);
+
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_received(bot.character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(bot.character_id, spin_stun);
+            }
+
+            if (spin_damage > 0)
+                player_ref->life -= spin_damage;
+
+            apply_spin_knockback_to_bot(player_ref->flip, spin_knockback * 2.0f);
+            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, spin_knockback, spin_stun);
             damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             return;
         }
 
-        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch1));
-        debug_track_player_knockback_dealt(player_knockback_punch1);
-        apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch1, BOT_TAKEN_STUN_LIGHT_FRAMES);
+        {
+            int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch1);
+            debug_battle_add_damage(player_ref->character_id, damage);
+            player_ref->battle_damage_dealt += damage;
+            apply_damage_to_bot(damage);
+        }
+        if (player_ref == &player)
+            debug_track_player_knockback_dealt(player_knockback_punch1);
+        apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch1, debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackPunch1));
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
     }
@@ -1278,16 +1295,36 @@ static void process_player_hits(character_t *player_ref,
         player_ref->hit_done_punch2 = true;
         if (bot.spin)
         {
-            apply_spin_knockback_to_bot(player_ref->flip, player_knockback_punch2 * 2.0f);
-            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, player_knockback_punch2, COUNTER_STUN_FRAMES);
+            int spin_damage = debug_balance_get_damage(bot.character_id, DebugBalanceAttackSpin);
+            float spin_knockback = debug_balance_get_knockback(bot.character_id, DebugBalanceAttackSpin);
+            int spin_stun = debug_balance_get_stun(bot.character_id, DebugBalanceAttackSpin);
+
+            if (player_ref == &player)
+            {
+                debug_track_player_damage_received(bot.character_id, spin_damage);
+                debug_track_player_knockback_received(spin_knockback);
+                debug_track_player_stun_received(bot.character_id, spin_stun);
+            }
+
+            if (spin_damage > 0)
+                player_ref->life -= spin_damage;
+
+            apply_spin_knockback_to_bot(player_ref->flip, spin_knockback * 2.0f);
+            apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, spin_knockback, spin_stun);
             damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
             game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
             return;
         }
 
-        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch2));
-        debug_track_player_knockback_dealt(player_knockback_punch2);
-        apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch2, BOT_TAKEN_STUN_HEAVY_FRAMES);
+        {
+            int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackPunch2);
+            debug_battle_add_damage(player_ref->character_id, damage);
+            player_ref->battle_damage_dealt += damage;
+            apply_damage_to_bot(damage);
+        }
+        if (player_ref == &player)
+            debug_track_player_knockback_dealt(player_knockback_punch2);
+        apply_hit_effect_to_bot(player_ref->flip, player_knockback_punch2, debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackPunch2));
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
     }
@@ -1299,6 +1336,10 @@ static void process_player_hits(character_t *player_ref,
         player_ref->hit_done_kick1 = true;
         if (bot.spin)
         {
+            if (player_ref == &player)
+            {
+                debug_track_player_stun_received(bot.character_id, COUNTER_STUN_FRAMES);
+            }
             apply_spin_knockback_to_bot(player_ref->flip, player_knockback_kick1 * 2.0f);
             apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, player_knockback_kick1, COUNTER_STUN_FRAMES);
             damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
@@ -1306,9 +1347,15 @@ static void process_player_hits(character_t *player_ref,
             return;
         }
 
-        apply_damage_to_bot(debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackKick1));
-        debug_track_player_knockback_dealt(player_knockback_kick1);
-        apply_hit_effect_to_bot(player_ref->flip, player_knockback_kick1, BOT_TAKEN_STUN_LIGHT_FRAMES);
+        {
+            int damage = debug_balance_get_damage(player_ref->character_id, DebugBalanceAttackKick1);
+            debug_battle_add_damage(player_ref->character_id, damage);
+            player_ref->battle_damage_dealt += damage;
+            apply_damage_to_bot(damage);
+        }
+        if (player_ref == &player)
+            debug_track_player_knockback_dealt(player_knockback_kick1);
+        apply_hit_effect_to_bot(player_ref->flip, player_knockback_kick1, debug_balance_get_stun(player_ref->character_id, DebugBalanceAttackKick1));
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_low_sfx());
     }
@@ -1327,13 +1374,15 @@ static void process_player_hits(character_t *player_ref,
         float kick2_knockback = charged_kick
             ? (player_knockback_kick2 * debug_balance_get_knockback(player_ref->character_id, DebugBalanceAttackCharged))
             : player_knockback_kick2;
-        int kick2_stun = charged_kick
-            ? (BOT_TAKEN_STUN_HEAVY_FRAMES + combat_profile.charged_kick_stun_bonus)
-            : BOT_TAKEN_STUN_HEAVY_FRAMES;
+        int kick2_stun = debug_balance_get_stun(player_ref->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
         int kick2_damage = debug_balance_get_damage(player_ref->character_id, charged_kick ? DebugBalanceAttackCharged : DebugBalanceAttackKick2);
 
         if (bot.spin)
         {
+            if (player_ref == &player)
+            {
+                debug_track_player_stun_received(bot.character_id, COUNTER_STUN_FRAMES);
+            }
             apply_spin_knockback_to_bot(player_ref->flip, kick2_knockback * 2.0f);
             apply_hit_effect_to_character(player_ref, player_physics, !player_ref->flip, kick2_knockback, COUNTER_STUN_FRAMES);
             damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
@@ -1341,8 +1390,14 @@ static void process_player_hits(character_t *player_ref,
             return;
         }
 
-        apply_damage_to_bot(kick2_damage);
-        debug_track_player_knockback_dealt(kick2_knockback);
+        {
+            int damage = kick2_damage;
+            debug_battle_add_damage(player_ref->character_id, damage);
+            player_ref->battle_damage_dealt += damage;
+            apply_damage_to_bot(damage);
+        }
+        if (player_ref == &player)
+            debug_track_player_knockback_dealt(kick2_knockback);
         apply_hit_effect_to_bot(player_ref->flip, kick2_knockback, kick2_stun);
         damage_fx_trigger_world((int)bot_world_x, (int)bot_world_y);
         game_audio_play_sfx_next_channel(game_audio_get_damage_hi_sfx());
@@ -2277,4 +2332,13 @@ int bot_get_character_id(int index)
 
     character_t *bot_chr = (character_t *)&default_bot_instances[index];
     return bot_chr->character_id;
+}
+
+int bot_get_group(int index)
+{
+    if (index < 0 || index >= default_bot_active_count)
+        return 0;
+
+    character_t *bot_chr = (character_t *)&default_bot_instances[index];
+    return bot_chr->group;
 }
