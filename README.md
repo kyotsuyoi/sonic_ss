@@ -39,6 +39,11 @@ Available characters:
 
 Checklist:
 
+- OK - Knuckles bot misses the range of the aerial attack and the super punch.
+- OK - Knuckles incorrectly allows jumping while holding the super punch.
+- OK - Reduce the number of Sonic and Amy sprites.
+- OK - Fix Tails's punch combo sequence.
+- OK - Fix Amy's kick cooldown timing.
 - NOK - Camera control.
 - NOK - Auto camera that stays at a midpoint between the players.
 - NOK - Allow the camera to follow player 1 or player 2.
@@ -50,7 +55,7 @@ Checklist:
 - NOK - Knuckles’ charged attack should allow up to 3 hits before being canceled.
 - NOK - Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
 - NOK - Assign characters to specific locations on the map using the Map Editor (only P1/P2 is currently working).
-- NOK - Adjust damage and knockback debugging for PvP (currently only works correctly on bots).
+- OK - Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
 - OK - Character classes are duplicated in class and character.
 - NOK - Check why debug_battle_add_damage doesn’t get called for all IDs.
 - NOK - Create spectator mode to watch bots fight.
