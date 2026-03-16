@@ -36,6 +36,11 @@ void vram_cache_do_uploads(void);
 // Força despejar (evict) o cache e liberar buffers WRAM.
 void vram_cache_clear(void);
 
+// Enable/disable vram cache activity (uploads & loads).
+// Useful to test whether WRAM/VRAM communication is the bottleneck.
+void vram_cache_enable(bool enabled);
+bool vram_cache_is_enabled(void);
+
 // Request a single tile to be present in VRAM. If the tile is already in
 // VRAM this returns its VRAM index (>=0). If not present, the function
 // schedules the tile for upload and returns -1; the caller can rely on

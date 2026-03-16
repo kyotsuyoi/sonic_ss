@@ -65,6 +65,7 @@ static int g_p1_airborne_time_ms = 0;
 static int g_p2_airborne_time_ms = 0;
 static int g_runtime_playing_update_logs = 0;
 static int g_runtime_playing_draw_logs = 0;
+static bool g_ui_text_dirty = true;
 
 #define TAILS_KICK1_ROTATION_TIME 16
 #define TAILS_KICK2_ROTATION_TIME 32
@@ -1259,6 +1260,9 @@ void game_loop_init(game_loop_context_t *ctx)
 
 void game_loop_update(void)
 {
+    if (g_ctx->ui_state->diag_menu_only && g_ctx->ui_state->current_game_state == UiGameStateMenu)
+        return;
+
     *g_ctx->total_pcm = game_audio_total_pcm();
     game_flow_runtime_tick();
 
@@ -1293,7 +1297,8 @@ void game_loop_update(void)
         runtime_log_verbose("upd: begin");
     }
 
-    world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    if (g_ctx->ui_state->diag_vram_uploads)
+        world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
 
     game_loop_sync_player2_mode();
 
@@ -1307,7 +1312,7 @@ void game_loop_update(void)
         runtime_log_verbose("upd: hits done");
     }
 
-    if (!g_ctx->ui_state->pause_bots)
+    if (!g_ctx->ui_state->pause_bots && g_ctx->ui_state->diag_bot_updates)
     {
         bot_update(&player,
                    g_ctx->player_defeated,
@@ -1381,14 +1386,19 @@ int game_loop_get_map_pos_y(void)
     return *g_ctx->map_pos_y;
 }
 
+void game_loop_mark_ui_dirty(void)
+{
+    g_ui_text_dirty = true;
+}
+
 void game_loop_draw(void)
 {
     int prev_y;
-    static bool g_ui_text_dirty = true;
     static bool g_prev_need_text_layer = false;
     static ui_menu_screen_t g_prev_menu_screen = UiMenuScreenMain;
     static ui_game_state_t g_prev_game_state = UiGameStateMenu;
     static bool g_prev_game_paused = false;
+    static bool g_prev_diag_menu_only = false;
     bool need_text_layer = (g_ctx->ui_state->current_game_state != UiGameStatePlaying)
         || g_ctx->ui_state->game_paused
         || g_ctx->ui_state->debug_enabled
@@ -1402,7 +1412,8 @@ void game_loop_draw(void)
     /* Force redraw when entering/exiting pause or changing menu/game state. */
     if (g_ctx->ui_state->game_paused != g_prev_game_paused
         || g_ctx->ui_state->menu_screen != g_prev_menu_screen
-        || g_ctx->ui_state->current_game_state != g_prev_game_state)
+        || g_ctx->ui_state->current_game_state != g_prev_game_state
+        || g_ctx->ui_state->diag_menu_only != g_prev_diag_menu_only)
     {
         g_ui_text_dirty = true;
     }
@@ -1411,6 +1422,7 @@ void game_loop_draw(void)
     g_prev_menu_screen = g_ctx->ui_state->menu_screen;
     g_prev_game_state = g_ctx->ui_state->current_game_state;
     g_prev_game_paused = g_ctx->ui_state->game_paused;
+    g_prev_diag_menu_only = g_ctx->ui_state->diag_menu_only;
 
     jo_vdp2_move_nbg0(0, 0);
 
@@ -1431,8 +1443,28 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->current_game_state == UiGameStateMenu)
     {
-        world_background_set_menu();
-        jo_move_background(0, 0);
+        if (g_ctx->ui_state->diag_menu_only)
+        {
+            /* Avoid clearing every frame; only clear when needed to avoid VDP write cost. */
+            if (g_ui_text_dirty)
+            {
+                jo_clear_background(JO_COLOR_Black);
+                ui_control_clear_text_layer();
+                jo_printf(0, 0, "MENU ONLY (diag_menu_only)");
+                g_ui_text_dirty = false;
+            }
+            return;
+        }
+
+        if (g_ctx->ui_state->diag_draw_backgrounds)
+        {
+            world_background_set_menu();
+            jo_move_background(0, 0);
+        }
+        else if (g_ui_text_dirty)
+        {
+            jo_clear_background(JO_COLOR_Black);
+        }
         ui_control_draw_character_menu(g_ctx->ui_state);
         return;
     }
@@ -1457,32 +1489,55 @@ void game_loop_draw(void)
         return;
     }
 
-    world_background_set_gameplay();
-    if (g_runtime_playing_draw_logs < 1)
+    if (g_ctx->ui_state->diag_disable_draw)
     {
-        runtime_log_verbose("draw: bg mode");
-        ++g_runtime_playing_draw_logs;
-    }
-    world_background_draw_parallax(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
-    if (g_runtime_playing_draw_logs < 2)
-    {
-        runtime_log_verbose("draw: parallax");
-        ++g_runtime_playing_draw_logs;
+        jo_clear_background(JO_COLOR_Black);
+        return;
     }
 
-    // Ensure any scheduled WRAM->VRAM uploads are performed before desenhar
-    // o mapa. Isso garante que as tiles presentes em WRAM estejam na VRAM
-    // quando o `jo_map_draw` for executado.
-    vram_cache_do_uploads();
-    if (g_runtime_playing_draw_logs < 3)
+    if (g_ctx->ui_state->diag_draw_backgrounds)
     {
-        runtime_log_verbose("draw: uploads");
-        ++g_runtime_playing_draw_logs;
+        world_background_set_gameplay();
+        if (g_runtime_playing_draw_logs < 1)
+        {
+            runtime_log_verbose("draw: bg mode");
+            ++g_runtime_playing_draw_logs;
+        }
+        world_background_draw_parallax(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+        if (g_runtime_playing_draw_logs < 2)
+        {
+            runtime_log_verbose("draw: parallax");
+            ++g_runtime_playing_draw_logs;
+        }
+    }
+    else
+    {
+        jo_clear_background(JO_COLOR_Black);
     }
 
-    world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    // Ensure any scheduled WRAM->VRAM uploads are performed before drawing the map.
+    // This ensures tiles in WRAM are uploaded to VRAM before `jo_map_draw` runs.
+    if (g_ctx->ui_state->diag_vram_uploads)
+    {
+        vram_cache_do_uploads();
+        world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+        jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
 
-    jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
+        if (g_runtime_playing_draw_logs < 3)
+        {
+            runtime_log_verbose("draw: uploads");
+            ++g_runtime_playing_draw_logs;
+        }
+        if (g_runtime_playing_draw_logs < 4)
+        {
+            runtime_log_verbose("draw: map");
+            ++g_runtime_playing_draw_logs;
+        }
+    }
+    else
+    {
+        jo_clear_background(JO_COLOR_Black);
+    }
     if (g_runtime_playing_draw_logs < 4)
     {
         runtime_log_verbose("draw: map");

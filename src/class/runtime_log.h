@@ -25,6 +25,7 @@ void runtime_log_close(void);
 void runtime_log_enable(bool enabled);
 void runtime_log_set_mode(runtime_log_mode_t mode);
 runtime_log_mode_t runtime_log_get_mode(void);
+bool runtime_log_is_enabled(void);
 void runtime_log_set_sprite_page(int page);
 int runtime_log_get_sprite_page(void);
 int runtime_log_get_sprite_page_count(void);

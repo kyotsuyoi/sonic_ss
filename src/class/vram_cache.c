@@ -13,6 +13,7 @@ static uint32_t vc_tile_requests = 0;
 static uint32_t vc_tile_hits = 0;
 static uint32_t vc_tile_misses = 0;
 static uint32_t vc_evictions = 0;
+static bool g_vram_cache_enabled = true;
 
 // Simplified cache: mantém um buffer por "pack" carregado em WRAM e permite
 // copiar todo o conteúdo para VRAM sob demanda. Este módulo é propositalmente
@@ -73,13 +74,15 @@ void vram_cache_init(void)
     vc_evictions = 0;
     tick_counter = 0;
     tile_cache_init();
+    g_vram_cache_enabled = true;
 }
 
 // Leitura simples do arquivo para um buffer alocado com malloc.
 // Leitura síncrona de arquivo (mantida para fallback, não usada por padrão).
 static void *read_file_to_buffer(const char *filepath, size_t *out_size)
 {
-    jo_printf(0, 30, "vram_cache: (fallback) reading file '%s'", filepath);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 30, "vram_cache: (fallback) reading file '%s'", filepath);
     FILE *f = fopen(filepath, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
@@ -95,12 +98,16 @@ static void *read_file_to_buffer(const char *filepath, size_t *out_size)
     }
     fclose(f);
     *out_size = (size_t)sz;
-    jo_printf(0, 31, "vram_cache: (fallback) read %u bytes from '%s'", (unsigned)*out_size, filepath);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 31, "vram_cache: (fallback) read %u bytes from '%s'", (unsigned)*out_size, filepath);
     return buf;
 }
 
 bool vram_cache_load_pack_to_wram(const char *pack_name, const char *filepath)
 {
+    if (!g_vram_cache_enabled)
+        return false;
+
     // procura pack existente
     for (int i = 0; i < packs_count; ++i) {
         if (strcmp(packs[i].pack_name, pack_name) == 0) {
@@ -113,13 +120,19 @@ bool vram_cache_load_pack_to_wram(const char *pack_name, const char *filepath)
     // `vram_cache_do_uploads` em pequenos chunks por frame.
     FILE *f = fopen(filepath, "rb");
     if (!f) {
-        jo_printf(0, 32, "vram_cache: failed to open '%s' for pack '%s'", filepath, pack_name);
+        if (runtime_log_is_enabled())
+            jo_printf(0, 32, "vram_cache: failed to open '%s' for pack '%s'", filepath, pack_name);
         return false;
     }
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (sz <= 0) { fclose(f); jo_printf(0, 32, "vram_cache: empty file '%s'", filepath); return false; }
+    if (sz <= 0) {
+        fclose(f);
+        if (runtime_log_is_enabled())
+            jo_printf(0, 32, "vram_cache: empty file '%s'", filepath);
+        return false;
+    }
 
     vram_pack_t *new_packs = realloc(packs, sizeof(vram_pack_t) * (packs_count + 1));
     if (!new_packs) {
@@ -142,7 +155,8 @@ bool vram_cache_load_pack_to_wram(const char *pack_name, const char *filepath)
     packs[packs_count].loading = true; // leitura iniciada, continuará em `do_uploads`
     packs[packs_count].scheduled = false;
     packs_count++;
-    jo_printf(0, 33, "vram_cache: registered pack '%s' size=%u bytes (deferred load)", pack_name, (unsigned)sz);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 33, "vram_cache: registered pack '%s' size=%u bytes (deferred load)", pack_name, (unsigned)sz);
     return true;
 }
 
@@ -191,12 +205,26 @@ static void upload_pack_to_vram_raw(const vram_pack_t *p)
     // jo_vdp2_vram_write(p->data, p->size, dest_vram_addr);
 
     // Como fallback, apenas logamos o evento para desenvolvimento.
-    jo_printf(0, 22, "vram_cache: upload pack '%s' size=%u bytes", p->pack_name, (unsigned)p->size);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 22, "vram_cache: upload pack '%s' size=%u bytes", p->pack_name, (unsigned)p->size);
     ++vc_total_pack_uploads;
+}
+
+void vram_cache_enable(bool enabled)
+{
+    g_vram_cache_enabled = enabled;
+}
+
+bool vram_cache_is_enabled(void)
+{
+    return g_vram_cache_enabled;
 }
 
 void vram_cache_do_uploads(void)
 {
+    if (!g_vram_cache_enabled)
+        return;
+
     // Leitura incremental por-pacote: para evitar bloqueios longos no startup
     // lemos o arquivo em pequenos pedaços a cada chamada (cada frame).
     const size_t PACK_READ_CHUNK = 16 * 1024; // 16KB por frame
@@ -208,7 +236,8 @@ void vram_cache_do_uploads(void)
             size_t got = fread((char*)p->data + p->read_offset, 1, toread, p->file);
             if (got == 0) {
                 // erro de leitura: aborta leitura e libera recursos
-                jo_printf(0, 34, "vram_cache: read error on '%s'", p->filepath ? p->filepath : "?");
+                if (runtime_log_is_enabled())
+                    jo_printf(0, 34, "vram_cache: read error on '%s'", p->filepath ? p->filepath : "?");
                 fclose(p->file);
                 p->file = NULL;
                 p->loading = false;
@@ -217,7 +246,7 @@ void vram_cache_do_uploads(void)
                 continue;
             }
             p->read_offset += got;
-            if (runtime_log_get_mode() != RuntimeLogModeOff)
+            if (runtime_log_is_enabled())
                 jo_printf(0, 35, "vram_cache: loading '%s' %u/%u bytes", p->pack_name, (unsigned)p->read_offset, (unsigned)p->size);
             if (p->read_offset >= p->size) {
                 // leitura completa
@@ -225,7 +254,7 @@ void vram_cache_do_uploads(void)
                 p->file = NULL;
                 p->loading = false;
                 p->scheduled = true; // marcar para upload no mesmo ou próximo vblank
-                if (runtime_log_get_mode() != RuntimeLogModeOff)
+                if (runtime_log_is_enabled())
                     jo_printf(0, 36, "vram_cache: finished loading '%s' into WRAM", p->pack_name);
                 runtime_log("vram_cache: finished loading '%s' into WRAM", p->pack_name);
             }
@@ -234,6 +263,9 @@ void vram_cache_do_uploads(void)
 
     // Primeiro, uploads de packs completos
     for (int i = 0; i < packs_count; ++i) {
+        if (!g_vram_cache_enabled)
+            break;
+
         if (packs[i].scheduled && packs[i].data && !packs[i].loading) {
             upload_pack_to_vram_raw(&packs[i]);
             runtime_log("vram_cache: uploaded pack '%s' size=%u", packs[i].pack_name, (unsigned)packs[i].size);
@@ -277,7 +309,7 @@ void vram_cache_clear(void)
     vc_tile_misses = 0;
     vc_evictions = 0;
     tick_counter = 0;
-    // limpa cache por-tile
+    // Do not change `g_vram_cache_enabled` here; that's controlled by `vram_cache_enable`
     tile_cache_init();
 }
 
@@ -311,6 +343,9 @@ static int evict_lru_slot(void)
 // already resident, otherwise schedules upload and returns -1.
 int vram_cache_request_tile(int tileId, void *wramPtr)
 {
+    if (!g_vram_cache_enabled)
+        return -1;
+
     ++vc_tile_requests;
     if (tileId < 0) return -1;
     int slot = find_tile_slot_by_id(tileId);

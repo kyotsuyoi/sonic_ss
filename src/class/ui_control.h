@@ -66,7 +66,8 @@ typedef enum
     UiMenuScreenOptions,
     UiMenuScreenConfigControls,
     UiMenuScreenSongTest,
-    UiMenuScreenDebugBalance
+    UiMenuScreenDebugBalance,
+    UiMenuScreenDiagnostics
 } ui_menu_screen_t;
 
 #define UI_MENU_MAX_MAPS 16
@@ -86,6 +87,7 @@ typedef struct
     ui_character_choice_t menu_group_order[UiCharacterCount];
     int menu_group_count;
     int menu_group_cursor;
+    int menu_group_error_timer;
     bool menu_selecting_bot_character;
     bool menu_selecting_player2_character;
     bool menu_player1_confirmed;
@@ -144,6 +146,17 @@ typedef struct
     bool pause_lr_released;
     bool pause_c_released;
     bool pause_text_dirty;
+
+    /* Diagnostics toggles */
+    bool diag_runtime_log;
+    bool diag_vram_uploads;
+    bool diag_bot_updates;
+    bool diag_show_fps;
+    bool diag_draw_backgrounds;
+    bool diag_disable_draw;
+    bool diag_disable_cd_audio;
+    bool diag_menu_only;
+    int diag_selected_option;
 
     /* Debug balance submenu state */
     int debug_balance_selected_row;

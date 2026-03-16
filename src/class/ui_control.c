@@ -1,4 +1,5 @@
 #include <jo/jo.h>
+#include <string.h>
 #include "ui_control.h"
 #include "player.h"
 #include "input_mapping.h"
@@ -7,6 +8,7 @@
 #include "runtime_log.h"
 #include "debug.h"
 #include "world_map.h"
+#include "vram_cache.h"
 
 #define MENU_SPRITE_Y 88
 #define MENU_NAME_Y 6
@@ -17,7 +19,7 @@
 #define MENU_MODE_OPTION_COUNT 2
 #define MENU_BATTLE_OPTION_COUNT 2
 #define MENU_MULTIPLAYER_OPTION_COUNT 2
-#define MENU_OPTIONS_OPTION_COUNT 2
+#define MENU_OPTIONS_OPTION_COUNT 3
 #define SONG_TEST_LINE_COUNT 2
 #define SONG_TEST_SFX_COUNT 6
 #define SONG_TEST_MIN_TRACK 2
@@ -51,7 +53,8 @@ enum
 enum
 {
     MenuOptionsConfigControls = 0,
-    MenuOptionsSongTest
+    MenuOptionsSongTest,
+    MenuOptionsDiagnostics
 };
 
 enum
@@ -305,10 +308,10 @@ void ui_control_reset_menu_sprites(void)
     menu_shadow_jump_sprite_id = -1;
 }
 
-static bool ui_control_character_is_locked(ui_character_choice_t choice)
+static bool ui_control_character_is_locked(const ui_control_state_t *state, ui_character_choice_t choice)
 {
-    (void)choice;
-    return false;
+    /* "Out" means the character is not participating in the battle. */
+    return state->menu_character_controller[choice] == UiControllerNone;
 }
 
 static bool ui_control_is_multiplayer_versus(const ui_control_state_t *state)
@@ -436,6 +439,15 @@ void ui_control_init(ui_control_state_t *state)
     state->menu_mode_selected_option = MenuModeBattle;
     state->menu_battle_selected_option = MenuBattleSinglePlayer;
     state->menu_options_selected_option = MenuOptionsConfigControls;
+    state->diag_runtime_log = false;
+    state->diag_vram_uploads = true;
+    state->diag_bot_updates = true;
+    state->diag_show_fps = true;
+    state->diag_draw_backgrounds = true;
+    state->diag_disable_draw = false;
+    state->diag_disable_cd_audio = false;
+    state->diag_menu_only = false;
+    state->diag_selected_option = 0;
     state->menu_selected_character = UiCharacterSonic;
     state->menu_selected_bot_character = UiCharacterAmy;
     state->menu_selected_player2_character = UiCharacterAmy;
@@ -450,6 +462,7 @@ void ui_control_init(ui_control_state_t *state)
     state->menu_character_controller[UiCharacterSonic] = UiControllerPlayer1;
     state->menu_group_count = 0;
     state->menu_group_cursor = 0;
+    state->menu_group_error_timer = 0;
     state->menu_selecting_bot_character = false;
     state->menu_selecting_player2_character = false;
     state->menu_player1_confirmed = false;
@@ -807,8 +820,7 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf(15, 6, "MAIN MENU");
         jo_printf(8, 10, "%s START GAME", state->menu_main_selected_option == MenuMainStartGame ? ">" : " ");
         jo_printf(8, 11, "%s OPTIONS", state->menu_main_selected_option == MenuMainOptions ? ">" : " ");
-        
-        jo_printf(4, 25, "UP/DOWN: SELECT");
+
         jo_printf(4, 26, "A: CONFIRM");
         return;
     }
@@ -870,6 +882,8 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf(4, 25, "LEFT/RIGHT: GROUP");
         jo_printf(4, 26, "A: MAP");
         jo_printf(4, 27, "B: BACK");
+        if (state->menu_group_error_timer > 0)
+            jo_printf(4, 22, "ASSIGN AT LEAST 1");
         return;
     }
 
@@ -906,10 +920,33 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         jo_printf(16, 6, "OPTIONS");
         jo_printf(6, 10, "%s CONFIG CONTROLS", state->menu_options_selected_option == MenuOptionsConfigControls ? ">" : " ");
         jo_printf(6, 11, "%s SONG TEST", state->menu_options_selected_option == MenuOptionsSongTest ? ">" : " ");
+        jo_printf(6, 12, "%s DIAGNOSTICS", state->menu_options_selected_option == MenuOptionsDiagnostics ? ">" : " ");
         
-        jo_printf(4, 24, "UP/DOWN: SELECT");
-        jo_printf(4, 25, "A: CONFIRM");
-        jo_printf(4, 26, "B: BACK");
+        jo_printf(4, 25, "UP/DOWN: SELECT");
+        jo_printf(4, 26, "A: CONFIRM");
+        jo_printf(4, 27, "B: BACK");
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenDiagnostics)
+    {
+        jo_printf(12, 6, "DIAGNOSTICS");
+        jo_printf(8, 10, "%s RUNTIME LOG", state->diag_selected_option == 0 ? ">" : " ");
+        jo_printf(25, 10, "%s", state->diag_runtime_log ? "ON" : "OFF");
+        jo_printf(8, 11, "%s VRAM UPLOADS", state->diag_selected_option == 1 ? ">" : " ");
+        jo_printf(25, 11, "%s", state->diag_vram_uploads ? "ON" : "OFF");
+        jo_printf(8, 12, "%s BOT UPDATES", state->diag_selected_option == 2 ? ">" : " ");
+        jo_printf(25, 12, "%s", state->diag_bot_updates ? "ON" : "OFF");
+        jo_printf(8, 13, "%s SHOW FPS", state->diag_selected_option == 3 ? ">" : " ");
+        jo_printf(25, 13, "%s", state->diag_show_fps ? "ON" : "OFF");
+        jo_printf(8, 14, "%s DRAW BACKGROUNDS", state->diag_selected_option == 4 ? ">" : " ");
+        jo_printf(25, 14, "%s", state->diag_draw_backgrounds ? "ON" : "OFF");
+        jo_printf(8, 15, "%s DRAW OFF", state->diag_selected_option == 5 ? ">" : " ");
+        jo_printf(25, 15, "%s", state->diag_disable_draw ? "ON" : "OFF");
+        jo_printf(8, 16, "%s CD AUDIO", state->diag_selected_option == 6 ? ">" : " ");
+        jo_printf(25, 16, "%s", state->diag_disable_cd_audio ? "OFF" : "ON ");
+        jo_printf(8, 17, "%s MENU ONLY", state->diag_selected_option == 7 ? ">" : " ");
+        jo_printf(25, 17, "%s", state->diag_menu_only ? "ON" : "OFF");
         return;
     }
 
@@ -987,7 +1024,7 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
 
     for (idx = 0; idx < UiCharacterCount; ++idx)
     {
-        bool is_locked = ui_control_character_is_locked((ui_character_choice_t)idx);
+        bool is_locked = ui_control_character_is_locked(state, (ui_character_choice_t)idx);
         bool is_hovered = state->menu_selecting_bot_character
             ? (state->menu_cursor_bot_character == (ui_character_choice_t)idx)
             : (state->menu_cursor_character == (ui_character_choice_t)idx);
@@ -1040,20 +1077,20 @@ void ui_control_draw_character_menu(const ui_control_state_t *state)
         switch (state->menu_character_controller[idx])
         {
             case UiControllerPlayer1:
-                controller_label = "P1";
+                controller_label = "P1 ";
                 break;
             case UiControllerPlayer2:
-                controller_label = "P2";
+                controller_label = "P2 ";
                 break;
             case UiControllerCpu:
                 controller_label = "CPU";
                 break;
             default:
-                controller_label = "X";
+                controller_label = "OUT";
                 break;
         }
         jo_printf((item_x[idx] / 8) - 2,
-                  (MENU_SPRITE_Y / 8) + 2,
+                  (MENU_SPRITE_Y / 8) + 4,
                   "%s",
                   controller_label);
     }
@@ -1195,14 +1232,85 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
     if (state->menu_screen == UiMenuScreenMain)
     {
-        if (pressed_up || pressed_down)
+        if (pressed_up)
+        {
+            if (state->menu_main_selected_option == 0)
+                state->menu_main_selected_option = MENU_MAIN_OPTION_COUNT - 1;
+            else
+                state->menu_main_selected_option--;
+        }
+        else if (pressed_down)
+        {
             state->menu_main_selected_option = (state->menu_main_selected_option + 1) % MENU_MAIN_OPTION_COUNT;
+        }
         else if (pressed_a)
         {
             if (state->menu_main_selected_option == MenuMainStartGame)
-                state->menu_screen = UiMenuScreenModeSelect;
-            else
+            {
+                if (!state->diag_menu_only)
+                    state->menu_screen = UiMenuScreenModeSelect;
+            }
+            else if (state->menu_main_selected_option == MenuMainOptions)
                 state->menu_screen = UiMenuScreenOptions;
+        }
+        return;
+    }
+
+    if (state->menu_screen == UiMenuScreenDiagnostics)
+    {
+        if (pressed_up)
+        {
+            if (state->diag_selected_option == 0)
+                state->diag_selected_option = 7;
+            else
+                state->diag_selected_option--;
+        }
+        else if (pressed_down)
+        {
+            state->diag_selected_option = (state->diag_selected_option + 1) % 8;
+        }
+        else if (pressed_a)
+        {
+            switch (state->diag_selected_option)
+            {
+                case 0:
+                    state->diag_runtime_log = !state->diag_runtime_log;
+                    if (!state->diag_runtime_log)
+                        runtime_log_set_mode(RuntimeLogModeOff);
+                    else
+                        runtime_log_set_mode(RuntimeLogModeSystem);
+                    break;
+                case 1:
+                    state->diag_vram_uploads = !state->diag_vram_uploads;
+                    vram_cache_enable(state->diag_vram_uploads);
+                    if (!state->diag_vram_uploads)
+                        vram_cache_clear();
+                    break;
+                case 2:
+                    state->diag_bot_updates = !state->diag_bot_updates;
+                    break;
+                case 3:
+                    state->diag_show_fps = !state->diag_show_fps;
+                    break;
+                case 4:
+                    state->diag_draw_backgrounds = !state->diag_draw_backgrounds;
+                    break;
+                case 5:
+                    state->diag_disable_draw = !state->diag_disable_draw;
+                    break;
+                case 6:
+                    state->diag_disable_cd_audio = !state->diag_disable_cd_audio;
+                    break;
+                case 7:
+                    state->diag_menu_only = !state->diag_menu_only;
+                    if (state->diag_menu_only)
+                        state->current_game_state = UiGameStateMenu;
+                    break;
+            }
+        }
+        else if (pressed_b)
+        {
+            state->menu_screen = UiMenuScreenMain;
         }
         return;
     }
@@ -1369,6 +1477,24 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             /* Go to group assignment before starting the fight */
             if (pressed_a)
             {
+                /* Prevent entering group assignment when all characters are out-of-combat (X). */
+                bool any_selected = false;
+                for (int i = 0; i < UiCharacterCount; ++i)
+                {
+                    if (state->menu_character_controller[i] != UiControllerNone
+                        && !ui_control_character_is_locked(state, (ui_character_choice_t)i))
+                    {
+                        any_selected = true;
+                        break;
+                    }
+                }
+
+                if (!any_selected)
+                {
+                    state->menu_group_error_timer = 60; /* ~1 second */
+                    return;
+                }
+
                 int p1_char = -1;
                 int p2_char = -1;
                 int first_cpu_char = -1;
@@ -1404,6 +1530,9 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
                         || state->menu_character_controller[i] == UiControllerPlayer2
                         || state->menu_character_controller[i] == UiControllerCpu)
                     {
+                        if (ui_control_character_is_locked(state, (ui_character_choice_t)i))
+                            continue;
+
                         state->menu_group_order[count++] = (ui_character_choice_t)i;
                         if (state->menu_character_controller[i] == UiControllerPlayer1)
                             state->menu_character_group[i] = 1;
@@ -1413,6 +1542,14 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
                             state->menu_character_group[i] = 0;
                     }
                 }
+
+                if (count == 0)
+                {
+                    /* No characters are actually participating in the battle. */
+                    state->menu_group_error_timer = 60; /* ~1 second */
+                    return;
+                }
+
                 state->menu_group_count = count;
                 state->menu_group_cursor = 0;
                 state->menu_screen = UiMenuScreenGroupAssign;
@@ -1446,6 +1583,24 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
         }
         else if (pressed_a)
         {
+            /* Prevent entering group assignment when all characters are out-of-combat (X). */
+            bool any_selected = false;
+            for (int i = 0; i < UiCharacterCount; ++i)
+            {
+                if (state->menu_character_controller[i] != UiControllerNone
+                    && !ui_control_character_is_locked(state, (ui_character_choice_t)i))
+                {
+                    any_selected = true;
+                    break;
+                }
+            }
+
+            if (!any_selected)
+            {
+                state->menu_group_error_timer = 60; /* ~1 second */
+                return;
+            }
+
             /* Determine selected player and CPUs before going to group assignment */
             int player_char = -1;
             ui_character_choice_t first_cpu_char = UiCharacterSonic;
@@ -1501,6 +1656,9 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
     if (state->menu_screen == UiMenuScreenGroupAssign)
     {
+        if (state->menu_group_error_timer > 0)
+            state->menu_group_error_timer--;
+
         if (state->menu_group_count > 0)
         {
             if (pressed_up)
@@ -1534,6 +1692,24 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
             }
             else if (pressed_a)
             {
+                /* Ensure at least one character is assigned to a group before continuing. */
+                bool any_assigned = false;
+                for (int i = 0; i < state->menu_group_count; ++i)
+                {
+                    int char_id = state->menu_group_order[i];
+                    if (state->menu_character_group[char_id] != 0)
+                    {
+                        any_assigned = true;
+                        break;
+                    }
+                }
+
+                if (!any_assigned)
+                {
+                    state->menu_group_error_timer = 60; /* ~1 second */
+                    return;
+                }
+
                 /* Move to map selection before starting the battle */
                 state->menu_map_cursor = 0;
                 if (state->menu_map_count > 0)
@@ -1585,14 +1761,25 @@ void ui_control_handle_menu_input(ui_control_state_t *state, ui_control_start_ga
 
     if (state->menu_screen == UiMenuScreenOptions)
     {
-        if (pressed_up || pressed_down)
+        if (pressed_up)
+        {
+            if (state->menu_options_selected_option == 0)
+                state->menu_options_selected_option = MENU_OPTIONS_OPTION_COUNT - 1;
+            else
+                state->menu_options_selected_option--;
+        }
+        else if (pressed_down)
+        {
             state->menu_options_selected_option = (state->menu_options_selected_option + 1) % MENU_OPTIONS_OPTION_COUNT;
+        }
         else if (pressed_a)
         {
             if (state->menu_options_selected_option == MenuOptionsConfigControls)
                 state->menu_screen = UiMenuScreenConfigControls;
-            else
+            else if (state->menu_options_selected_option == MenuOptionsSongTest)
                 state->menu_screen = UiMenuScreenSongTest;
+            else
+                state->menu_screen = UiMenuScreenDiagnostics;
         }
         else if (pressed_b)
         {
@@ -2065,3 +2252,4 @@ void ui_control_handle_start_toggle(ui_control_state_t *state)
         state->pause_start_released = true;
     }
 }
+

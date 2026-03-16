@@ -59,5 +59,6 @@ Checklist:
 - OK - Character classes are duplicated in class and character.
 - NOK - Check why debug_battle_add_damage doesn’t get called for all IDs.
 - NOK - Create spectator mode to watch bots fight.
-- NOK - Physical hardware (SAROO) became extremely slow, need to find out why (emulator is OK).
+- OK - Physical hardware (SAROO) became extremely slow, need to find out why (emulator is OK).
+- - OK The method jo_clear_background is called in a loop and wipes the entire VRAM.
 - OK - Some logs and debug output stay permanently on and need to be disabled by default (causes a bug in jo_print).

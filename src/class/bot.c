@@ -1559,7 +1559,8 @@ void bot_instance_init(bot_instance_t *instance,
                        int player_world_y)
 {
     //LOG
-    jo_printf(0, 242, "bot_instance_init: entry selected_player=%d selected_bot=%d", selected_player_character, selected_bot_character);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 242, "bot_instance_init: entry selected_player=%d selected_bot=%d", selected_player_character, selected_bot_character);
     runtime_log("bot_instance_init: entry selected_player=%d selected_bot=%d", selected_player_character, selected_bot_character);
     
     bot_character_assets_t *assets;
@@ -1654,7 +1655,8 @@ void bot_instance_init(bot_instance_t *instance,
     bot_loaded = true;
 
     //LOG
-    jo_printf(0, 243, "bot_instance_init: exit bot_character=%d loaded=%d", bot_character, bot_loaded);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 243, "bot_instance_init: exit bot_character=%d loaded=%d", bot_character, bot_loaded);
     runtime_log("bot_instance_init: exit bot_character=%d loaded=%d", bot_character, bot_loaded);
 }
 
@@ -2157,7 +2159,8 @@ void bot_init_multi(int selected_player_character, const int selected_bot_charac
     }
 
     //LOG
-    jo_printf(0, 241, "bot_init_multi: done count=%d\n", default_bot_active_count);
+    if (runtime_log_is_enabled())
+        jo_printf(0, 241, "bot_init_multi: done count=%d\n", default_bot_active_count);
 }
 
 void bot_init_versus(int selected_player_character,
@@ -2286,13 +2289,16 @@ bool bot_is_defeated(void)
 
 void bot_debug_draw_hitbox(void)
 {
-    jo_printf(26, 14, "HITBOX DBG");
-    jo_printf(26, 15, "DX:%3d DY:%3d", dbg_center_dx, dbg_center_dy);
-    jo_printf(26, 16, "P1:%3d/%3d %s", dbg_center_dx, dbg_hreach_p1, dbg_hit_p1 ? "HIT" : "---");
-    jo_printf(26, 17, "P2:%3d/%3d %s", dbg_center_dx, dbg_hreach_punch2, dbg_hit_punch2 ? "HIT" : "---");
-    jo_printf(26, 18, "K1:%3d/%3d %s", dbg_center_dx, dbg_hreach_k1, dbg_hit_k1 ? "HIT" : "---");
-    jo_printf(26, 19, "K2:%3d/%3d %s", dbg_center_dx, dbg_hreach_k2, dbg_hit_k2 ? "HIT" : "---");
-    jo_printf(26, 20, "V :%3d/%3d", dbg_center_dy, dbg_vreach);
+    if (runtime_log_is_enabled())
+    {
+        jo_printf(26, 14, "HITBOX DBG");
+        jo_printf(26, 15, "DX:%3d DY:%3d", dbg_center_dx, dbg_center_dy);
+        jo_printf(26, 16, "P1:%3d/%3d %s", dbg_center_dx, dbg_hreach_p1, dbg_hit_p1 ? "HIT" : "---");
+        jo_printf(26, 17, "P2:%3d/%3d %s", dbg_center_dx, dbg_hreach_punch2, dbg_hit_punch2 ? "HIT" : "---");
+        jo_printf(26, 18, "K1:%3d/%3d %s", dbg_center_dx, dbg_hreach_k1, dbg_hit_k1 ? "HIT" : "---");
+        jo_printf(26, 19, "K2:%3d/%3d %s", dbg_center_dx, dbg_hreach_k2, dbg_hit_k2 ? "HIT" : "---");
+        jo_printf(26, 20, "V :%3d/%3d", dbg_center_dy, dbg_vreach);
+    }
 }
 
 bool bot_debug_get_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot)

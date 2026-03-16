@@ -30,4 +30,7 @@ bool game_loop_debug_get_player2_hitbox_snapshot(debug_hitbox_snapshot_t *snapsh
 int game_loop_get_map_pos_x(void);
 int game_loop_get_map_pos_y(void);
 
+/* External helpers */
+void game_loop_mark_ui_dirty(void);
+
 #endif

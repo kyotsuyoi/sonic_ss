@@ -123,6 +123,11 @@ runtime_log_mode_t runtime_log_get_mode(void)
     return g_runtime_log_mode;
 }
 
+bool runtime_log_is_enabled(void)
+{
+    return g_runtime_log_mode != RuntimeLogModeOff;
+}
+
 void runtime_log_set_sprite_page(int page)
 {
     if (page < 0)

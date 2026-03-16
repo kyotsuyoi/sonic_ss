@@ -12,11 +12,16 @@ typedef enum
     WorldBackgroundMenu
 } world_background_mode_t;
 
-static world_background_mode_t current_mode = WorldBackgroundGameplay;
+static world_background_mode_t current_mode = (world_background_mode_t)-1;
 
 void world_background_load(void)
 {
     world_background_set_gameplay();
+}
+
+void world_background_invalidate(void)
+{
+    current_mode = (world_background_mode_t)-1;
 }
 
 void world_background_set_gameplay(void)
@@ -33,10 +38,6 @@ void world_background_set_gameplay(void)
         jo_set_background_sprite(&bg_gameplay_image, 0, 0);
         current_mode = WorldBackgroundGameplay;
     }
-    else
-    {
-        jo_set_background_sprite(&bg_gameplay_image, 0, 0);
-    }
 }
 
 void world_background_set_menu(void)
@@ -52,10 +53,6 @@ void world_background_set_menu(void)
     {
         jo_set_background_sprite(&bg_menu_image, 0, 0);
         current_mode = WorldBackgroundMenu;
-    }
-    else
-    {
-        jo_set_background_sprite(&bg_menu_image, 0, 0);
     }
 }
 
