@@ -49,14 +49,13 @@ Checklist:
 - NOK - Allow the camera to follow player 1 or player 2.
 - OK - Debug menu to adjust stun, knockback, pulse, and damage in-game.
 - - OK - Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
-- - OK - Danos dados não aparece corretamente q.
 - NOK - Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
 - NOK - Sprite packing: grouping multiple sprites into the same block to reduce overhead.
 - NOK - Bot strategy.
 - NOK - Equalize Shadow’s class.
 - NOK - Knuckles’ charged attack should allow up to 3 hits before being canceled.
 - NOK - Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
-- NOK - Assign characters to specific locations on the map using the Map Editor (only P1/P2 is currently working).
+- OK - Assign characters to specific locations on the map using the Map Editor (only P1/P2 is currently working).
 - OK - Character classes are duplicated in class and character.
 - NOK - Check why debug_battle_add_damage doesn’t get called for all IDs.
 - NOK - Create spectator mode to watch bots fight.

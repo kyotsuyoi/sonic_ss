@@ -41,6 +41,9 @@ void bot_init_versus(int selected_player_character,
                      int player_world_y);
 void bot_unload(void);
 void bot_invalidate_asset_cache(void);
+
+void bot_reposition_from_map_start(void);
+
 void bot_update(character_t *player,
                 bool *player_defeated,
                 jo_sidescroller_physics_params *player_physics,

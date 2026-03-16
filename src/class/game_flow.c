@@ -481,6 +481,7 @@ void game_flow_process_loading(void *user_data)
 
     /* The map is now fully parsed, so re-apply the start marker position. */
     reset_fight(ctx->map_pos_x, ctx->map_pos_y, ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_character]);
+    bot_reposition_from_map_start();
 
     loading_pending = false;
     loading_assets_ready = false;
@@ -609,6 +610,8 @@ void game_flow_reset_fight(void *user_data)
     world_physics_init_character(ctx->physics);
 
     reset_fight(ctx->map_pos_x, ctx->map_pos_y, player1_group);
+    bot_reposition_from_map_start();
+
     if (ctx->ui_state->menu_multiplayer_versus)
     {
         /* Position player2 using its configured start marker (group-specific). */

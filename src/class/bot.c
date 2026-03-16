@@ -8,6 +8,7 @@
 #include "damage_fx.h"
 #include "world_collision.h"
 #include "world_physics.h"
+#include "world_map.h"
 #include "character_registry.h"
 #include "character/tails.h"
 #include "runtime_log.h"
@@ -1632,7 +1633,7 @@ void bot_instance_init(bot_instance_t *instance,
 
     bot = (character_t){0};
     bot_jump_sfx = *game_audio_get_jump_sfx();
-    bot_world_x = player_world_x + 96;
+    bot_world_x = player_world_x;
     bot_world_y = player_world_y;
     bot.x = bot_screen_x(0);
     bot.y = bot_screen_y(0);
@@ -2172,12 +2173,25 @@ void bot_init_multi(int selected_player_character, const int selected_bot_charac
     {
         int char_index = selected_bot_characters[index % bot_count];
         int group = selected_bot_groups[index % bot_count];
+
+        /* Use map-defined bot start positions when available. */
+        int bot_start_world_x = world_map_get_bot_start_x(index, group);
+        int bot_start_world_y = world_map_get_bot_start_y(index, group);
+        if (bot_start_world_x == WORLD_CAMERA_TARGET_X && bot_start_world_y == WORLD_CAMERA_TARGET_Y)
+        {
+            /* Fallback: if map doesn't define a bot marker, fall back to the player group start position (so bots spawn near the selected group). */
+            int base_x = world_map_get_player_start_x(0, group);
+            int base_y = world_map_get_player_start_y(0, group);
+            bot_start_world_x = base_x + (spacing * index);
+            bot_start_world_y = base_y;
+        }
+
         bot_instance_init(&default_bot_instances[index],
                           selected_player_character,
                           char_index,
                           group,
-                          player_world_x + (spacing * index),
-                          player_world_y);
+                          bot_start_world_x,
+                          bot_start_world_y);
 
         default_bot_instances[index].bot_is_ally = (group != 0 && group == selected_player_group);
     }
@@ -2185,6 +2199,32 @@ void bot_init_multi(int selected_player_character, const int selected_bot_charac
     //LOG
     if (runtime_log_is_enabled())
         jo_printf(0, 241, "bot_init_multi: done count=%d\n", default_bot_active_count);
+}
+
+void bot_reposition_from_map_start(void)
+{
+    int spacing = 64;
+    for (int index = 0; index < default_bot_active_count; ++index)
+    {
+        bot_use_instance(&default_bot_instances[index]);
+        int group = bot.group;
+
+        int bot_start_world_x = world_map_get_bot_start_x(index, group);
+        int bot_start_world_y = world_map_get_bot_start_y(index, group);
+        if (bot_start_world_x == WORLD_CAMERA_TARGET_X && bot_start_world_y == WORLD_CAMERA_TARGET_Y)
+        {
+            /* Fallback: if map doesn't define a bot marker, fall back to the player group start position. */
+            int base_x = world_map_get_player_start_x(0, group);
+            int base_y = world_map_get_player_start_y(0, group);
+            bot_start_world_x = base_x + (spacing * index);
+            bot_start_world_y = base_y;
+        }
+
+        bot_world_x = (float)bot_start_world_x;
+        bot_world_y = (float)bot_start_world_y;
+        bot.x = bot_screen_x(0);
+        bot.y = bot_screen_y(0);
+    }
 }
 
 void bot_init_versus(int selected_player_character,

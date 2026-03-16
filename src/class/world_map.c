@@ -65,6 +65,22 @@ static int world_map_player_start_y[2][3] =
     {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y}
 };
 
+/* Bot start position marker (from `STB10.TGA`/`STB11.TGA`/`STB12.TGA` for Bot1, `STB20.TGA`/`STB21.TGA`/`STB22.TGA` for Bot2, etc.) */
+static int world_map_bot_start_x[4][3] =
+{
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X},
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X},
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X},
+    {WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X, WORLD_CAMERA_TARGET_X}
+};
+static int world_map_bot_start_y[4][3] =
+{
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y},
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y},
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y},
+    {WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y, WORLD_CAMERA_TARGET_Y}
+};
+
 /* Track the vertical extent of the map so characters falling off the bottom can be teleported back onto the last tile. */
 static int world_map_max_tile_bottom = 0;
 static int world_map_max_tile_top = 0;
@@ -150,6 +166,15 @@ static void world_map_reset_tiles(void)
         {
             world_map_player_start_x[player][group] = WORLD_CAMERA_TARGET_X;
             world_map_player_start_y[player][group] = WORLD_CAMERA_TARGET_Y;
+        }
+    }
+
+    for (int bot = 0; bot < 4; ++bot)
+    {
+        for (int group = 0; group < 3; ++group)
+        {
+            world_map_bot_start_x[bot][group] = WORLD_CAMERA_TARGET_X;
+            world_map_bot_start_y[bot][group] = WORLD_CAMERA_TARGET_Y;
         }
     }
     world_map_max_tile_bottom = 0;
@@ -402,6 +427,28 @@ static bool world_map_parse_entries_from_stream(const char *stream)
                             world_map_player_start_x[player_index][group_id],
                             world_map_player_start_y[player_index][group_id],
                             player_index + 1,
+                            group_id);
+            }
+            /* Skip remaining fields on this line */
+            while (*stream && *stream != '\n')
+                ++stream;
+            continue;
+        }
+
+        /* Bot start position marker format: STB<bot#><group>.TGA where bot# is 1-4 and group is 0-2 */
+        if (strncmp(sprite, "STB", 3) == 0 && strlen(sprite) >= 6)
+        {
+            int bot_index = (sprite[3] - '0') - 1; /* '1' -> 0 */
+            int group_id = sprite[4] - '0';
+            if (bot_index >= 0 && bot_index < 4 && group_id >= 0 && group_id < 3)
+            {
+                world_map_bot_start_x[bot_index][group_id] = jo_tools_atoi(x_buf);
+                world_map_bot_start_y[bot_index][group_id] = jo_tools_atoi(y_buf);
+                runtime_log("world_map: start marker sprite %s at %d,%d (bot %d group %d)",
+                            sprite,
+                            world_map_bot_start_x[bot_index][group_id],
+                            world_map_bot_start_y[bot_index][group_id],
+                            bot_index + 1,
                             group_id);
             }
             /* Skip remaining fields on this line */
@@ -813,6 +860,26 @@ int world_map_get_player_start_y(int player_index, int group)
     player_index = (player_index < 0) ? 0 : (player_index > 1 ? 1 : player_index);
     group = world_map_sanitize_group(group);
     return world_map_player_start_y[player_index][group];
+}
+
+int world_map_get_bot_start_x(int bot_index, int group)
+{
+    if (bot_index < 0)
+        bot_index = 0;
+    if (bot_index > 3)
+        bot_index = 3;
+    group = world_map_sanitize_group(group);
+    return world_map_bot_start_x[bot_index][group];
+}
+
+int world_map_get_bot_start_y(int bot_index, int group)
+{
+    if (bot_index < 0)
+        bot_index = 0;
+    if (bot_index > 3)
+        bot_index = 3;
+    group = world_map_sanitize_group(group);
+    return world_map_bot_start_y[bot_index][group];
 }
 
 int world_map_get_max_tile_bottom(void)

@@ -41,7 +41,7 @@ static unsigned int g_fps_value = 0;
 static ram_cart_status_t ram_cart_status = RamCartStatusNotDetected;
 static int sprite_anim_bootstrap_id = -1;
 
-#define GAME_VERSION_TEXT "ver. 0.1.27a"
+#define GAME_VERSION_TEXT "ver. 0.1.32a"
 #define GAME_VERSION_TEXT_X 28
 #define GAME_VERSION_TEXT_Y 28
 #define RAM_CART_TEXT_X 7
