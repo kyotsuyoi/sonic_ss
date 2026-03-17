@@ -59,9 +59,9 @@ Available characters:
 
 - NOK - Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
         Sprite packing: grouping multiple sprites into the same block to reduce overhead.
-- - NOK (Working) - Sonic sprites.
+- - NOK (Working 95%) - Sonic sprites.
 - - NOK - Tails sprites.
-- - NOK (Working) - Amy sprites.
+- - NOK (Working 70%) - Amy sprites.
 - - NOK - Knuckles sprites.
 - - NOK - Shadow sprites.
 - - NOK - All characters - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
