@@ -180,6 +180,26 @@ bool vram_cache_is_pack_present(const char *pack_name)
     return false;
 }
 
+void *vram_cache_get_pack_data(const char *pack_name)
+{
+    for (int i = 0; i < packs_count; ++i) {
+        if (strcmp(packs[i].pack_name, pack_name) == 0) {
+            return packs[i].data;
+        }
+    }
+    return NULL;
+}
+
+size_t vram_cache_get_pack_size(const char *pack_name)
+{
+    for (int i = 0; i < packs_count; ++i) {
+        if (strcmp(packs[i].pack_name, pack_name) == 0) {
+            return packs[i].size;
+        }
+    }
+    return 0;
+}
+
 void vram_cache_schedule_upload_all(void)
 {
     for (int i = 0; i < packs_count; ++i) packs[i].scheduled = true;

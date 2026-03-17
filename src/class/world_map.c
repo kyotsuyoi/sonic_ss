@@ -293,15 +293,43 @@ static bool world_map_probe_asset_dimensions(world_map_asset_t *asset)
     jo_img image;
     int group_index;
 
+    runtime_log("world_map: probing asset '%s'", asset->filename);
+
     contents = jo_fs_read_file_in_dir(asset->filename, "BLK", JO_NULL);
     if (contents == JO_NULL)
-        return false;
+    {
+        runtime_log("world_map: missing asset '%s' (skipping)", asset->filename);
+        // Avoid stalling the load if a tile asset is missing.
+        asset->width = CHARACTER_WIDTH;
+        asset->height = CHARACTER_HEIGHT;
+        group_index = world_map_find_or_add_group(asset->width, asset->height);
+        if (group_index < 0)
+        {
+            runtime_log("world_map: too many unique tile sizes, falling back to group 0");
+            group_index = 0;
+        }
+        asset->group_index = group_index;
+        ++world_groups[group_index].asset_count;
+        return true;
+    }
 
     image.data = JO_NULL;
     if (jo_tga_loader_from_stream(&image, contents, JO_COLOR_Red) != JO_TGA_OK)
     {
+        runtime_log("world_map: failed to decode '%s' (skipping)", asset->filename);
         jo_free(contents);
-        return false;
+
+        asset->width = CHARACTER_WIDTH;
+        asset->height = CHARACTER_HEIGHT;
+        group_index = world_map_find_or_add_group(asset->width, asset->height);
+        if (group_index < 0)
+        {
+            runtime_log("world_map: too many unique tile sizes, falling back to group 0");
+            group_index = 0;
+        }
+        asset->group_index = group_index;
+        ++world_groups[group_index].asset_count;
+        return true;
     }
 
     asset->width = image.width;
@@ -311,7 +339,10 @@ static bool world_map_probe_asset_dimensions(world_map_asset_t *asset)
 
     group_index = world_map_find_or_add_group(asset->width, asset->height);
     if (group_index < 0)
-        return false;
+    {
+        runtime_log("world_map: too many unique tile sizes, falling back to group 0");
+        group_index = 0;
+    }
 
     asset->group_index = group_index;
     ++world_groups[group_index].asset_count;

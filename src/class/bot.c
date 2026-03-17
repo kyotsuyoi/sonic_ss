@@ -1,4 +1,5 @@
 #include <jo/jo.h>
+#include <string.h>
 #include "bot.h"
 #include "player.h"
 #include "game_constants.h"
@@ -16,6 +17,13 @@
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
 #define DEFEATED_SPRITE_HEIGHT 32
+
+// Amy WRAM sheet support
+static bool bot_amy_sheet_ready = false;
+static jo_img bot_amy_sheet = {0};
+
+static bool bot_sonic_sheet_ready = false;
+static jo_img bot_sonic_sheet = {0};
 
 /* Combat tuning */
 #define BOT_ENGAGE_RANGE 9
@@ -82,6 +90,11 @@ struct bot_instance
     int bot_spin_sprite_id;
     int bot_damage_sprite_id;
     int bot_defeated_sprite_id;
+
+    // When using the Amy WRAM sheet (AMY_FUL.TGA), each bot instance gets its own VRAM sprite
+    // so multiple Amy bots can animate independently.
+    int bot_wram_sheet_sprite_id;
+
     int bot_tail_base_id;
     int bot_tail_frame;
     int bot_tail_timer;
@@ -428,6 +441,7 @@ static void bot_reset_asset_ids(void)
     bot_spin_asset_sprite_id = -1;
     bot_damage_sprite_id = -1;
     bot_defeated_sprite_id = -1;
+    ctx->bot_wram_sheet_sprite_id = -1;
     bot_tail_base_id = -1;
     bot_tail_frame = 0;
     bot_tail_timer = 0;
@@ -551,6 +565,181 @@ static bool bot_validate_anim_set(void)
         && bot_punch_anim_id >= 0
         && bot_kick_anim_id >= 0;
 }
+
+static void bot_init_amy_sheet(void)
+{
+    if (bot_amy_sheet_ready)
+        return;
+
+    char *sheet_data = jo_fs_read_file_in_dir("AMY_FUL.TGA", SPRITE_DIR, JO_NULL);
+    if (sheet_data == JO_NULL)
+        return;
+
+    if (jo_tga_loader_from_stream(&bot_amy_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
+        bot_amy_sheet_ready = true;
+    jo_free(sheet_data);
+}
+
+static void bot_init_sonic_sheet(void)
+{
+    if (bot_sonic_sheet_ready)
+        return;
+
+    char *sheet_data = jo_fs_read_file_in_dir("SNC_FUL.TGA", SPRITE_DIR, JO_NULL);
+    if (sheet_data == JO_NULL)
+        return;
+
+    if (jo_tga_loader_from_stream(&bot_sonic_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
+        bot_sonic_sheet_ready = true;
+    jo_free(sheet_data);
+}
+
+static int bot_try_add_tga_tileset(const char *filename, const jo_tile *tiles, int count)
+{
+    char *data = jo_fs_read_file_in_dir(filename, SPRITE_DIR, JO_NULL);
+    if (data == JO_NULL)
+        return -1;
+    jo_free(data);
+    return jo_sprite_add_tga_tileset(SPRITE_DIR, filename, JO_COLOR_Green, tiles, count);
+}
+
+static int bot_try_add_tga(const char *filename)
+{
+    char *data = jo_fs_read_file_in_dir(filename, SPRITE_DIR, JO_NULL);
+    if (data == JO_NULL)
+        return -1;
+    jo_free(data);
+    return jo_sprite_add_tga(SPRITE_DIR, filename, JO_COLOR_Green);
+}
+
+static int bot_create_blank_sprite(void)
+{
+    jo_img blank;
+    blank.width = CHARACTER_WIDTH;
+    blank.height = CHARACTER_HEIGHT;
+    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+    if (blank.data == JO_NULL)
+        return -1;
+
+    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
+        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
+
+    int id = jo_sprite_add(&blank);
+    jo_free_img(&blank);
+    return id;
+}
+
+static void bot_copy_sheet_frame_to_sprite(const jo_img *sheet, int sprite_id, int frame_x, int frame_y)
+{
+    if (sheet == JO_NULL || sheet->data == JO_NULL || sprite_id < 0)
+        return;
+
+    static jo_img tmp = {0};
+    if (tmp.data == JO_NULL)
+    {
+        tmp.width = CHARACTER_WIDTH;
+        tmp.height = CHARACTER_HEIGHT;
+        tmp.data = jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+        if (tmp.data == JO_NULL)
+            return;
+    }
+
+    unsigned short *dst = (unsigned short *)tmp.data;
+    unsigned short *src = (unsigned short *)sheet->data;
+    int sheet_width = sheet->width;
+
+    for (int y = 0; y < CHARACTER_HEIGHT; ++y)
+    {
+        unsigned short *src_row = src + (frame_y + y) * sheet_width + frame_x;
+        unsigned short *dst_row = dst + y * CHARACTER_WIDTH;
+        memcpy(dst_row, src_row, CHARACTER_WIDTH * sizeof(unsigned short));
+    }
+
+    jo_sprite_replace(&tmp, sprite_id);
+}
+
+#undef bot
+#undef bot_punch_anim_id
+#undef bot_kick_anim_id
+#undef bot_walking_anim_id
+#undef bot_running1_anim_id
+#undef bot_running2_anim_id
+#undef bot_stand_anim_id
+
+static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img *sheet, bool sheet_ready)
+{
+    if (!sheet_ready || instance == JO_NULL || instance->bot_wram_sheet_sprite_id < 0)
+        return;
+
+    character_t *bot_ref = &instance->bot;
+
+    int row = 0;
+    int col = 0;
+
+    if (bot_ref->spin)
+    {
+        row = 0;
+        col = 5; // assumed spin frame in the sheet (row 0, col 5)
+    }
+    else if (bot_ref->life <= 0)
+    {
+        return; // defeated uses separate sprite
+    }
+    else if (bot_ref->stun_timer > 0)
+    {
+        row = 0;
+        col = 4; // assumed damage frame in the sheet (row 0, col 4)
+    }
+    else if (bot_ref->punch || bot_ref->punch2)
+    {
+        row = 4;
+        col = jo_get_sprite_anim_frame(instance->bot_punch_anim_id);
+    }
+    else if (bot_ref->kick || bot_ref->kick2)
+    {
+        row = 5;
+        col = jo_get_sprite_anim_frame(instance->bot_kick_anim_id);
+    }
+    else if (bot_ref->jump)
+    {
+        row = 0;
+        col = 3; // assumed jump frame in the sheet (row 0, col 3)
+    }
+    else
+    {
+        if (bot_ref->walk && bot_ref->run == 0)
+        {
+            row = 1;
+            col = jo_get_sprite_anim_frame(instance->bot_walking_anim_id);
+        }
+        else if (bot_ref->walk && bot_ref->run == 1)
+        {
+            row = 2;
+            col = jo_get_sprite_anim_frame(instance->bot_running1_anim_id);
+        }
+        else if (bot_ref->walk && bot_ref->run == 2)
+        {
+            row = 3;
+            col = jo_get_sprite_anim_frame(instance->bot_running2_anim_id);
+        }
+        else
+        {
+            row = 0;
+            col = jo_get_sprite_anim_frame(instance->bot_stand_anim_id);
+        }
+    }
+
+    // Copy from the selected WRAM sheet into the per-bot VRAM sprite
+    bot_copy_sheet_frame_to_sprite(sheet, instance->bot_wram_sheet_sprite_id, col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
+}
+
+#define bot_punch_anim_id (ctx->bot_punch_anim_id)
+#define bot_kick_anim_id (ctx->bot_kick_anim_id)
+#define bot_walking_anim_id (ctx->bot_walking_anim_id)
+#define bot_running1_anim_id (ctx->bot_running1_anim_id)
+#define bot_running2_anim_id (ctx->bot_running2_anim_id)
+#define bot_stand_anim_id (ctx->bot_stand_anim_id)
+#define bot (ctx->bot)
 
 static void bot_rollback_anim_set(void)
 {
@@ -962,6 +1151,31 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
 
     if (character == BotCharacterSonic)
     {
+        bot_init_sonic_sheet();
+        if (bot_sonic_sheet_ready)
+        {
+            // Use WRAM sheet for Sonic bot (mirrors player behavior).
+            assets->walking_base_id = bot_create_blank_sprite();
+            assets->running1_base_id = bot_create_blank_sprite();
+            assets->running2_base_id = bot_create_blank_sprite();
+            assets->stand_base_id = bot_create_blank_sprite();
+            assets->jump_sprite_id = bot_create_blank_sprite();
+            assets->spin_sprite_id = bot_create_blank_sprite();
+            assets->damage_sprite_id = bot_create_blank_sprite();
+            assets->defeated_sprite_id = -1; // leave defeated as file-based if needed
+            assets->punch_base_id = bot_create_blank_sprite();
+            assets->kick_base_id = bot_create_blank_sprite();
+
+            assets->move_count = move_count;
+            assets->stand_count = stand_count;
+            assets->punch_count = punch_count;
+            assets->kick_count = kick_count;
+            assets->punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
+            assets->kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
+            assets->loaded = true;
+            return;
+        }
+
         wlk = "SNC_WLK.TGA";
         run1 = "SNC_RUN1.TGA";
         run2 = "SNC_RUN2.TGA";
@@ -979,6 +1193,31 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     }
     else if (character == BotCharacterAmy)
     {
+        bot_init_amy_sheet();
+        if (bot_amy_sheet_ready)
+        {
+            // Build dummy base sprites so animations can tick, but rendering uses the WRAM sheet.
+            assets->walking_base_id = bot_create_blank_sprite();
+            assets->running1_base_id = bot_create_blank_sprite();
+            assets->running2_base_id = bot_create_blank_sprite();
+            assets->stand_base_id = bot_create_blank_sprite();
+            assets->jump_sprite_id = bot_create_blank_sprite();
+            assets->spin_sprite_id = bot_create_blank_sprite();
+            assets->damage_sprite_id = bot_create_blank_sprite();
+            assets->defeated_sprite_id = -1;
+            assets->punch_base_id = bot_create_blank_sprite();
+            assets->kick_base_id = bot_create_blank_sprite();
+
+            assets->move_count = move_count;
+            assets->stand_count = stand_count;
+            assets->punch_count = punch_count;
+            assets->kick_count = kick_count;
+            assets->punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
+            assets->kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
+            assets->loaded = true;
+            return;
+        }
+
         wlk = "AMY_WLK.TGA";
         run1 = "AMY_RUN1.TGA";
         run2 = "AMY_RUN2.TGA";
@@ -1046,23 +1285,23 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         kick_tiles = KickTiles1;
     }
 
-    assets->walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, wlk, JO_COLOR_Green, move_tiles, move_count);
-    assets->running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, run1, JO_COLOR_Green, move_tiles, move_count);
+    assets->walking_base_id = bot_try_add_tga_tileset(wlk, move_tiles, move_count);
+    assets->running1_base_id = bot_try_add_tga_tileset(run1, move_tiles, move_count);
 
     if (character == BotCharacterTails || character == BotCharacterKnuckles)
         assets->running2_base_id = assets->running1_base_id;
     else
-        assets->running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, run2, JO_COLOR_Green, move_tiles, move_count);
+        assets->running2_base_id = bot_try_add_tga_tileset(run2, move_tiles, move_count);
 
-    assets->stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, std, JO_COLOR_Green, stand_tiles, stand_count);
+    assets->stand_base_id = bot_try_add_tga_tileset(std, stand_tiles, stand_count);
 
-    assets->jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, jmp, JO_COLOR_Green);
-    assets->spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, spn, JO_COLOR_Green);
-    assets->damage_sprite_id = jo_sprite_add_tga(SPRITE_DIR, dmg, JO_COLOR_Green);
-    assets->defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, dft, JO_COLOR_Green, BotDefeatedTile, JO_TILE_COUNT(BotDefeatedTile));
+    assets->jump_sprite_id = bot_try_add_tga(jmp);
+    assets->spin_sprite_id = bot_try_add_tga(spn);
+    assets->damage_sprite_id = bot_try_add_tga(dmg);
+    assets->defeated_sprite_id = bot_try_add_tga_tileset(dft, BotDefeatedTile, JO_TILE_COUNT(BotDefeatedTile));
 
-    assets->punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, pnc, JO_COLOR_Green, punch_tiles, punch_count);
-    assets->kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, kck, JO_COLOR_Green, kick_tiles, kick_count);
+    assets->punch_base_id = bot_try_add_tga_tileset(pnc, punch_tiles, punch_count);
+    assets->kick_base_id = bot_try_add_tga_tileset(kck, kick_tiles, kick_count);
 
     assets->move_count = move_count;
     assets->stand_count = stand_count;
@@ -1075,6 +1314,23 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
         assets->tail_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_TLS.TGA", JO_COLOR_Green, TailsTailTiles, JO_TILE_COUNT(TailsTailTiles));
     else
         assets->tail_base_id = -1;
+
+    // Ensure all required assets were loaded successfully.
+    if (assets->walking_base_id < 0 ||
+        assets->running1_base_id < 0 ||
+        assets->running2_base_id < 0 ||
+        assets->stand_base_id < 0 ||
+        assets->punch_base_id < 0 ||
+        assets->kick_base_id < 0 ||
+        assets->jump_sprite_id < 0 ||
+        assets->spin_sprite_id < 0 ||
+        assets->damage_sprite_id < 0 ||
+        assets->defeated_sprite_id < 0)
+    {
+        // Asset load incomplete (missing files); clear cache so we can retry later.
+        bot_reset_cached_assets(assets);
+        return;
+    }
 
     assets->loaded = true;
 }
@@ -1628,6 +1884,14 @@ void bot_instance_init(bot_instance_t *instance,
             bot_uses_shared_player_sprites = false;
             return;
         }
+
+        // If we have an Amy WRAM sprite sheet, allocate an instance-level VRAM sprite
+        // so each bot can animate independently.
+if (bot_character == BotCharacterAmy && bot_amy_sheet_ready && instance->bot_wram_sheet_sprite_id < 0)
+        instance->bot_wram_sheet_sprite_id = bot_create_blank_sprite();
+    if (bot_character == BotCharacterSonic && bot_sonic_sheet_ready && instance->bot_wram_sheet_sprite_id < 0)
+        instance->bot_wram_sheet_sprite_id = bot_create_blank_sprite();
+
         bot_uses_shared_player_sprites = false;
     }
 
@@ -1928,6 +2192,22 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
 
     bot_use_instance(instance);
 
+    // Ensure WRAM sprite sheets are loaded and per-bot VRAM sprite is allocated.
+    // This guards against scenarios where the sheet becomes available after the bot
+    // was initially loaded (e.g., player sheet load happens later).
+    if (bot_character == BotCharacterAmy)
+    {
+        bot_init_amy_sheet();
+        if (bot_amy_sheet_ready && ctx->bot_wram_sheet_sprite_id < 0)
+            ctx->bot_wram_sheet_sprite_id = bot_create_blank_sprite();
+    }
+    else if (bot_character == BotCharacterSonic)
+    {
+        bot_init_sonic_sheet();
+        if (bot_sonic_sheet_ready && ctx->bot_wram_sheet_sprite_id < 0)
+            ctx->bot_wram_sheet_sprite_id = bot_create_blank_sprite();
+    }
+
     if (!bot_loaded)
         return;
 
@@ -1941,6 +2221,42 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         jo_sprite_enable_horizontal_flip();
 
     bot_draw_tail();
+
+    if (bot_character == BotCharacterAmy && bot_amy_sheet_ready && ctx->bot_wram_sheet_sprite_id >= 0)
+    {
+        if ((bot_defeated || bot.life <= 0) && bot_defeated_sprite_id >= 0)
+        {
+            bot_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(bot_defeated_sprite_id, bot.x, bot.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+        }
+        else
+        {
+            bot_wram_render_current_frame(instance, &bot_amy_sheet, bot_amy_sheet_ready);
+            jo_sprite_draw3D2(ctx->bot_wram_sheet_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+        }
+
+        if (bot.flip)
+            jo_sprite_disable_horizontal_flip();
+        return;
+    }
+
+    if (bot_character == BotCharacterSonic && bot_sonic_sheet_ready && ctx->bot_wram_sheet_sprite_id >= 0)
+    {
+        if ((bot_defeated || bot.life <= 0) && bot_defeated_sprite_id >= 0)
+        {
+            bot_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(bot_defeated_sprite_id, bot.x, bot.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+        }
+        else
+        {
+            bot_wram_render_current_frame(instance, &bot_sonic_sheet, bot_sonic_sheet_ready);
+            jo_sprite_draw3D2(ctx->bot_wram_sheet_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
+        }
+
+        if (bot.flip)
+            jo_sprite_disable_horizontal_flip();
+        return;
+    }
 
     /* If bot is defeated, immediately draw defeated sprite (skip charged kick special-case). */
     if ((bot_defeated || bot.life <= 0) && bot_defeated_sprite_id >= 0)

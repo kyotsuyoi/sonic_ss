@@ -2,6 +2,7 @@
 #define VRAM_CACHE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct
@@ -56,6 +57,11 @@ void vram_cache_prefetch_region(int center_tile_x, int center_tile_y, int radius
 // Helpers to query pack loading state (useful for deferred loaders).
 bool vram_cache_is_pack_loading(const char *pack_name);
 bool vram_cache_is_pack_present(const char *pack_name);
+
+// Access the raw buffer stored in WRAM for a loaded pack.
+// Returns NULL if the pack is not present.
+void *vram_cache_get_pack_data(const char *pack_name);
+size_t vram_cache_get_pack_size(const char *pack_name);
 
 // Dump runtime statistics for vram cache (uploads, hits, misses, evictions)
 void vram_cache_dump_stats(void);

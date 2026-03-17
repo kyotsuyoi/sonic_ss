@@ -1471,6 +1471,9 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->current_game_state == UiGameStateLoading)
     {
+        // Ensure any WRAM->VRAM uploads advance even during loading.
+        vram_cache_do_uploads();
+
         // Avança a carga do mapa (não-bloqueante). world_map_do_load_step
         // fará leituras incrementais via vram_cache e só chamará
         // jo_map_load_from_file quando o pack estiver pronto.
@@ -1515,11 +1518,12 @@ void game_loop_draw(void)
         jo_clear_background(JO_COLOR_Black);
     }
 
-    // Ensure any scheduled WRAM->VRAM uploads are performed before drawing the map.
-    // This ensures tiles in WRAM are uploaded to VRAM before `jo_map_draw` runs.
+    // Ensure any scheduled WRAM->VRAM uploads are performed every frame.
+    // This is required so deferred loads (like SNC_FUL) can complete.
+    vram_cache_do_uploads();
+
     if (g_ctx->ui_state->diag_vram_uploads)
     {
-        vram_cache_do_uploads();
         world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
         jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
 

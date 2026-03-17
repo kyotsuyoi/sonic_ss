@@ -1,4 +1,5 @@
 #include <jo/jo.h>
+#include <string.h>
 #include "sonic.h"
 #include "amy.h"
 #include "player.h"
@@ -30,57 +31,116 @@ static int amy_jump_sprite_id;
 static int amy_damage_sprite_id;
 static int amy_defeated_sprite_id;
 
+// WRAM-backed sprite sheet (AMY_FUL.TGA) for faster VRAM uploads.
+static bool amy_sheet_ready = false;
+static jo_img amy_sheet = {0};
+static int amy_sprite_id = -1;
+
+static const jo_tile AmyStandTiles[] =
+{
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile AmyJumpTile[] =
+{
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile AmyDamageTile[] =
+{
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile AmySpinTile[] =
+{
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
 static const jo_tile AmyWalkingTiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyRunning1Tiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyRunning2Tiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile AmyStandTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyPunchTiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyKickTiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile AmyDefeatedTile[] =
 {
     {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
+
+static int amy_try_add_tga_tileset(const char *filename, const jo_tile *tiles, int count)
+{
+    char *data = jo_fs_read_file_in_dir(filename, SPRITE_DIR, JO_NULL);
+    if (data == JO_NULL)
+        return -1;
+    jo_free(data);
+    return jo_sprite_add_tga_tileset(SPRITE_DIR, filename, JO_COLOR_Green, tiles, count);
+}
+
+static int amy_try_add_tga(const char *filename)
+{
+    char *data = jo_fs_read_file_in_dir(filename, SPRITE_DIR, JO_NULL);
+    if (data == JO_NULL)
+        return -1;
+    jo_free(data);
+    return jo_sprite_add_tga(SPRITE_DIR, filename, JO_COLOR_Green);
+}
 
 static void amy_reset_animation_lists_except(int active_anim_id)
 {
@@ -96,6 +156,142 @@ static void amy_reset_animation_lists_except(int active_anim_id)
         jo_reset_sprite_anim(character_ref.punch_anim_id);
     if (character_ref.kick_anim_id >= 0 && character_ref.kick_anim_id != active_anim_id)
         jo_reset_sprite_anim(character_ref.kick_anim_id);
+}
+
+static void amy_copy_sheet_frame_to_sprite(int frame_x, int frame_y)
+{
+    if (!amy_sheet_ready || amy_sprite_id < 0)
+        return;
+
+    static jo_img tmp = {0};
+    if (tmp.data == JO_NULL)
+    {
+        tmp.width = CHARACTER_WIDTH;
+        tmp.height = CHARACTER_HEIGHT;
+        tmp.data = jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+        if (tmp.data == JO_NULL)
+            return;
+    }
+
+    unsigned short *dst = (unsigned short *)tmp.data;
+    unsigned short *src = (unsigned short *)amy_sheet.data;
+    int sheet_width = amy_sheet.width;
+
+    for (int y = 0; y < CHARACTER_HEIGHT; ++y)
+    {
+        unsigned short *src_row = src + (frame_y + y) * sheet_width + frame_x;
+        unsigned short *dst_row = dst + y * CHARACTER_WIDTH;
+        memcpy(dst_row, src_row, CHARACTER_WIDTH * sizeof(unsigned short));
+    }
+
+    jo_sprite_replace(&tmp, amy_sprite_id);
+}
+
+static int amy_create_blank_animation(int frame_count)
+{
+    jo_img blank;
+    blank.width = CHARACTER_WIDTH;
+    blank.height = CHARACTER_HEIGHT;
+    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+    if (blank.data == JO_NULL)
+        return -1;
+
+    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
+        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
+
+    int base = -1;
+    for (int i = 0; i < frame_count; ++i)
+    {
+        int id = jo_sprite_add(&blank);
+        if (id < 0)
+            break;
+        if (base < 0)
+            base = id;
+    }
+
+    jo_free_img(&blank);
+    return base;
+}
+
+static int amy_create_blank_sprite(void)
+{
+    jo_img blank;
+    blank.width = CHARACTER_WIDTH;
+    blank.height = CHARACTER_HEIGHT;
+    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+    if (blank.data == JO_NULL)
+        return -1;
+
+    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
+        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
+
+    int id = jo_sprite_add(&blank);
+    jo_free_img(&blank);
+    return id;
+}
+
+static void amy_render_current_frame(void)
+{
+    if (!amy_sheet_ready)
+        return;
+
+    int row = 0;
+    int col = 0;
+
+    if (character_ref.spin)
+    {
+        row = 0;
+        col = 5; // assumed spin frame in the sheet (row 0, col 5)
+    }
+    else if (character_ref.life <= 0)
+    {
+        return; // defeated uses a separate sprite sheet
+    }
+    else if (character_ref.stun_timer > 0)
+    {
+        row = 0;
+        col = 4; // assumed damage frame in the sheet (row 0, col 4)
+    }
+    else if (character_ref.punch || character_ref.punch2)
+    {
+        row = 4;
+        col = jo_get_sprite_anim_frame(character_ref.punch_anim_id);
+    }
+    else if (character_ref.kick || character_ref.kick2)
+    {
+        row = 5;
+        col = jo_get_sprite_anim_frame(character_ref.kick_anim_id);
+    }
+    else if (character_ref.jump)
+    {
+        row = 0;
+        col = 3; // assumed jump frame in the sheet (row 0, col 3)
+    }
+    else
+    {
+        if (character_ref.walk && character_ref.run == 0)
+        {
+            row = 1;
+            col = jo_get_sprite_anim_frame(character_ref.walking_anim_id);
+        }
+        else if (character_ref.walk && character_ref.run == 1)
+        {
+            row = 2;
+            col = jo_get_sprite_anim_frame(character_ref.running1_anim_id);
+        }
+        else if (character_ref.walk && character_ref.run == 2)
+        {
+            row = 3;
+            col = jo_get_sprite_anim_frame(character_ref.running2_anim_id);
+        }
+        else
+        {
+            row = 0;
+            col = jo_get_sprite_anim_frame(character_ref.stand_sprite_id);
+        }
+    }
+
+    amy_copy_sheet_frame_to_sprite(col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
 }
 
 void amy_running_animation_handling(void)
@@ -189,49 +385,91 @@ void display_amy(void)
     if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    if (character_ref.spin)
+    if (amy_sheet_ready)
     {
-        amy_reset_animation_lists_except(-1);
-        jo_sprite_draw3D_and_rotate2(character_ref.spin_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
-        if (character_ref.flip)
-            character_ref.angle -= CHARACTER_SPIN_SPEED;
-        else
-            character_ref.angle += CHARACTER_SPIN_SPEED;
-    } else if (character_ref.life <= 0 && amy_defeated_sprite_id >= 0) {
-        amy_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(amy_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
-    } else if (character_ref.stun_timer > 0 && amy_damage_sprite_id >= 0) {
-        amy_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(amy_damage_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.punch || character_ref.punch2){
-        amy_reset_animation_lists_except(character_ref.punch_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.punch_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.kick || character_ref.kick2){
-        amy_reset_animation_lists_except(character_ref.kick_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.kick_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.jump){
-        amy_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(character_ref.jump_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else {
-        if (character_ref.walk && character_ref.run == 0)
+        if (character_ref.spin)
         {
-            amy_reset_animation_lists_except(character_ref.walking_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.walking_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            amy_reset_animation_lists_except(-1);
+            amy_render_current_frame();
+            jo_sprite_draw3D_and_rotate2(amy_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
+            if (character_ref.flip)
+                character_ref.angle -= CHARACTER_SPIN_SPEED;
+            else
+                character_ref.angle += CHARACTER_SPIN_SPEED;
         }
-        else if (character_ref.walk && character_ref.run == 1)
+        else if (character_ref.life <= 0 && amy_defeated_sprite_id >= 0)
         {
-            amy_reset_animation_lists_except(character_ref.running1_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running1_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else if (character_ref.walk && character_ref.run == 2)
-        {
-            amy_reset_animation_lists_except(character_ref.running2_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running2_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            amy_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(amy_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
         }
         else
         {
-            amy_reset_animation_lists_except(character_ref.stand_sprite_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.stand_sprite_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            int active_anim = -1;
+            if (character_ref.punch || character_ref.punch2)
+                active_anim = character_ref.punch_anim_id;
+            else if (character_ref.kick || character_ref.kick2)
+                active_anim = character_ref.kick_anim_id;
+            else if (character_ref.walk && character_ref.run == 0)
+                active_anim = character_ref.walking_anim_id;
+            else if (character_ref.walk && character_ref.run == 1)
+                active_anim = character_ref.running1_anim_id;
+            else if (character_ref.walk && character_ref.run == 2)
+                active_anim = character_ref.running2_anim_id;
+            else
+                active_anim = character_ref.stand_sprite_id;
+
+            amy_reset_animation_lists_except(active_anim);
+            amy_render_current_frame();
+            jo_sprite_draw3D2(amy_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+        }
+    }
+    else
+    {
+        // Fallback behavior (legacy separate TGAs)
+        if (character_ref.spin)
+        {
+            amy_reset_animation_lists_except(-1);
+            jo_sprite_draw3D_and_rotate2(character_ref.spin_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
+            if (character_ref.flip)
+                character_ref.angle -= CHARACTER_SPIN_SPEED;
+            else
+                character_ref.angle += CHARACTER_SPIN_SPEED;
+        } else if (character_ref.life <= 0 && amy_defeated_sprite_id >= 0) {
+            amy_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(amy_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+        } else if (character_ref.stun_timer > 0 && amy_damage_sprite_id >= 0) {
+            amy_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(amy_damage_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+        } else if (character_ref.punch || character_ref.punch2){
+            amy_reset_animation_lists_except(character_ref.punch_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.punch_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+        } else if (character_ref.kick || character_ref.kick2){
+            amy_reset_animation_lists_except(character_ref.kick_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.kick_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+        } else if (character_ref.jump){
+            amy_reset_animation_lists_except(-1);
+            jo_sprite_draw3D2(character_ref.jump_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+        } else {
+            if (character_ref.walk && character_ref.run == 0)
+            {
+                amy_reset_animation_lists_except(character_ref.walking_anim_id);
+                jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.walking_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            }
+            else if (character_ref.walk && character_ref.run == 1)
+            {
+                amy_reset_animation_lists_except(character_ref.running1_anim_id);
+                jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running1_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            }
+            else if (character_ref.walk && character_ref.run == 2)
+            {
+                amy_reset_animation_lists_except(character_ref.running2_anim_id);
+                jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running2_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            }
+            else
+            {
+                amy_reset_animation_lists_except(character_ref.stand_sprite_id);
+                jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.stand_sprite_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
+            }
         }
     }
 
@@ -252,28 +490,44 @@ void load_amy(void)
 {
     if (!amy_loaded)
     {
-amy_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_WLK.TGA", JO_COLOR_Green, AmyWalkingTiles, JO_TILE_COUNT(AmyWalkingTiles));
-        amy_walking_anim_id = jo_create_sprite_anim(amy_walking_base_id, JO_TILE_COUNT(AmyWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        // Try to load the combined WRAM sheet first.
+        if (!amy_sheet_ready)
+        {
+            char *sheet_data = jo_fs_read_file_in_dir("AMY_FUL.TGA", SPRITE_DIR, JO_NULL);
+            if (sheet_data != JO_NULL)
+            {
+                if (jo_tga_loader_from_stream(&amy_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
+                    amy_sheet_ready = true;
+                jo_free(sheet_data);
+            }
+        }
 
-        amy_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_RUN1.TGA", JO_COLOR_Green, AmyRunning1Tiles, JO_TILE_COUNT(AmyRunning1Tiles));
-        amy_running1_anim_id = jo_create_sprite_anim(amy_running1_base_id, JO_TILE_COUNT(AmyRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        // Create a single VRAM sprite that will be updated each frame.
+        if (amy_sprite_id < 0)
+        {
+            jo_img blank;
+            blank.width = CHARACTER_WIDTH;
+            blank.height = CHARACTER_HEIGHT;
+            blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+            if (blank.data != JO_NULL)
+            {
+                for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
+                    ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
 
-        amy_running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_RUN2.TGA", JO_COLOR_Green, AmyRunning2Tiles, JO_TILE_COUNT(AmyRunning2Tiles));
-        amy_running2_anim_id = jo_create_sprite_anim(amy_running2_base_id, JO_TILE_COUNT(AmyRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+                amy_sprite_id = jo_sprite_add(&blank);
+                jo_free_img(&blank);
+            }
+        }
 
-        amy_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_STD.TGA", JO_COLOR_Green, AmyStandTiles, JO_TILE_COUNT(AmyStandTiles));
-        amy_stand_anim_id = jo_create_sprite_anim(amy_stand_base_id, JO_TILE_COUNT(AmyStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
-        amy_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "AMY_SPN.TGA", JO_COLOR_Green);
-        amy_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "AMY_JMP.TGA", JO_COLOR_Green);
-        amy_damage_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "AMY_DMG.TGA", JO_COLOR_Green);
+        // Dummy animation objects (used only for timing / combo logic).
+        amy_stand_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyStandTiles)), JO_TILE_COUNT(AmyStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        amy_walking_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyWalkingTiles)), JO_TILE_COUNT(AmyWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        amy_running1_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyRunning1Tiles)), JO_TILE_COUNT(AmyRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        amy_running2_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyRunning2Tiles)), JO_TILE_COUNT(AmyRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        amy_punch_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyPunchTiles)), JO_TILE_COUNT(AmyPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        amy_kick_anim_id = jo_create_sprite_anim(amy_create_blank_animation(JO_TILE_COUNT(AmyKickTiles)), JO_TILE_COUNT(AmyKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
+      
         amy_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_DFT.TGA", JO_COLOR_Green, AmyDefeatedTile, JO_TILE_COUNT(AmyDefeatedTile));
-
-        amy_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_PNC.TGA", JO_COLOR_Green, AmyPunchTiles, JO_TILE_COUNT(AmyPunchTiles));
-        amy_punch_anim_id = jo_create_sprite_anim(amy_punch_base_id, JO_TILE_COUNT(AmyPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
-        amy_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "AMY_KCK.TGA", JO_COLOR_Green, AmyKickTiles, JO_TILE_COUNT(AmyKickTiles));
-        amy_kick_anim_id = jo_create_sprite_anim(amy_kick_base_id, JO_TILE_COUNT(AmyKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         amy_loaded = true;
     }
@@ -331,5 +585,13 @@ void unload_amy(void)
     amy_jump_sprite_id = -1;
     amy_damage_sprite_id = -1;
     amy_defeated_sprite_id = -1;
+
+    if (amy_sheet_ready)
+    {
+        jo_free_img(&amy_sheet);
+        amy_sheet_ready = false;
+    }
+    amy_sprite_id = -1;
+
     amy_loaded = false;
 }

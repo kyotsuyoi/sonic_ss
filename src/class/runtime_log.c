@@ -54,6 +54,21 @@ static void runtime_log_draw_sprite_stats(void)
     jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 6, JO_COLOR_INDEX_White, "POOL SLOTS: %d/%d", pool_stats.used_slots, pool_stats.total_slots);
     jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 7, JO_COLOR_INDEX_White, "POOL VRAM: %u KB", (unsigned)(pool_stats.reserved_bytes / 1024ULL));
 
+    // Show if the Sonic sheet is loaded into WRAM (used for on-demand VRAM sprite updates)
+    {
+        bool sonic_loading = vram_cache_is_pack_loading("sonic");
+        bool sonic_sheet = vram_cache_is_pack_present("sonic");
+        size_t sonic_size = vram_cache_get_pack_size("sonic");
+        jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 8, JO_COLOR_INDEX_White,
+                             "SNC_FUL: %s %s %uKB",
+                             sonic_sheet ? "loaded" : "missing",
+                             sonic_loading ? "(loading)" : "",
+                             (unsigned)(sonic_size / 1024ULL));
+    }
+
+    // Ensure pool list starts below the SNC_FUL line
+    line = 9;
+
     first_pool_index = g_runtime_log_sprite_page * RUNTIME_LOG_SPRITE_POOLS_PER_PAGE;
     for (pool_offset = 0; pool_offset < RUNTIME_LOG_SPRITE_POOLS_PER_PAGE; ++pool_offset)
     {

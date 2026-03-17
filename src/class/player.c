@@ -554,6 +554,14 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
+	// Sonic uses an 8-frame punch sheet (4 frames punch1 + 4 frames punch2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC)
+	{
+		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
+		player_update_punch_state(controlled_player, 3, 3, 4, 7, true, true, false);
+		return;
+	}
+
 	/* Unified 4-frame profile matching the working Knuckles combo flow. */
 	/* 2 + 2 frames: stage1 frames 0-1, stage2 frames 2-3. Allow combo trigger at frame 1. */
 	player_update_punch_state(controlled_player, 1, 1, 2, 3, true, true, false);
@@ -747,6 +755,14 @@ void player_update_kick_state_for_character(character_t *controlled_player)
 {
 	if (controlled_player == JO_NULL)
 		return;
+
+	// Sonic uses an 8-frame kick sheet (4 frames kick1 + 4 frames kick2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC)
+	{
+		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
+		player_update_kick_state(controlled_player, 3, 3, 4, 7, true, true, false);
+		return;
+	}
 
 	/* Unified 4-frame profile matching the punch combo flow:
 	   stage1 frames 0-1, stage2 frames 2-3 */
