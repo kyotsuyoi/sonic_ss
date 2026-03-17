@@ -296,6 +296,12 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 								  bool c_down,
 								  bool c_hold)
 {
+	// static int debug_input_frames = 60;
+	// if (debug_input_frames > 0 && controlled_player == &player)
+	// {
+	// 	debug_input_frames--;
+	// 	jo_printf(1, 19, "INP L=%d R=%d B=%d A=%d C=%d", left_pressed ? 1 : 0, right_pressed ? 1 : 0, b_down ? 1 : 0, a_down ? 1 : 0, c_down ? 1 : 0);
+	// }
 	if (physics->is_in_air)
 	{
 		if (spin_pressed)
@@ -482,10 +488,21 @@ void player_update_punch_state(character_t *controlled_player,
 				controlled_player->punch2 = true;
 				controlled_player->punch2_requested = false;
 				controlled_player->perform_punch2 = true;
-				/* set total ticks for stage2: two frames each lasting DEFAULT */
-				controlled_player->punch_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
-				/* explicitly show first frame of stage2; do not start anim */
-				jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
+
+				/* For Sonic/Amy, stage2 is a full 4-frame animation (frames 4-7). */
+				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+				{
+					controlled_player->punch_stage2_ticks = 0;
+					jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
+					jo_start_sprite_anim(controlled_player->punch_anim_id);
+				}
+				else
+				{
+					/* set total ticks for stage2: two frames each lasting DEFAULT */
+					controlled_player->punch_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+					/* explicitly show first frame of stage2; do not start anim */
+					jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
+				}
 			}
 			else if (anim_frame >= punch_stage1_last_frame
 				 && (anim_stopped || finish_stage1_on_last_frame))
@@ -503,7 +520,8 @@ void player_update_punch_state(character_t *controlled_player,
 		return;
 
 	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
-	if (controlled_player->punch_stage2_ticks > 0)
+	if (controlled_player->punch_stage2_ticks > 0
+		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY))
 	{
 		int half = DEFAULT_SPRITE_FRAME_DURATION;
 		if (controlled_player->punch_stage2_ticks > half)
@@ -554,8 +572,8 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	// Sonic uses an 8-frame punch sheet (4 frames punch1 + 4 frames punch2)
-	if (controlled_player->character_id == CHARACTER_ID_SONIC)
+	// Sonic and Amy use 8-frame punch sheets (4 frames punch1 + 4 frames punch2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
 	{
 		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
 		player_update_punch_state(controlled_player, 3, 3, 4, 7, true, true, false);
@@ -684,10 +702,21 @@ void player_update_kick_state(character_t *controlled_player,
 				controlled_player->kick2 = true;
 				controlled_player->kick2_requested = false;
 				controlled_player->perform_kick2 = true;
-				/* set total ticks for stage2: two frames each lasting DEFAULT */
-				controlled_player->kick_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
-				/* explicitly show first frame of stage2; do not start anim */
-				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+
+				/* For Sonic/Amy, stage2 is a full 4-frame animation (frames 4-7). */
+				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+				{
+					controlled_player->kick_stage2_ticks = 0;
+					jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+					jo_start_sprite_anim(controlled_player->kick_anim_id);
+				}
+				else
+				{
+					/* set total ticks for stage2: two frames each lasting DEFAULT */
+					controlled_player->kick_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
+					/* explicitly show first frame of stage2; do not start anim */
+					jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+				}
 			}
 			else if (anim_frame >= kick_stage1_last_frame
 				&& (anim_stopped || finish_stage1_on_last_frame))
@@ -705,7 +734,8 @@ void player_update_kick_state(character_t *controlled_player,
 		return;
 
 	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
-	if (controlled_player->kick_stage2_ticks > 0)
+	if (controlled_player->kick_stage2_ticks > 0
+		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY))
 	{
 		int half = DEFAULT_SPRITE_FRAME_DURATION;
 		if (controlled_player->kick_stage2_ticks > half)
@@ -756,8 +786,8 @@ void player_update_kick_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	// Sonic uses an 8-frame kick sheet (4 frames kick1 + 4 frames kick2)
-	if (controlled_player->character_id == CHARACTER_ID_SONIC)
+	// Sonic and Amy use an 8-frame kick sheet (4 frames kick1 + 4 frames kick2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
 	{
 		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
 		player_update_kick_state(controlled_player, 3, 3, 4, 7, true, true, false);

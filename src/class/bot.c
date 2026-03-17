@@ -666,7 +666,7 @@ static void bot_copy_sheet_frame_to_sprite(const jo_img *sheet, int sprite_id, i
 #undef bot_running2_anim_id
 #undef bot_stand_anim_id
 
-static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img *sheet, bool sheet_ready)
+static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img *sheet, bool sheet_ready, int jump_col, int damage_col, int spin_col)
 {
     if (!sheet_ready || instance == JO_NULL || instance->bot_wram_sheet_sprite_id < 0)
         return;
@@ -679,7 +679,7 @@ static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img
     if (bot_ref->spin)
     {
         row = 0;
-        col = 5; // assumed spin frame in the sheet (row 0, col 5)
+        col = spin_col;
     }
     else if (bot_ref->life <= 0)
     {
@@ -688,7 +688,7 @@ static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img
     else if (bot_ref->stun_timer > 0)
     {
         row = 0;
-        col = 4; // assumed damage frame in the sheet (row 0, col 4)
+        col = damage_col;
     }
     else if (bot_ref->punch || bot_ref->punch2)
     {
@@ -703,7 +703,7 @@ static void bot_wram_render_current_frame(bot_instance_t *instance, const jo_img
     else if (bot_ref->jump)
     {
         row = 0;
-        col = 3; // assumed jump frame in the sheet (row 0, col 3)
+        col = jump_col;
     }
     else
     {
@@ -1896,6 +1896,7 @@ if (bot_character == BotCharacterAmy && bot_amy_sheet_ready && instance->bot_wra
     }
 
     bot = (character_t){0};
+    bot.wram_sprite_id = -1;
     bot_jump_sfx = *game_audio_get_jump_sfx();
     bot_world_x = player_world_x;
     bot_world_y = player_world_y;
@@ -2231,7 +2232,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         }
         else
         {
-            bot_wram_render_current_frame(instance, &bot_amy_sheet, bot_amy_sheet_ready);
+            bot_wram_render_current_frame(instance, &bot_amy_sheet, bot_amy_sheet_ready, 4, 5, 6);
             jo_sprite_draw3D2(ctx->bot_wram_sheet_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
         }
 
@@ -2249,7 +2250,7 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         }
         else
         {
-            bot_wram_render_current_frame(instance, &bot_sonic_sheet, bot_sonic_sheet_ready);
+            bot_wram_render_current_frame(instance, &bot_sonic_sheet, bot_sonic_sheet_ready, 4, 5, 6);
             jo_sprite_draw3D2(ctx->bot_wram_sheet_sprite_id, bot.x, bot.y, CHARACTER_SPRITE_Z);
         }
 

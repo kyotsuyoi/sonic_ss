@@ -2,8 +2,11 @@
 #include "game_flow.h"
 #include "game_constants.h"
 #include "player.h"
+#include "sprite_safe.h"
 #include "character_registry.h"
 #include "bot.h"
+#include "character/sonic.h"
+#include "character/amy.h"
 #include "character/tails.h"
 #include "world_physics.h"
 #include "damage_fx.h"
@@ -166,6 +169,10 @@ static void select_active_character(ui_character_choice_t selected_character)
 
 static void setup_player2_character(ui_character_choice_t selected_character)
 {
+    // Reset safe animation creation state so we can retry creating Player2 anims if
+    // a previous attempt failed (e.g., due to early crash or engine event pooling).
+    sprite_safe_reset();
+
     character_animation_profile_t anim_profile;
     int move_count;
     int stand_count;
@@ -187,7 +194,20 @@ static void setup_player2_character(ui_character_choice_t selected_character)
 
     saved_player = player;
     player2_handlers = character_registry_get(selected_character);
+
+    /* Ensure load runs on the correct character instance (P2) and doesn't overwrite P1. */
+    if (selected_character == UiCharacterSonic)
+        sonic_set_current(&player2, NULL);
+    else if (selected_character == UiCharacterAmy)
+        amy_set_current(&player2, NULL);
+
     player2_handlers.load();
+
+    /* Restore P1's current context so subsequent code affects the right instance. */
+    if (selected_character == UiCharacterSonic)
+        sonic_set_current(&player, NULL);
+    else if (selected_character == UiCharacterAmy)
+        amy_set_current(&player, NULL);
 
     /* Ensure player2 combat stats (including charged kick) match the selected character. */
     character_registry_apply_combat_profile(&player2, selected_character);
@@ -237,7 +257,6 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.charged_kick_active = false;
     player2.charged_kick_phase = 0;
     player2.charged_kick_phase_timer = 0;
-    player2.character_id = selected_character;
     player2.hit_done_punch1 = false;
     player2.hit_done_punch2 = false;
     player2.hit_done_kick1 = false;
@@ -286,6 +305,11 @@ static void ensure_active_character_loaded(ui_character_choice_t selected_charac
         active_handlers.unload();
 
     select_active_character(selected_character);
+
+    // Ensure animation creation state is reset so first-time load works correctly.
+    sprite_safe_reset();
+
+    runtime_log("game_flow: active character load %d", (int)selected_character);
 
     active_handlers.load();
     active_character_loaded = true;
@@ -351,6 +375,8 @@ void game_flow_process_loading(void *user_data)
 
         player = (character_t){0};
         player2 = (character_t){0};
+        player.wram_sprite_id = -1;
+        player2.wram_sprite_id = -1;
         //jo_printf(0, 203, "game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
         runtime_log("game_flow: ensure_active_character_loaded(%d)", (int)loading_selected_character);
         ensure_active_character_loaded(loading_selected_character);        
@@ -370,7 +396,10 @@ void game_flow_process_loading(void *user_data)
             player2.group = ctx->ui_state->menu_character_group[ctx->ui_state->menu_selected_player2_character];
         }
         else
+        {
             player2 = (character_t){0};
+            player2.wram_sprite_id = -1;
+        }
 
         runtime_log("game_flow: world_physics_init_character");
         world_physics_init_character(ctx->physics);

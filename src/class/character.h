@@ -23,6 +23,15 @@ typedef struct
     int jump_sprite_id;
     int damage_sprite_id;
     int defeated_sprite_id;
+    int wram_sprite_id; /* sprite used by WRAM-sheet rendering (e.g. Amy) */
+
+    /* Per-character WRAM-sheet animation state (used by Sonic/Amy) */
+    int wram_anim_state;
+    int wram_anim_frame;
+    int wram_anim_frame_ticks;
+    int wram_anim_frame_duration;
+    int wram_anim_frame_count;
+
     int punch_anim_id;
     int kick_anim_id;
     int x;

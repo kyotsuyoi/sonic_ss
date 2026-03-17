@@ -7,7 +7,9 @@ JO_COMPILE_WITH_PSEUDO_MODE7_MODULE = 0
 JO_COMPILE_WITH_EFFECTS_MODULE = 0
 JO_DEBUG = 1
 JO_COMPILE_USING_SGL=1
-JO_MAX_SPRITE_ANIM=64
+# Increase the sprite animation event pool to avoid "Event creation failed" at startup.
+# This is required when many characters/bots create animations at once.
+JO_MAX_SPRITE_ANIM=128
 SRCS=main.c src/class/player.c src/class/character/sonic.c src/class/character/amy.c src/class/character/tails.c src/class/character/knuckles.c src/class/character/shadow.c src/class/character/character_registry.c src/class/bot.c src/class/control.c src/class/input_mapping.c src/class/ai_control.c src/class/ui_control.c src/class/game_flow.c src/class/game_loop.c src/class/world_collision.c src/class/world_camera.c src/class/world_background.c src/class/world_map.c src/class/world_physics.c src/class/game_audio.c src/class/debug.c src/class/damage_fx.c src/class/ram_cart.c src/class/vram_cache.c src/class/sprite_safe.c src/class/rotating_sprite_pool.c src/jo_ext/jo_audio_ext.c src/jo_ext/jo_map_ext.c
 SRCS+= src/class/runtime_log.c
 OBJDIR=build

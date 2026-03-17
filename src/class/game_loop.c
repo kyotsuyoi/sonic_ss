@@ -17,6 +17,8 @@
 #include "game_loop.h"
 #include "damage_fx.h"
 #include "character_registry.h"
+#include "character/amy.h"
+#include "character/sonic.h"
 #include "character/knuckles.h"
 #include "vram_cache.h"
 #include "runtime_log.h"
@@ -798,6 +800,23 @@ static void game_loop_update_player2_animation(void)
     else
         game_loop_reset_player2_tails_state();
 
+    /* For Sonic/Amy, use the same animation-update flow as Player 1 (same timing & state transitions). */
+    if (player2.character_id == CHARACTER_ID_SONIC)
+    {
+        sonic_set_current(&player2, &g_player2_physics);
+        sonic_running_animation_handling();
+        sonic_set_current(&player, g_ctx->physics);
+        return;
+    }
+    else if (player2.character_id == CHARACTER_ID_AMY)
+    {
+        amy_set_current(&player2, &g_player2_physics);
+        amy_running_animation_handling();
+        amy_set_current(&player, g_ctx->physics);
+        return;
+    }
+
+    /* Otherwise fallback to the existing P2 animation logic (walk/run + punch/kick). */
     if (jo_physics_is_standing(&g_player2_physics))
     {
         jo_reset_sprite_anim(player2.running1_anim_id);
@@ -1164,6 +1183,28 @@ static void game_loop_draw_player2(void)
     {
         /* Use shared Knuckles display logic so P2 matches P1 (charged kick + phase visuals). */
         knuckles_display_for(&player2, &g_player2_physics);
+        return;
+    }
+
+    if (player2.character_id == CHARACTER_ID_AMY)
+    {
+        /* Amy uses WRAM sprite sheets (AMY_FUL.TGA), so we render it with the Amy display logic. */
+        amy_set_current(&player2, &g_player2_physics);
+        amy_draw(&player2);
+        amy_set_current(&player, g_ctx->physics);
+        if (player2.flip)
+            jo_sprite_disable_horizontal_flip();
+        return;
+    }
+
+    if (player2.character_id == CHARACTER_ID_SONIC)
+    {
+        /* Sonic uses WRAM sprite sheets (SNC_FUL.TGA), so we render it with the Sonic display logic. */
+        sonic_set_current(&player2, &g_player2_physics);
+        sonic_draw(&player2);
+        sonic_set_current(&player, g_ctx->physics);
+        if (player2.flip)
+            jo_sprite_disable_horizontal_flip();
         return;
     }
 

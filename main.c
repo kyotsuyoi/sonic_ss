@@ -180,6 +180,8 @@ static void reset_to_splash_screen(void)
 
     player = (character_t){0};
     player2 = (character_t){0};
+    player.wram_sprite_id = -1;
+    player2.wram_sprite_id = -1;
     physics = (jo_sidescroller_physics_params){0};
     map_pos_x = WORLD_DEFAULT_X;
     map_pos_y = WORLD_DEFAULT_Y;

@@ -533,7 +533,7 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
 {
     ui_control_clear_text_layer();
 
-    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATK SPRITE", "SPAWN"};
+    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATK SPRITE", "MEM", "SPAWN"};
     static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "VERBOSE", "SPRITE"};
     int sprite_log_page = runtime_log_get_sprite_page() + 1;
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
@@ -638,7 +638,14 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     //     jo_printf(2, 19, "LAST DMG/KG RECEI: %2d/%2d (<- %s)", g_debug_last_damage_received, g_debug_last_knockback_received, attacker_name);
     // }
     // else 
-    if (state->debug_mode == UiDebugModeSpawn)
+    if (state->debug_mode == UiDebugModeMemory)
+    {
+        //VDP1 VRAM = sprite/object memory (512 KB)
+        jo_printf(2, 18, "SPR_MEM_U: %d%%", jo_sprite_usage_percent());
+        //heap/dynamique (malloc/etc) memory LWRAM (1 MB)
+        jo_printf(2, 19, "DIN_MEM_U: %d%%", jo_memory_usage_percent());
+    }
+    else if (state->debug_mode == UiDebugModeSpawn)
     {
         int p1x = world_map_get_player_start_x(0, player.group);
         int p1y = world_map_get_player_start_y(0, player.group);

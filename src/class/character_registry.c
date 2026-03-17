@@ -71,19 +71,24 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
 {
     character_animation_profile_t profile;
 
+    /* Default to the most common profile (Knuckles / Tails), then override for special cases. */
     profile.move_count = 4;
-    profile.stand_count = 3;
+    profile.stand_count = 4;
     profile.punch_count = 4;
     profile.kick_count = 4;
 
     switch (choice)
     {
     case UiCharacterAmy:
-        profile.punch_count = 4;
-        profile.kick_count = 4;
+        /* Amy uses an 8-frame walk/run sheet and an 8-frame punch/kick sheet. */
+        profile.move_count = 8;
+        profile.stand_count = 4;
+        profile.punch_count = 8;
+        profile.kick_count = 8;
         break;
     case UiCharacterTails:
         profile.move_count = 4;
+        profile.stand_count = 4;
         profile.punch_count = 4;
         profile.kick_count = 4;
         break;
@@ -94,8 +99,18 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
         profile.kick_count = 4;
         break;
     case UiCharacterShadow:
+        profile.move_count = 4;
+        profile.stand_count = 3;
+        profile.punch_count = 4;
+        profile.kick_count = 4;
+        break;
     case UiCharacterSonic:
     default:
+        /* Sonic uses an 8-frame walk/run sheet and an 8-frame punch/kick sheet. */
+        profile.move_count = 8;
+        profile.stand_count = 4;
+        profile.punch_count = 8;
+        profile.kick_count = 8;
         break;
     }
 

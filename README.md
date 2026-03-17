@@ -36,7 +36,7 @@ Available characters:
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
 
-### 4. Checklist (Road to v0.2)
+### 4. Checklist (Road to v0.2) (50%)
 
 - [x] Knuckles bot misses the range of the aerial attack and the super punch.
 - [x] Knuckles incorrectly allows jumping while holding the super punch.
@@ -59,18 +59,18 @@ Available characters:
 
 - [ ] Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
   - [ ] Sprite packing: grouping multiple sprites into the same block to reduce overhead.
-  - [ ] Sonic sprites (working 95%).
+  - [ ] Sonic sprites (95%) - Bots are missing.
   - [ ] Tails sprites.
-  - [ ] Amy sprites (working 70%).
+  - [ ] Amy sprites (95%) - Bots are missing.
   - [ ] Knuckles sprites.
   - [ ] Shadow sprites.
-  - [ ] All characters - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
+  - [ ] All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
 
-- [ ] Sprite packing: grouping multiple sprites into the same block to reduce overhead.
 - [ ] Bot strategy.
+- [ ] Make the bots follow the same sprite control flow as the players.
 - [ ] Equalize Shadow’s class.
 - [ ] Knuckles’ charged attack should allow up to 3 hits before being canceled.
 - [ ] Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
-- [ ] Check why debug_battle_add_damage doesn’t get called for all IDs.
+- [x] Check why debug_battle_add_damage doesn’t get called for all IDs.
 - [ ] Create spectator mode to watch bots fight.
 

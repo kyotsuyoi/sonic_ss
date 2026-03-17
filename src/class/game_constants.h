@@ -34,7 +34,10 @@
 #define STUN_HEAVY_FRAMES (24)
 #define COUNTER_STUN_FRAMES (120)
 
-/* Default sprite frame duration used when creating animations. Change to slow/faster global animation speed */
-#define DEFAULT_SPRITE_FRAME_DURATION (8)
+/* Default sprite frame duration used when creating animations.
+   This is measured in game ticks (GAME_FRAME_MS ms each).
+   For ~60 FPS, GAME_FRAME_MS is 17ms, so a value of 6 gives ~102ms per frame.
+*/
+#define DEFAULT_SPRITE_FRAME_DURATION (6)
 
 #endif

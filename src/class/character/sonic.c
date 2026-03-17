@@ -1,12 +1,27 @@
 #include <jo/jo.h>
-#include <stddef.h>
 #include <string.h>
 #include "sonic.h"
 #include "player.h"
 #include "character_registry.h"
+#include "sprite_safe.h"
+#include "runtime_log.h"
 
-#define character_ref player
-extern jo_sidescroller_physics_params physics;
+extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
+
+static character_t *sonic_ref = &player;
+static jo_sidescroller_physics_params *sonic_physics = &physics;
+
+#define character_ref (*sonic_ref)
+#define physics (*sonic_physics)
+
+void sonic_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    if (chr != NULL)
+        sonic_ref = chr;
+    if (phy != NULL)
+        sonic_physics = phy;
+}
+
 #define SPRITE_DIR "SPT"
 #define DEFEATED_SPRITE_WIDTH 40
 #define DEFEATED_SPRITE_HEIGHT 32
@@ -16,25 +31,12 @@ static bool sonic_sheet_ready = false;
 static jo_img sonic_sheet = {0};
 static int sonic_sprite_id = -1;
 
-typedef enum
-{
-    SONIC_ANIM_NONE = -1,
-    SONIC_ANIM_STAND,
-    SONIC_ANIM_WALK,
-    SONIC_ANIM_RUN1,
-    SONIC_ANIM_RUN2,
-    SONIC_ANIM_PUNCH,
-    SONIC_ANIM_KICK,
-    SONIC_ANIM_JUMP,
-    SONIC_ANIM_DAMAGE,
-    SONIC_ANIM_SPIN,
-} sonic_anim_t;
+static bool sonic_defeated_sheet_ready = false;
+static jo_img sonic_defeated_sheet = {0};
 
-static sonic_anim_t sonic_current_anim = SONIC_ANIM_NONE;
-static int sonic_current_frame = 0;
-static int sonic_current_frame_ticks = 0;
-static int sonic_current_frame_duration = DEFAULT_SPRITE_FRAME_DURATION;
-static int sonic_current_frame_count = 1;
+// NOTE: per-character animation state is stored directly on the character so
+// multiple instances (Player 1 / Player 2 / bots) do not interfere with each other.
+// This avoids the case where P2 overwrites P1's current animation/frame.
 
 // Dummy anims used for internal timing / combo logic (punch/kick/speed).
 static int sonic_stand_anim_id = -1;
@@ -141,25 +143,60 @@ static const jo_tile SonicDefeatedTile[] =
     {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
-static void sonic_reset_animation_lists_except(int active_anim_id)
+static void sonic_copy_defeated_sheet_frame_to_sprite(int sprite_id)
 {
-    if (sonic_stand_anim_id >= 0 && sonic_stand_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_stand_anim_id);
-    if (sonic_walking_anim_id >= 0 && sonic_walking_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_walking_anim_id);
-    if (sonic_running1_anim_id >= 0 && sonic_running1_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_running1_anim_id);
-    if (sonic_running2_anim_id >= 0 && sonic_running2_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_running2_anim_id);
-    if (sonic_punch_anim_id >= 0 && sonic_punch_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_punch_anim_id);
-    if (sonic_kick_anim_id >= 0 && sonic_kick_anim_id != active_anim_id)
-        jo_reset_sprite_anim(sonic_kick_anim_id);
+    if (!sonic_defeated_sheet_ready || sprite_id < 0)
+        return;
+
+    static jo_img tmp = {0};
+    if (tmp.data == JO_NULL)
+    {
+        tmp.width = DEFEATED_SPRITE_WIDTH;
+        tmp.height = DEFEATED_SPRITE_HEIGHT;
+        tmp.data = jo_malloc((size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT * sizeof(unsigned short));
+        if (tmp.data == JO_NULL)
+            return;
+    }
+
+    unsigned short *dst = (unsigned short *)tmp.data;
+    unsigned short *src = (unsigned short *)sonic_defeated_sheet.data;
+    int sheet_width = sonic_defeated_sheet.width;
+
+    for (int y = 0; y < DEFEATED_SPRITE_HEIGHT; ++y)
+    {
+        unsigned short *src_row = src + y * sheet_width;
+        unsigned short *dst_row = dst + y * DEFEATED_SPRITE_WIDTH;
+        memcpy(dst_row, src_row, DEFEATED_SPRITE_WIDTH * sizeof(unsigned short));
+    }
+
+    jo_sprite_replace(&tmp, sprite_id);
 }
 
-static void sonic_copy_sheet_frame_to_sprite(int frame_x, int frame_y)
+static int sonic_ensure_defeated_wram_sprite(character_t *chr)
 {
-    if (!sonic_sheet_ready || sonic_sprite_id < 0)
+    if (chr->defeated_sprite_id < 0)
+    {
+        jo_img blank;
+        blank.width = DEFEATED_SPRITE_WIDTH;
+        blank.height = DEFEATED_SPRITE_HEIGHT;
+        blank.data = (unsigned short *)jo_malloc((size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT * sizeof(unsigned short));
+        if (blank.data == JO_NULL)
+            return -1;
+
+        for (size_t i = 0; i < (size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT; ++i)
+            ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
+
+        int id = jo_sprite_add(&blank);
+        jo_free_img(&blank);
+        chr->defeated_sprite_id = id;
+    }
+
+    return chr->defeated_sprite_id;
+}
+
+static void sonic_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
+{
+    if (!sonic_sheet_ready || sprite_id < 0)
         return;
 
     static jo_img tmp = {0};
@@ -183,7 +220,7 @@ static void sonic_copy_sheet_frame_to_sprite(int frame_x, int frame_y)
         memcpy(dst_row, src_row, CHARACTER_WIDTH * sizeof(unsigned short));
     }
 
-    jo_sprite_replace(&tmp, sonic_sprite_id);
+    jo_sprite_replace(&tmp, sprite_id);
 }
 
 static int sonic_create_blank_animation(int frame_count)
@@ -212,69 +249,109 @@ static int sonic_create_blank_animation(int frame_count)
     return base;
 }
 
-static void sonic_render_current_frame(void)
+static int sonic_create_blank_sprite(void)
 {
-    if (!sonic_sheet_ready || sonic_sprite_id < 0)
+    jo_img blank;
+    blank.width = CHARACTER_WIDTH;
+    blank.height = CHARACTER_HEIGHT;
+    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+    if (blank.data == JO_NULL)
+        return -1;
+
+    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
+        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
+
+    int id = jo_sprite_add(&blank);
+    jo_free_img(&blank);
+    return id;
+}
+
+static void sonic_render_current_frame_for(const character_t *chr, int sprite_id)
+{
+    if (!sonic_sheet_ready || sprite_id < 0)
         return;
 
     int row = 0;
     int col = 0;
 
-    switch (sonic_current_anim)
+    if (chr->spin)
     {
-        case SONIC_ANIM_STAND:
-            row = 0;
-            col = jo_get_sprite_anim_frame(sonic_stand_anim_id);
-            break;
-        case SONIC_ANIM_WALK:
+        row = 0;
+        col = 6;
+    }
+    else if (chr->life <= 0)
+    {
+        int defeated_sprite_id = sonic_ensure_defeated_wram_sprite((character_t *)chr);
+        if (defeated_sprite_id >= 0)
+            sonic_copy_defeated_sheet_frame_to_sprite(defeated_sprite_id);
+        return;
+    }
+    else if (chr->stun_timer > 0)
+    {
+        row = 0;
+        col = 5;
+    }
+    else if (chr->punch || chr->punch2)
+    {
+        row = 4;
+        col = (chr->punch_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->punch_anim_id) : 0;
+    }
+    else if (chr->kick || chr->kick2)
+    {
+        row = 5;
+        col = (chr->kick_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->kick_anim_id) : 0;
+    }
+    else if (chr->jump)
+    {
+        row = 0;
+        col = 4;
+    }
+    else
+    {
+        if (chr->walk && chr->run == 0)
+        {
             row = 1;
-            col = jo_get_sprite_anim_frame(sonic_walking_anim_id);
-            break;
-        case SONIC_ANIM_RUN1:
+            col = (chr->walking_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->walking_anim_id) : 0;
+        }
+        else if (chr->walk && chr->run == 1)
+        {
             row = 2;
-            col = jo_get_sprite_anim_frame(sonic_running1_anim_id);
-            break;
-        case SONIC_ANIM_RUN2:
+            col = (chr->running1_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->running1_anim_id) : 0;
+        }
+        else if (chr->walk && chr->run == 2)
+        {
             row = 3;
-            col = jo_get_sprite_anim_frame(sonic_running2_anim_id);
-            break;
-        case SONIC_ANIM_PUNCH:
-            row = 4;
-            col = jo_get_sprite_anim_frame(sonic_punch_anim_id);
-            break;
-        case SONIC_ANIM_KICK:
-            row = 5;
-            col = jo_get_sprite_anim_frame(sonic_kick_anim_id);
-            break;
-        case SONIC_ANIM_JUMP:
+            col = (chr->running2_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->running2_anim_id) : 0;
+        }
+        else
+        {
             row = 0;
-            col = 4;
-            break;
-        case SONIC_ANIM_DAMAGE:
-            row = 0;
-            col = 5;
-            break;
-        case SONIC_ANIM_SPIN:
-            row = 0;
-            col = 6;
-            break;
-        default:
-            return;
+            col = (chr->stand_sprite_id >= 0) ? jo_get_sprite_anim_frame(chr->stand_sprite_id) : 0;
+        }
     }
 
-    sonic_copy_sheet_frame_to_sprite(col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
+    sonic_copy_sheet_frame_to_sprite(sprite_id, col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
 }
 
-static void sonic_set_current_anim(sonic_anim_t anim, int frame_count, int frame_duration)
+// The full WRAM-per-character sprite approach avoids P1/P2 sharing the same
+// backing sprite, which would cause one entity to overwrite the other's frame
+// each update.
+static int sonic_ensure_wram_sprite(character_t *chr)
 {
-    if (anim != sonic_current_anim)
+    if (chr->wram_sprite_id < 0)
     {
-        sonic_current_anim = anim;
-        sonic_current_frame = 0;
-        sonic_current_frame_ticks = 0;
-        sonic_current_frame_duration = frame_duration;
-        sonic_current_frame_count = frame_count;
+        /* Prefer reusing the global sprite only for the primary player instance */
+        extern character_t player;
+        if (chr == &player && sonic_sprite_id >= 0)
+            chr->wram_sprite_id = sonic_sprite_id;
+
+        if (chr->wram_sprite_id < 0)
+            chr->wram_sprite_id = sonic_create_blank_sprite();
+
+        runtime_log("sonic: wram sprite %d for char=%d", chr->wram_sprite_id, chr->character_id);
     }
+
+    return chr->wram_sprite_id;
 }
 
 /*
@@ -292,15 +369,20 @@ Speed -> Animation mapping:
 - `run` selects which animation variant is drawn (0 = walking, 1 = running1, 2 = running2).
 This mapping keeps the visual animation speed consistent with the character's physical speed.
 */
-inline void sonic_running_animation_handling(void)
+/*
+Per-character WRAM animation timing is now driven by the dummy sprite animations
+(the ones created via `sprite_safe_create_anim`) rather than manually ticking a
+frame counter.
+
+This matches Amy's behavior and ensures stand/walk/run timing is consistent.
+*/
+
+void sonic_running_animation_handling(void)
 {
     int speed_step;
 
     if (jo_physics_is_standing(&physics))
     {
-        // Standing animation
-        sonic_set_current_anim(SONIC_ANIM_STAND, JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
         jo_reset_sprite_anim(character_ref.running1_anim_id);
         jo_reset_sprite_anim(character_ref.running2_anim_id);
 
@@ -322,11 +404,8 @@ inline void sonic_running_animation_handling(void)
     }
     else
     {
-        // Running/walking animation selection
         if (character_ref.run == 0)
         {
-            sonic_set_current_anim(SONIC_ANIM_WALK, JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
             jo_reset_sprite_anim(character_ref.running1_anim_id);
             jo_reset_sprite_anim(character_ref.running2_anim_id);
 
@@ -335,8 +414,6 @@ inline void sonic_running_animation_handling(void)
         }
         else if (character_ref.run == 1)
         {
-            sonic_set_current_anim(SONIC_ANIM_RUN1, JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-
             jo_reset_sprite_anim(character_ref.walking_anim_id);
             jo_reset_sprite_anim(character_ref.running2_anim_id);
 
@@ -345,8 +422,6 @@ inline void sonic_running_animation_handling(void)
         }
         else if (character_ref.run == 2)
         {
-            sonic_set_current_anim(SONIC_ANIM_RUN2, JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-
             jo_reset_sprite_anim(character_ref.walking_anim_id);
             jo_reset_sprite_anim(character_ref.running1_anim_id);
 
@@ -356,25 +431,38 @@ inline void sonic_running_animation_handling(void)
 
         speed_step = (int)JO_ABS(physics.speed);
 
-        if (speed_step >= 6){
+        if (speed_step >= 6)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.running2_anim_id, 3);
             character_ref.run = 2;
-        }else if (speed_step >= 5){
+        }
+        else if (speed_step >= 5)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 4);
             character_ref.run = 1;
-        }else if (speed_step >= 4){
+        }
+        else if (speed_step >= 4)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 5);
             character_ref.run = 1;
-        }else if (speed_step >= 3){
+        }
+        else if (speed_step >= 3)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 6);
             character_ref.run = 1;
-        }else if (speed_step >= 2){
+        }
+        else if (speed_step >= 2)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 7);
             character_ref.run = 1;
-        }else if (speed_step >= 1){
+        }
+        else if (speed_step >= 1)
+        {
             jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 8);
             character_ref.run = 0;
-        }else{
+        }
+        else
+        {
             jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 9);
             character_ref.run = 0;
         }
@@ -384,7 +472,114 @@ inline void sonic_running_animation_handling(void)
     player_update_kick_state_for_character(&character_ref);
 }
 
-inline void display_sonic(void)
+
+static void sonic_draw_for_character(character_t *chr)
+{
+    if (!sonic_sheet_ready)
+    {
+        // Legacy per-frame animation path.
+        if (chr->spin)
+        {
+            jo_sprite_draw3D_and_rotate2(chr->spin_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+            if (chr->flip)
+                chr->angle -= CHARACTER_SPIN_SPEED;
+            else
+                chr->angle += CHARACTER_SPIN_SPEED;
+            return;
+        }
+
+        if (chr->life <= 0 && chr->defeated_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(chr->defeated_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->stun_timer > 0 && chr->damage_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(chr->damage_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->punch || chr->punch2)
+        {
+            int anim_sprite_id = (chr->punch_anim_id >= 0) ? jo_get_anim_sprite(chr->punch_anim_id) : -1;
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->kick || chr->kick2)
+        {
+            int anim_sprite_id = (chr->kick_anim_id >= 0) ? jo_get_anim_sprite(chr->kick_anim_id) : -1;
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->jump)
+        {
+            jo_sprite_draw3D2(chr->jump_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        int anim_sprite_id;
+        if (chr->walk && chr->run == 0)
+            anim_sprite_id = (chr->walking_anim_id >= 0) ? jo_get_anim_sprite(chr->walking_anim_id) : -1;
+        else if (chr->walk && chr->run == 1)
+            anim_sprite_id = (chr->running1_anim_id >= 0) ? jo_get_anim_sprite(chr->running1_anim_id) : -1;
+        else if (chr->walk && chr->run == 2)
+            anim_sprite_id = (chr->running2_anim_id >= 0) ? jo_get_anim_sprite(chr->running2_anim_id) : -1;
+        else
+            anim_sprite_id = (chr->stand_sprite_id >= 0) ? jo_get_anim_sprite(chr->stand_sprite_id) : -1;
+
+        if (anim_sprite_id >= 0)
+            jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+        return;
+    }
+
+    if (chr->life <= 0)
+    {
+        int defeated_sprite_id = sonic_ensure_defeated_wram_sprite(chr);
+        if (defeated_sprite_id >= 0)
+            sonic_copy_defeated_sheet_frame_to_sprite(defeated_sprite_id);
+
+        if (defeated_sprite_id >= 0)
+            jo_sprite_draw3D2(defeated_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
+        return;
+    }
+
+    int sprite_id = sonic_ensure_wram_sprite(chr);
+    if (sprite_id < 0)
+        return;
+
+    sonic_render_current_frame_for(chr, sprite_id);
+
+    if (chr->spin)
+    {
+        jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+        if (chr->flip)
+            chr->angle -= CHARACTER_SPIN_SPEED;
+        else
+            chr->angle += CHARACTER_SPIN_SPEED;
+    }
+    else
+    {
+        jo_sprite_draw3D2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+    }
+}
+
+void sonic_draw(character_t *chr)
+{
+    sonic_draw_for_character(chr);
+}
+
+void display_sonic(void)
 {
     if (!physics.is_in_air)
     {
@@ -396,88 +591,14 @@ inline void display_sonic(void)
     if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    if (character_ref.spin)
-    {
-        sonic_reset_animation_lists_except(-1);
-        sonic_set_current_anim(SONIC_ANIM_SPIN, 1, DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_render_current_frame();
-        jo_sprite_draw3D_and_rotate2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
-        if (character_ref.flip)
-            character_ref.angle -= CHARACTER_SPIN_SPEED;
-        else
-            character_ref.angle += CHARACTER_SPIN_SPEED;
-    }
-    else if (character_ref.life <= 0 && sonic_defeated_sprite_id >= 0)
-    {
-        sonic_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(sonic_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
-    }
-    else if (character_ref.stun_timer > 0 && sonic_sheet_ready)
-    {
-        sonic_reset_animation_lists_except(-1);
-        sonic_set_current_anim(SONIC_ANIM_DAMAGE, 1, DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_render_current_frame();
-        jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    }
-    else if (character_ref.punch || character_ref.punch2)
-    {
-        sonic_reset_animation_lists_except(character_ref.punch_anim_id);
-        sonic_set_current_anim(SONIC_ANIM_PUNCH, JO_TILE_COUNT(SonicPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_render_current_frame();
-        jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    }
-    else if (character_ref.kick || character_ref.kick2)
-    {
-        sonic_reset_animation_lists_except(character_ref.kick_anim_id);
-        sonic_set_current_anim(SONIC_ANIM_KICK, JO_TILE_COUNT(SonicKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_render_current_frame();
-        jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    }
-    else if (character_ref.jump)
-    {
-        sonic_reset_animation_lists_except(-1);
-        sonic_set_current_anim(SONIC_ANIM_JUMP, 1, DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_render_current_frame();
-        jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    }
-    else
-    {
-        if (character_ref.walk && character_ref.run == 0)
-        {
-            sonic_reset_animation_lists_except(character_ref.walking_anim_id);
-            sonic_set_current_anim(SONIC_ANIM_WALK, JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_render_current_frame();
-            jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else if (character_ref.walk && character_ref.run == 1)
-        {
-            sonic_reset_animation_lists_except(character_ref.running1_anim_id);
-            sonic_set_current_anim(SONIC_ANIM_RUN1, JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_render_current_frame();
-            jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else if (character_ref.walk && character_ref.run == 2)
-        {
-            sonic_reset_animation_lists_except(character_ref.running2_anim_id);
-            sonic_set_current_anim(SONIC_ANIM_RUN2, JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_render_current_frame();
-            jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else
-        {
-            sonic_reset_animation_lists_except(character_ref.stand_sprite_id);
-            sonic_set_current_anim(SONIC_ANIM_STAND, JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_render_current_frame();
-            jo_sprite_draw3D2(sonic_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);        
-        }
-    }
+    // Use the generic draw path so it also works for P2 / bots if needed.
+    sonic_draw_for_character(&character_ref);
 
     if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
 
-    // Barra de vidas textual
     int life_percent = (character_ref.life * 100) / 50;
-    int bar_max_width = 20; // 20 caracteres
+    int bar_max_width = 20;
     int bar_width = (life_percent * bar_max_width) / 100;
     char bar[bar_max_width + 1];
     for (int i = 0; i < bar_max_width; ++i)
@@ -502,6 +623,18 @@ void load_sonic(void)
             }
         }
 
+        // Load defeated sprite sheet into WRAM so it can also be copied on demand.
+        if (!sonic_defeated_sheet_ready)
+        {
+            char *sheet_data = jo_fs_read_file_in_dir("SNC_DFT.TGA", SPRITE_DIR, JO_NULL);
+            if (sheet_data != JO_NULL)
+            {
+                if (jo_tga_loader_from_stream(&sonic_defeated_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
+                    sonic_defeated_sheet_ready = true;
+                jo_free(sheet_data);
+            }
+        }
+
         // Create a single VRAM sprite that will be updated each frame.
         if (sonic_sprite_id < 0)
         {
@@ -519,13 +652,20 @@ void load_sonic(void)
             }
         }
 
+        /* Use the global sprite as the base WRAM sprite for this character; P2/bots
+         * will allocate their own WRAM sprite as needed. */
+        character_ref.wram_sprite_id = sonic_sprite_id;
+
         // Dummy animation objects (used only for timing / combo logic).
-        sonic_stand_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicStandTiles)), JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_walking_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicWalkingTiles)), JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_running1_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning1Tiles)), JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_running2_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning2Tiles)), JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_punch_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicPunchTiles)), JO_TILE_COUNT(SonicPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        sonic_kick_anim_id = jo_create_sprite_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicKickTiles)), JO_TILE_COUNT(SonicKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        if (sprite_safe_can_create_anim())
+        {
+            sonic_stand_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicStandTiles)), JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            sonic_walking_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicWalkingTiles)), JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            sonic_running1_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning1Tiles)), JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+            sonic_running2_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning2Tiles)), JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+            sonic_punch_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicPunchTiles)), JO_TILE_COUNT(SonicPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            sonic_kick_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicKickTiles)), JO_TILE_COUNT(SonicKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        }
 
         sonic_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_DFT.TGA", JO_COLOR_Green, SonicDefeatedTile, JO_TILE_COUNT(SonicDefeatedTile));
 
@@ -543,6 +683,10 @@ void load_sonic(void)
     character_ref.punch_anim_id = sonic_punch_anim_id;
     character_ref.kick_anim_id = sonic_kick_anim_id;
     character_registry_apply_combat_profile(&character_ref, UiCharacterSonic);
+
+    // Always ensure this module has a valid physics context, even if it was
+    // cleared earlier during a character swap.
+    sonic_physics = &physics;
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
@@ -576,15 +720,21 @@ void unload_sonic(void)
         sonic_sheet_ready = false;
     }
 
+    if (sonic_defeated_sheet_ready)
+    {
+        jo_free_img(&sonic_defeated_sheet);
+        sonic_defeated_sheet_ready = false;
+    }
+
     sonic_stand_anim_id = -1;
     sonic_walking_anim_id = -1;
     sonic_running1_anim_id = -1;
     sonic_running2_anim_id = -1;
     sonic_punch_anim_id = -1;
     sonic_kick_anim_id = -1;
-    sonic_sprite_id = -1;
     sonic_defeated_sprite_id = -1;
-    sonic_current_anim = SONIC_ANIM_NONE;
 
+    sonic_sprite_id = -1;
+    character_ref.wram_sprite_id = -1;
     sonic_loaded = false;
 }
