@@ -221,134 +221,8 @@ static jo_sidescroller_physics_params *target_player_physics_ctx = &physics;
 #define bot_airborne_time_ms (ctx->bot_airborne_time_ms)
 #define bot_show_jump_sprite (ctx->bot_show_jump_sprite)
 
-static const jo_tile WalkTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile TailsMoveTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KnucklesTiles4[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile StandTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile StandTiles4[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile PunchTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile TailsPunchTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KickTiles13[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 10, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 11, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 12, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KickTiles8[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KickTiles1[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile PunchTiles4[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KickTiles4[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile TailsTailTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile BotDefeatedTile[] =
-{
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT}
-};
+// Bot sprite tile definitions are owned by the character system (character_sprites.c).
+// Bot should not hardcode character-specific sprite layouts.
 
 static int bot_punch_combo2_start_frame_for_count(int frame_count)
 {
@@ -989,45 +863,24 @@ static void bot_update_animation(void)
     jo_reset_sprite_anim(bot.punch_anim_id);
     jo_reset_sprite_anim(bot.kick_anim_id);
 
-    speed_step = (int)JO_ABS(bot_physics.speed);
+    /* Animation selection is driven by `bot.walk` / `bot.run` (set by AI input). */
+    int movement_anim_id = -1;
+    if (bot.walk)
+    {
+        if (bot.run == 2)
+            movement_anim_id = bot.running2_anim_id;
+        else if (bot.run == 1)
+            movement_anim_id = bot.running1_anim_id;
+        else
+            movement_anim_id = bot.walking_anim_id;
+    }
 
-    if (speed_step >= 3)
-    {
-        jo_reset_sprite_anim(bot.walking_anim_id);
-        jo_reset_sprite_anim(bot.running1_anim_id);
-        jo_set_sprite_anim_frame_rate(bot.running2_anim_id, 3);
-        bot.run = 2;
-        if (jo_is_sprite_anim_stopped(bot.running2_anim_id))
-            jo_start_sprite_anim_loop(bot.running2_anim_id);
-    }
-    else if (speed_step >= 2)
-    {
-        jo_reset_sprite_anim(bot.walking_anim_id);
-        jo_reset_sprite_anim(bot.running2_anim_id);
-        jo_set_sprite_anim_frame_rate(bot.running1_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
-        bot.run = 1;
-        if (jo_is_sprite_anim_stopped(bot.running1_anim_id))
-            jo_start_sprite_anim_loop(bot.running1_anim_id);
-    }
-    else if (speed_step >= 1)
-    {
-        jo_reset_sprite_anim(bot.running1_anim_id);
-        jo_reset_sprite_anim(bot.running2_anim_id);
-        jo_set_sprite_anim_frame_rate(bot.walking_anim_id, 8);
-        bot.run = 0;
-        if (jo_is_sprite_anim_stopped(bot.walking_anim_id))
-            jo_start_sprite_anim_loop(bot.walking_anim_id);
-    }
-    else
-    {
-        jo_reset_sprite_anim(bot.walking_anim_id);
-        jo_reset_sprite_anim(bot.running1_anim_id);
-        jo_reset_sprite_anim(bot.running2_anim_id);
-        bot.run = 0;
-        if (jo_is_sprite_anim_stopped(bot.stand_sprite_id))
-            jo_start_sprite_anim_loop(bot.stand_sprite_id);
-    }
+    bot_reset_animation_lists_except(movement_anim_id);
+
+    if (movement_anim_id >= 0 && jo_is_sprite_anim_stopped(movement_anim_id))
+        jo_start_sprite_anim_loop(movement_anim_id);
 }
+
 
 static void bot_start_attack(ai_bot_attack_t attack, bool request_combo)
 {
@@ -1121,16 +974,6 @@ static void bot_end_attack(void)
 static void bot_load_character_assets(bot_character_assets_t *assets, int character)
 {
     character_animation_profile_t anim_profile;
-    const char *wlk;
-    const char *run1;
-    const char *run2;
-    const char *std;
-    const char *jmp;
-    const char *spn;
-    const char *dmg;
-    const char *dft;
-    const char *pnc;
-    const char *kck;
     const jo_tile *move_tiles;
     const jo_tile *stand_tiles;
     const jo_tile *punch_tiles;
@@ -1143,147 +986,31 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     if (assets->loaded)
         return;
 
-    anim_profile = character_registry_get_animation_profile(bot_ui_character_from_bot_character(character));
+    ui_character_choice_t choice = bot_ui_character_from_bot_character(character);
+
+    anim_profile = character_registry_get_animation_profile(choice);
     move_count = anim_profile.move_count;
     stand_count = anim_profile.stand_count;
     punch_count = anim_profile.punch_count;
     kick_count = anim_profile.kick_count;
 
-    if (character == BotCharacterSonic)
-    {
-        bot_init_sonic_sheet();
-        if (bot_sonic_sheet_ready)
-        {
-            // Use WRAM sheet for Sonic bot (mirrors player behavior).
-            assets->walking_base_id = bot_create_blank_sprite();
-            assets->running1_base_id = bot_create_blank_sprite();
-            assets->running2_base_id = bot_create_blank_sprite();
-            assets->stand_base_id = bot_create_blank_sprite();
-            assets->jump_sprite_id = bot_create_blank_sprite();
-            assets->spin_sprite_id = bot_create_blank_sprite();
-            assets->damage_sprite_id = bot_create_blank_sprite();
-            assets->defeated_sprite_id = -1; // leave defeated as file-based if needed
-            assets->punch_base_id = bot_create_blank_sprite();
-            assets->kick_base_id = bot_create_blank_sprite();
+    move_tiles = character_get_move_tiles(choice, &move_count);
+    stand_tiles = character_get_stand_tiles(choice, &stand_count);
+    punch_tiles = character_get_punch_tiles(choice, &punch_count);
+    kick_tiles = character_get_kick_tiles(choice, &kick_count);
 
-            assets->move_count = move_count;
-            assets->stand_count = stand_count;
-            assets->punch_count = punch_count;
-            assets->kick_count = kick_count;
-            assets->punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
-            assets->kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
-            assets->loaded = true;
-            return;
-        }
+    const char *wlk = character_get_walk_tga(choice);
+    const char *run1 = character_get_run1_tga(choice);
+    const char *run2 = character_get_run2_tga(choice);
+    const char *std = character_get_stand_tga(choice);
+    const char *jmp = character_get_jump_tga(choice);
+    const char *spn = character_get_spin_tga(choice);
+    const char *dmg = character_get_damage_tga(choice);
+    const char *dft = character_get_defeated_tga(choice);
+    const char *pnc = character_get_punch_tga(choice);
+    const char *kck = character_get_kick_tga(choice);
 
-        wlk = "SNC_WLK.TGA";
-        run1 = "SNC_RUN1.TGA";
-        run2 = "SNC_RUN2.TGA";
-        std = "SNC_STD.TGA";
-        jmp = "SNC_JMP.TGA";
-        spn = "SNC_SPN.TGA";
-        dmg = "SNC_DMG.TGA";
-        dft = "SNC_DFT.TGA";
-        pnc = "SNC_PNC.TGA";
-        kck = "SNC_KCK.TGA";
-        move_tiles = WalkTiles;
-        stand_tiles = StandTiles;
-        punch_tiles = PunchTiles;
-        kick_tiles = KickTiles13;
-    }
-    else if (character == BotCharacterAmy)
-    {
-        bot_init_amy_sheet();
-        if (bot_amy_sheet_ready)
-        {
-            // Build dummy base sprites so animations can tick, but rendering uses the WRAM sheet.
-            assets->walking_base_id = bot_create_blank_sprite();
-            assets->running1_base_id = bot_create_blank_sprite();
-            assets->running2_base_id = bot_create_blank_sprite();
-            assets->stand_base_id = bot_create_blank_sprite();
-            assets->jump_sprite_id = bot_create_blank_sprite();
-            assets->spin_sprite_id = bot_create_blank_sprite();
-            assets->damage_sprite_id = bot_create_blank_sprite();
-            assets->defeated_sprite_id = -1;
-            assets->punch_base_id = bot_create_blank_sprite();
-            assets->kick_base_id = bot_create_blank_sprite();
-
-            assets->move_count = move_count;
-            assets->stand_count = stand_count;
-            assets->punch_count = punch_count;
-            assets->kick_count = kick_count;
-            assets->punch_combo2_start_frame = bot_punch_combo2_start_frame_for_count(punch_count);
-            assets->kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
-            assets->loaded = true;
-            return;
-        }
-
-        wlk = "AMY_WLK.TGA";
-        run1 = "AMY_RUN1.TGA";
-        run2 = "AMY_RUN2.TGA";
-        std = "AMY_STD.TGA";
-        jmp = "AMY_JMP.TGA";
-        spn = "AMY_SPN.TGA";
-        dmg = "AMY_DMG.TGA";
-        dft = "AMY_DFT.TGA";
-        pnc = "AMY_PNC.TGA";
-        kck = "AMY_KCK.TGA";
-        move_tiles = WalkTiles;
-        stand_tiles = StandTiles;
-        punch_tiles = PunchTiles;
-        kick_tiles = KickTiles8;
-    }
-    else if (character == BotCharacterKnuckles)
-    {
-        wlk = "KNK_WLK.TGA";
-        run1 = "KNK_RUN1.TGA";
-        run2 = "KNK_RUN1.TGA";
-        std = "KNK_STD.TGA";
-        jmp = "KNK_JMP.TGA";
-        spn = "KNK_SPN.TGA";
-        dmg = "KNK_DMG.TGA";
-        dft = "KNK_DFT.TGA";
-        pnc = "KNK_PNC.TGA";
-        kck = "KNK_KCK.TGA";
-        move_tiles = KnucklesTiles4;
-        stand_tiles = StandTiles4;
-        punch_tiles = PunchTiles4;
-        kick_tiles = KickTiles4;
-    }
-    else if (character == BotCharacterShadow)
-    {
-        wlk = "SDW_WLK.TGA";
-        run1 = "SDW_RUN1.TGA";
-        run2 = "SDW_RUN2.TGA";
-        std = "SDW_STD.TGA";
-        jmp = "SDW_JMP.TGA";
-        spn = "SDW_SPN.TGA";
-        dmg = "SDW_DMG.TGA";
-        dft = "SDW_DFT.TGA";
-        pnc = "SDW_PNC.TGA";
-        kck = "SDW_KCK.TGA";
-        move_tiles = WalkTiles;
-        stand_tiles = StandTiles;
-        punch_tiles = PunchTiles;
-        kick_tiles = KickTiles13;
-    }
-    else
-    {
-        wlk = "TLS_WLK.TGA";
-        run1 = "TLS_RUN1.TGA";
-        run2 = "TLS_RUN1.TGA";
-        std = "TLS_STD.TGA";
-        jmp = "TLS_JMP.TGA";
-        spn = "TLS_SPN.TGA";
-        dmg = "TLS_DMG.TGA";
-        dft = "TLS_DFT.TGA";
-        pnc = "TLS_PNC.TGA";
-        kck = "TLS_KCK.TGA";
-        move_tiles = TailsMoveTiles;
-        stand_tiles = StandTiles;
-        punch_tiles = TailsPunchTiles;
-        kick_tiles = KickTiles1;
-    }
+    /* Bot WRAM-sheet support (Sonic/Amy) is still handled by bot-specific code. */
 
     assets->walking_base_id = bot_try_add_tga_tileset(wlk, move_tiles, move_count);
     assets->running1_base_id = bot_try_add_tga_tileset(run1, move_tiles, move_count);
@@ -1298,7 +1025,11 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     assets->jump_sprite_id = bot_try_add_tga(jmp);
     assets->spin_sprite_id = bot_try_add_tga(spn);
     assets->damage_sprite_id = bot_try_add_tga(dmg);
-    assets->defeated_sprite_id = bot_try_add_tga_tileset(dft, BotDefeatedTile, JO_TILE_COUNT(BotDefeatedTile));
+    {
+        int defeated_count;
+        const jo_tile *defeated_tiles = character_get_defeated_tiles(&defeated_count);
+        assets->defeated_sprite_id = bot_try_add_tga_tileset(dft, defeated_tiles, defeated_count);
+    }
 
     assets->punch_base_id = bot_try_add_tga_tileset(pnc, punch_tiles, punch_count);
     assets->kick_base_id = bot_try_add_tga_tileset(kck, kick_tiles, kick_count);
@@ -1311,9 +1042,16 @@ static void bot_load_character_assets(bot_character_assets_t *assets, int charac
     assets->kick_combo2_start_frame = bot_kick_combo2_start_frame_for_count(kick_count);
 
     if (character == BotCharacterTails)
-        assets->tail_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_TLS.TGA", JO_COLOR_Green, TailsTailTiles, JO_TILE_COUNT(TailsTailTiles));
+    {
+        int tail_count;
+        const jo_tile *tail_tiles = character_get_tail_tiles(bot_ui_character_from_bot_character(character), &tail_count);
+        const char *tail_tga = character_get_tail_tga(bot_ui_character_from_bot_character(character));
+        assets->tail_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, tail_tga, JO_COLOR_Green, tail_tiles, tail_count);
+    }
     else
+    {
         assets->tail_base_id = -1;
+    }
 
     // Ensure all required assets were loaded successfully.
     if (assets->walking_base_id < 0 ||

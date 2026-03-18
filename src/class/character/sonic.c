@@ -2,6 +2,7 @@
 #include <string.h>
 #include "sonic.h"
 #include "player.h"
+#include "character_common.h"
 #include "character_registry.h"
 #include "sprite_safe.h"
 #include "runtime_log.h"
@@ -145,125 +146,27 @@ static const jo_tile SonicDefeatedTile[] =
 
 static void sonic_copy_defeated_sheet_frame_to_sprite(int sprite_id)
 {
-    if (!sonic_defeated_sheet_ready || sprite_id < 0)
-        return;
-
-    static jo_img tmp = {0};
-    if (tmp.data == JO_NULL)
-    {
-        tmp.width = DEFEATED_SPRITE_WIDTH;
-        tmp.height = DEFEATED_SPRITE_HEIGHT;
-        tmp.data = jo_malloc((size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT * sizeof(unsigned short));
-        if (tmp.data == JO_NULL)
-            return;
-    }
-
-    unsigned short *dst = (unsigned short *)tmp.data;
-    unsigned short *src = (unsigned short *)sonic_defeated_sheet.data;
-    int sheet_width = sonic_defeated_sheet.width;
-
-    for (int y = 0; y < DEFEATED_SPRITE_HEIGHT; ++y)
-    {
-        unsigned short *src_row = src + y * sheet_width;
-        unsigned short *dst_row = dst + y * DEFEATED_SPRITE_WIDTH;
-        memcpy(dst_row, src_row, DEFEATED_SPRITE_WIDTH * sizeof(unsigned short));
-    }
-
-    jo_sprite_replace(&tmp, sprite_id);
+    character_copy_defeated_sheet_frame_to_sprite(sprite_id, &sonic_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
 static int sonic_ensure_defeated_wram_sprite(character_t *chr)
 {
-    if (chr->defeated_sprite_id < 0)
-    {
-        jo_img blank;
-        blank.width = DEFEATED_SPRITE_WIDTH;
-        blank.height = DEFEATED_SPRITE_HEIGHT;
-        blank.data = (unsigned short *)jo_malloc((size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT * sizeof(unsigned short));
-        if (blank.data == JO_NULL)
-            return -1;
-
-        for (size_t i = 0; i < (size_t)DEFEATED_SPRITE_WIDTH * (size_t)DEFEATED_SPRITE_HEIGHT; ++i)
-            ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
-
-        int id = jo_sprite_add(&blank);
-        jo_free_img(&blank);
-        chr->defeated_sprite_id = id;
-    }
-
-    return chr->defeated_sprite_id;
+    return character_ensure_defeated_wram_sprite(chr, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
 static void sonic_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
 {
-    if (!sonic_sheet_ready || sprite_id < 0)
-        return;
-
-    static jo_img tmp = {0};
-    if (tmp.data == JO_NULL)
-    {
-        tmp.width = CHARACTER_WIDTH;
-        tmp.height = CHARACTER_HEIGHT;
-        tmp.data = jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
-        if (tmp.data == JO_NULL)
-            return;
-    }
-
-    unsigned short *dst = (unsigned short *)tmp.data;
-    unsigned short *src = (unsigned short *)sonic_sheet.data;
-    int sheet_width = sonic_sheet.width;
-
-    for (int y = 0; y < CHARACTER_HEIGHT; ++y)
-    {
-        unsigned short *src_row = src + (frame_y + y) * sheet_width + frame_x;
-        unsigned short *dst_row = dst + y * CHARACTER_WIDTH;
-        memcpy(dst_row, src_row, CHARACTER_WIDTH * sizeof(unsigned short));
-    }
-
-    jo_sprite_replace(&tmp, sprite_id);
+    character_copy_sheet_frame_to_sprite(sprite_id, &sonic_sheet, frame_x, frame_y);
 }
 
 static int sonic_create_blank_animation(int frame_count)
 {
-    jo_img blank;
-    blank.width = CHARACTER_WIDTH;
-    blank.height = CHARACTER_HEIGHT;
-    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
-    if (blank.data == JO_NULL)
-        return -1;
-
-    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
-        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
-
-    int base = -1;
-    for (int i = 0; i < frame_count; ++i)
-    {
-        int id = jo_sprite_add(&blank);
-        if (id < 0)
-            break;
-        if (base < 0)
-            base = id;
-    }
-
-    jo_free_img(&blank);
-    return base;
+    return character_create_blank_animation(frame_count);
 }
 
 static int sonic_create_blank_sprite(void)
 {
-    jo_img blank;
-    blank.width = CHARACTER_WIDTH;
-    blank.height = CHARACTER_HEIGHT;
-    blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
-    if (blank.data == JO_NULL)
-        return -1;
-
-    for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
-        ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
-
-    int id = jo_sprite_add(&blank);
-    jo_free_img(&blank);
-    return id;
+    return character_create_blank_sprite();
 }
 
 static void sonic_render_current_frame_for(const character_t *chr, int sprite_id)
@@ -338,20 +241,7 @@ static void sonic_render_current_frame_for(const character_t *chr, int sprite_id
 // each update.
 static int sonic_ensure_wram_sprite(character_t *chr)
 {
-    if (chr->wram_sprite_id < 0)
-    {
-        /* Prefer reusing the global sprite only for the primary player instance */
-        extern character_t player;
-        if (chr == &player && sonic_sprite_id >= 0)
-            chr->wram_sprite_id = sonic_sprite_id;
-
-        if (chr->wram_sprite_id < 0)
-            chr->wram_sprite_id = sonic_create_blank_sprite();
-
-        runtime_log("sonic: wram sprite %d for char=%d", chr->wram_sprite_id, chr->character_id);
-    }
-
-    return chr->wram_sprite_id;
+    return character_ensure_wram_sprite(chr, &sonic_sprite_id);
 }
 
 /*
@@ -379,99 +269,8 @@ This matches Amy's behavior and ensures stand/walk/run timing is consistent.
 
 void sonic_running_animation_handling(void)
 {
-    int speed_step;
-
-    if (jo_physics_is_standing(&physics))
-    {
-        jo_reset_sprite_anim(character_ref.running1_anim_id);
-        jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-        if (!jo_is_sprite_anim_stopped(character_ref.walking_anim_id))
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.stand_sprite_id);
-        }
-        else
-        {
-            if (jo_is_sprite_anim_stopped(character_ref.stand_sprite_id))
-                jo_start_sprite_anim_loop(character_ref.stand_sprite_id);
-
-            if (jo_get_sprite_anim_frame(character_ref.stand_sprite_id) == 0)
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 70);
-            else
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 2);
-        }
-    }
-    else
-    {
-        if (character_ref.run == 0)
-        {
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.walking_anim_id))
-                jo_start_sprite_anim_loop(character_ref.walking_anim_id);
-        }
-        else if (character_ref.run == 1)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running1_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running1_anim_id);
-        }
-        else if (character_ref.run == 2)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running2_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running2_anim_id);
-        }
-
-        speed_step = (int)JO_ABS(physics.speed);
-
-        if (speed_step >= 6)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.running2_anim_id, 3);
-            character_ref.run = 2;
-        }
-        else if (speed_step >= 5)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 4);
-            character_ref.run = 1;
-        }
-        else if (speed_step >= 4)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 5);
-            character_ref.run = 1;
-        }
-        else if (speed_step >= 3)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 6);
-            character_ref.run = 1;
-        }
-        else if (speed_step >= 2)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 7);
-            character_ref.run = 1;
-        }
-        else if (speed_step >= 1)
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 8);
-            character_ref.run = 0;
-        }
-        else
-        {
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 9);
-            character_ref.run = 0;
-        }
-    }
-
-    player_update_punch_state_for_character(&character_ref);
-    player_update_kick_state_for_character(&character_ref);
+    character_running_animation_handling(&character_ref, &physics);
 }
-
 
 static void sonic_draw_for_character(character_t *chr)
 {
@@ -540,25 +339,18 @@ static void sonic_draw_for_character(character_t *chr)
         return;
     }
 
-    if (chr->life <= 0)
-    {
-        int defeated_sprite_id = sonic_ensure_defeated_wram_sprite(chr);
-        if (defeated_sprite_id >= 0)
-            sonic_copy_defeated_sheet_frame_to_sprite(defeated_sprite_id);
-
-        if (defeated_sprite_id >= 0)
-            jo_sprite_draw3D2(defeated_sprite_id,
-                              chr->x,
-                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
-                              CHARACTER_SPRITE_Z);
+    if (character_draw_defeated(chr, sonic_ensure_defeated_wram_sprite(chr), &sonic_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT))
         return;
-    }
 
     int sprite_id = sonic_ensure_wram_sprite(chr);
     if (sprite_id < 0)
         return;
 
-    sonic_render_current_frame_for(chr, sprite_id);
+    if (character_draw_sheet_frame(chr, sprite_id, &sonic_sheet))
+        return;
+
+    // Fall back in case the sheet isn't ready.
+    character_draw_legacy_frame(chr);
 
     if (chr->spin)
     {
@@ -613,44 +405,15 @@ void load_sonic(void)
     {
         // Load the combined sheet into WRAM so we can copy frames on demand.
         if (!sonic_sheet_ready)
-        {
-            char *sheet_data = jo_fs_read_file_in_dir("SNC_FUL.TGA", SPRITE_DIR, JO_NULL);
-            if (sheet_data != JO_NULL)
-            {
-                if (jo_tga_loader_from_stream(&sonic_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
-                    sonic_sheet_ready = true;
-                jo_free(sheet_data);
-            }
-        }
+            sonic_sheet_ready = character_load_sheet(&sonic_sheet, "SNC_FUL.TGA", SPRITE_DIR, JO_COLOR_Green);
 
         // Load defeated sprite sheet into WRAM so it can also be copied on demand.
         if (!sonic_defeated_sheet_ready)
-        {
-            char *sheet_data = jo_fs_read_file_in_dir("SNC_DFT.TGA", SPRITE_DIR, JO_NULL);
-            if (sheet_data != JO_NULL)
-            {
-                if (jo_tga_loader_from_stream(&sonic_defeated_sheet, sheet_data, JO_COLOR_Green) == JO_TGA_OK)
-                    sonic_defeated_sheet_ready = true;
-                jo_free(sheet_data);
-            }
-        }
+            sonic_defeated_sheet_ready = character_load_sheet(&sonic_defeated_sheet, "SNC_DFT.TGA", SPRITE_DIR, JO_COLOR_Green);
 
         // Create a single VRAM sprite that will be updated each frame.
         if (sonic_sprite_id < 0)
-        {
-            jo_img blank;
-            blank.width = CHARACTER_WIDTH;
-            blank.height = CHARACTER_HEIGHT;
-            blank.data = (unsigned short *)jo_malloc((size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
-            if (blank.data != JO_NULL)
-            {
-                for (size_t i = 0; i < (size_t)CHARACTER_WIDTH * (size_t)CHARACTER_HEIGHT; ++i)
-                    ((unsigned short *)blank.data)[i] = JO_COLOR_Transparent;
-
-                sonic_sprite_id = jo_sprite_add(&blank);
-                jo_free_img(&blank);
-            }
-        }
+            sonic_sprite_id = character_create_blank_sprite();
 
         /* Use the global sprite as the base WRAM sprite for this character; P2/bots
          * will allocate their own WRAM sprite as needed. */
@@ -716,13 +479,13 @@ void unload_sonic(void)
 
     if (sonic_sheet_ready)
     {
-        jo_free_img(&sonic_sheet);
+        character_unload_sheet(&sonic_sheet);
         sonic_sheet_ready = false;
     }
 
     if (sonic_defeated_sheet_ready)
     {
-        jo_free_img(&sonic_defeated_sheet);
+        character_unload_sheet(&sonic_defeated_sheet);
         sonic_defeated_sheet_ready = false;
     }
 

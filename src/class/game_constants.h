@@ -30,6 +30,10 @@
 #define CHARACTER_SPRITE_Z (450)
 #define DAMAGE_FX_SPRITE_Z (430)
 
+/* Defeated/blood sprite dimensions (used by bots and character sprites) */
+#define DEFEATED_SPRITE_WIDTH (40)
+#define DEFEATED_SPRITE_HEIGHT (32)
+
 #define STUN_LIGHT_FRAMES (18)
 #define STUN_HEAVY_FRAMES (24)
 #define COUNTER_STUN_FRAMES (120)

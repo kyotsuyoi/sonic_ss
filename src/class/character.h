@@ -82,6 +82,15 @@ typedef struct
     bool can_jump;
     int angle;
     int speed;
+
+    /* Tails-specific animation state (spin kick & tail loop). */
+    int tails_kick_timer;
+    int tails_kick_duration;
+    int tails_kick_total_degrees;
+    bool tails_kick_rotation_active;
+    int tail_frame;
+    int tail_timer;
+
     int life;
     int group; /* 0 = no group, 1 = group1, 2 = group2 */
     int battle_damage_dealt; /* accumulated damage dealt in the current fight */

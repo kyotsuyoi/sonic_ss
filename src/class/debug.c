@@ -321,7 +321,7 @@ static void debug_draw_player(void)
     jo_printf(0, 13 + DEBUG_SAFE_TOP_LINES, "SPR_RUN01: %d", jo_get_sprite_anim_frame(player.running1_anim_id));
     jo_printf(0, 14 + DEBUG_SAFE_TOP_LINES, "SPR_RUN02: %d", jo_get_sprite_anim_frame(player.running2_anim_id));
 
-    if (game_loop_debug_get_player2_hitbox_snapshot(&snapshot))
+    if (player2_debug_get_hitbox_snapshot(&snapshot))
         debug_draw_hitbox_snapshot("PVP HITBOX", &snapshot);
     else if (bot_debug_get_hitbox_snapshot(&snapshot))
         debug_draw_hitbox_snapshot("HITBOX DBG", &snapshot);

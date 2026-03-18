@@ -2,6 +2,14 @@
 #include "player.h"
 #include "game_audio.h"
 #include "game_constants.h"
+#include "world_map.h"
+#include "world_physics.h"
+#include "world_collision.h"
+#include "control.h"
+#include "debug.h"
+#include "character/sonic.h"
+#include "character/amy.h"
+#include "character/knuckles.h"
 
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
@@ -12,11 +20,43 @@
 #define GROUND_NO_WALK_BRAKE_FACTOR (0.65f)
 #define GROUND_NO_WALK_STOP_EPSILON (0.20f)
 
+/* Tails specific animation state constants */
+#define TAILS_KICK1_ROTATION_TIME 16
+#define TAILS_KICK2_ROTATION_TIME 32
+#define TAILS_TAIL_FRAME_COUNT 4
+#define TAILS_TAIL_FRAME_DURATION 5
+
 character_t player;
 character_t player2;
 
 /* Toggle for showing debug logs for punch/kick state machines. */
 bool g_show_attack_debug = false;
+
+/* Player2 runtime state (kept inside player module to avoid game_loop-specific logic). */
+static bool g_player2_active = false;
+static bool g_player2_initialized = false;
+static bool g_player2_defeated = false;
+static jo_sidescroller_physics_params g_player2_physics;
+static float g_player2_world_x = 0.0f;
+static float g_player2_world_y = 0.0f;
+static int g_player2_jump_cooldown = 0;
+static int g_p2_jump_hold_ms = 0;
+static bool g_p2_jump_cut_applied = false;
+static int g_p2_airborne_time_ms = 0;
+
+/* Debug snapshot for player-vs-player hitbox checks */
+static int g_dbg_pvp_center_dx = 0;
+static int g_dbg_pvp_center_dy = 0;
+static int g_dbg_pvp_hreach_p1 = 0;
+static int g_dbg_pvp_hreach_p2 = 0;
+static int g_dbg_pvp_hreach_k1 = 0;
+static int g_dbg_pvp_hreach_k2 = 0;
+static int g_dbg_pvp_vreach = 0;
+static bool g_dbg_pvp_hit_p1 = false;
+static bool g_dbg_pvp_hit_p2 = false;
+static bool g_dbg_pvp_hit_k1 = false;
+static bool g_dbg_pvp_hit_k2 = false;
+static bool g_dbg_pvp_available = false;
 
 character_t *player_get_instance(int index)
 {
@@ -24,6 +64,229 @@ character_t *player_get_instance(int index)
 		return &player2;
 
 	return &player;
+}
+
+bool player2_is_active(void)
+{
+	return g_player2_active;
+}
+
+void player2_sync_mode(bool multiplayer_versus)
+{
+	if (!multiplayer_versus)
+	{
+		g_player2_active = false;
+		g_player2_initialized = false;
+		g_player2_defeated = false;
+		g_player2_jump_cooldown = 0;
+		g_p2_jump_hold_ms = 0;
+		g_p2_jump_cut_applied = false;
+		g_p2_airborne_time_ms = 0;
+		player_reset_tail_state(&player2);
+		return;
+	}
+
+	g_player2_active = true;
+}
+
+void player2_reset_runtime(int map_pos_x, int map_pos_y)
+{
+	g_player2_initialized = false;
+	g_player2_defeated = false;
+	g_player2_jump_cooldown = 0;
+	g_p2_jump_hold_ms = 0;
+	g_p2_jump_cut_applied = false;
+	g_p2_airborne_time_ms = 0;
+	player_reset_tail_state(&player2);
+
+	/* Use the current player2 screen position (set by reset_fight), not an offset from player1. */
+	g_player2_world_x = (float)(map_pos_x + player2.x);
+	g_player2_world_y = (float)(map_pos_y + player2.y);
+}
+
+void player2_update_runtime(int map_pos_x, int map_pos_y)
+{
+	if (!g_player2_active)
+		return;
+
+	player_runtime_update(&player2,
+	                      &g_player2_physics,
+	                      &g_player2_world_x,
+	                      &g_player2_world_y,
+	                      &g_player2_initialized,
+	                      &g_player2_defeated,
+	                      &g_player2_jump_cooldown,
+	                      &g_p2_jump_hold_ms,
+	                      &g_p2_jump_cut_applied,
+	                      &g_p2_airborne_time_ms,
+	                      1,
+	                      map_pos_x,
+	                      map_pos_y);
+}
+
+bool player2_is_defeated(void)
+{
+	return player2.life <= 0;
+}
+
+jo_sidescroller_physics_params *player2_get_physics(void)
+{
+	return &g_player2_physics;
+}
+
+static bool player_debug_is_attack_in_range(int attacker_x,
+                                              int attacker_y,
+                                              bool attacker_flip,
+                                              int target_x,
+                                              int target_y,
+                                              int range)
+{
+    int forward_range = range;
+    int attacker_left = attacker_x;
+    int attacker_right = attacker_x + CHARACTER_WIDTH;
+    int attacker_top = attacker_y;
+    int attacker_bottom = attacker_y + CHARACTER_HEIGHT;
+    int attack_left;
+    int attack_right;
+    int target_left = target_x;
+    int target_right = target_x + CHARACTER_WIDTH;
+    int target_top = target_y;
+    int target_bottom = target_y + CHARACTER_HEIGHT;
+
+    if (forward_range > 1)
+        forward_range = (forward_range + 1) / 2;
+
+    if (attacker_flip)
+    {
+        attack_left = attacker_left - forward_range;
+        attack_right = attacker_left;
+    }
+    else
+    {
+        attack_left = attacker_right;
+        attack_right = attacker_right + forward_range;
+    }
+
+    return target_right >= attack_left
+        && target_left <= attack_right
+        && target_bottom >= attacker_top
+        && target_top <= attacker_bottom;
+}
+
+void player2_update_pvp_hitbox_snapshot(int p1_world_x, int p1_world_y, int p2_world_x, int p2_world_y)
+{
+	if (!g_player2_active)
+	{
+		g_dbg_pvp_available = false;
+		return;
+	}
+
+	int center_x_p1 = p1_world_x + (CHARACTER_WIDTH / 2);
+	int center_x_p2 = p2_world_x + (CHARACTER_WIDTH / 2);
+	int center_y_p1 = p1_world_y + (CHARACTER_HEIGHT / 2);
+	int center_y_p2 = p2_world_y + (CHARACTER_HEIGHT / 2);
+
+	g_dbg_pvp_center_dx = JO_ABS(center_x_p1 - center_x_p2);
+	g_dbg_pvp_center_dy = JO_ABS(center_y_p1 - center_y_p2);
+	g_dbg_pvp_hreach_p1 = (CHARACTER_WIDTH / 2) + player.hit_range_punch1;
+	g_dbg_pvp_hreach_p2 = (CHARACTER_WIDTH / 2) + player.hit_range_punch2;
+	g_dbg_pvp_hreach_k1 = (CHARACTER_WIDTH / 2) + player.hit_range_kick1;
+	g_dbg_pvp_hreach_k2 = (CHARACTER_WIDTH / 2) + player.hit_range_kick2;
+	g_dbg_pvp_vreach = (CHARACTER_HEIGHT / 2) + 12;
+
+	g_dbg_pvp_hit_p1 = player_debug_is_attack_in_range(p1_world_x,
+	                                                 p1_world_y,
+	                                                 player.flip,
+	                                                 p2_world_x,
+	                                                 p2_world_y,
+	                                                 player.hit_range_punch1);
+	g_dbg_pvp_hit_p2 = player_debug_is_attack_in_range(p1_world_x,
+	                                                 p1_world_y,
+	                                                 player.flip,
+	                                                 p2_world_x,
+	                                                 p2_world_y,
+	                                                 player.hit_range_punch2);
+	g_dbg_pvp_hit_k1 = player_debug_is_attack_in_range(p1_world_x,
+	                                                 p1_world_y,
+	                                                 player.flip,
+	                                                 p2_world_x,
+	                                                 p2_world_y,
+	                                                 player.hit_range_kick1);
+	g_dbg_pvp_hit_k2 = player_debug_is_attack_in_range(p1_world_x,
+	                                                 p1_world_y,
+	                                                 player.flip,
+	                                                 p2_world_x,
+	                                                 p2_world_y,
+	                                                 player.hit_range_kick2);
+
+	g_dbg_pvp_available = true;
+}
+
+bool player2_debug_get_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot)
+{
+	if (snapshot == JO_NULL || !g_dbg_pvp_available)
+		return false;
+
+	snapshot->center_dx = g_dbg_pvp_center_dx;
+	snapshot->center_dy = g_dbg_pvp_center_dy;
+	snapshot->hreach_p1 = g_dbg_pvp_hreach_p1;
+	snapshot->hreach_p2 = g_dbg_pvp_hreach_p2;
+	snapshot->hreach_k1 = g_dbg_pvp_hreach_k1;
+	snapshot->hreach_k2 = g_dbg_pvp_hreach_k2;
+	snapshot->vreach = g_dbg_pvp_vreach;
+	snapshot->hit_p1 = g_dbg_pvp_hit_p1;
+	snapshot->hit_p2 = g_dbg_pvp_hit_p2;
+	snapshot->hit_k1 = g_dbg_pvp_hit_k1;
+	snapshot->hit_k2 = g_dbg_pvp_hit_k2;
+	return true;
+}
+
+void player2_handle_input(const control_input_t *input)
+{
+	if (!g_player2_active)
+		return;
+
+	if (player2.life <= 0)
+	{
+		player2.walk = false;
+		player2.run = 0;
+		player2.spin = false;
+		player2.punch = false;
+		player2.punch2 = false;
+		player2.kick = false;
+		player2.kick2 = false;
+		jo_physics_apply_friction(&g_player2_physics);
+		return;
+	}
+
+	if (g_player2_jump_cooldown > 0)
+		g_player2_jump_cooldown--;
+
+	if (player2.attack_cooldown > 0)
+		player2.attack_cooldown--;
+
+	if (player2.stun_timer > 0)
+	{
+		player2.stun_timer--;
+		player2.walk = false;
+		player2.run = 0;
+		player2.spin = false;
+		jo_physics_apply_friction(&g_player2_physics);
+	}
+	else
+	{
+		control_handle_character_commands(&g_player2_physics,
+		                                  &player2,
+		                                  &g_player2_jump_cooldown,
+		                                  &g_p2_jump_hold_ms,
+		                                  &g_p2_jump_cut_applied,
+		                                  game_audio_get_jump_sfx(),
+		                                  0,
+		                                  game_audio_get_spin_sfx(),
+		                                  game_audio_get_punch_sfx(),
+		                                  game_audio_get_kick_sfx(),
+		                                  input);
+	}
 }
 
 int player_get_max_instances(void)
@@ -583,6 +846,463 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	/* Unified 4-frame profile matching the working Knuckles combo flow. */
 	/* 2 + 2 frames: stage1 frames 0-1, stage2 frames 2-3. Allow combo trigger at frame 1. */
 	player_update_punch_state(controlled_player, 1, 1, 2, 3, true, true, false);
+}
+void player_update_animation_state(character_t *controlled_player, jo_sidescroller_physics_params *physics)
+{
+    if (controlled_player == JO_NULL || physics == JO_NULL)
+        return;
+
+    bool is_tails = (controlled_player->character_id == CHARACTER_ID_TAILS);
+    bool is_knuckles = (controlled_player->character_id == CHARACTER_ID_KNUCKLES);
+    bool is_sonic = (controlled_player->character_id == CHARACTER_ID_SONIC);
+    bool is_amy = (controlled_player->character_id == CHARACTER_ID_AMY);
+
+    /* Tails-specific tail animation loop state */
+    if (is_tails)
+    {
+        controlled_player->tail_timer++;
+        if (controlled_player->tail_timer >= TAILS_TAIL_FRAME_DURATION)
+        {
+            controlled_player->tail_timer = 0;
+            controlled_player->tail_frame = (controlled_player->tail_frame + 1) % TAILS_TAIL_FRAME_COUNT;
+        }
+    }
+    else
+    {
+        controlled_player->tail_timer = 0;
+        controlled_player->tail_frame = 0;
+
+        controlled_player->tails_kick_timer = 0;
+        controlled_player->tails_kick_duration = 0;
+        controlled_player->tails_kick_total_degrees = 0;
+        controlled_player->tails_kick_rotation_active = false;
+    }
+
+    /* Sonic/Amy use WRAM-sheet animation handlers which rely on a global current character pointer. */
+    if (is_sonic)
+    {
+        sonic_set_current(controlled_player, physics);
+        sonic_running_animation_handling();
+        sonic_set_current(&player, NULL);
+        return;
+    }
+
+    if (is_amy)
+    {
+        amy_set_current(controlled_player, physics);
+        amy_running_animation_handling();
+        amy_set_current(&player, NULL);
+        return;
+    }
+
+    /* Generic walk/run/stand animation handling for remaining characters. */
+    if (jo_physics_is_standing(physics))
+    {
+        jo_reset_sprite_anim(controlled_player->running1_anim_id);
+        jo_reset_sprite_anim(controlled_player->running2_anim_id);
+
+        if (!jo_is_sprite_anim_stopped(controlled_player->walking_anim_id))
+        {
+            jo_reset_sprite_anim(controlled_player->walking_anim_id);
+            jo_reset_sprite_anim(controlled_player->stand_sprite_id);
+        }
+        else
+        {
+            if (jo_is_sprite_anim_stopped(controlled_player->stand_sprite_id))
+                jo_start_sprite_anim_loop(controlled_player->stand_sprite_id);
+
+            if (jo_get_sprite_anim_frame(controlled_player->stand_sprite_id) == 0)
+                jo_set_sprite_anim_frame_rate(controlled_player->stand_sprite_id, 70);
+            else
+                jo_set_sprite_anim_frame_rate(controlled_player->stand_sprite_id, 2);
+        }
+    }
+    else
+    {
+        int speed_step = (int)JO_ABS(physics->speed);
+
+        if (controlled_player->run == 0)
+        {
+            jo_reset_sprite_anim(controlled_player->running1_anim_id);
+            jo_reset_sprite_anim(controlled_player->running2_anim_id);
+
+            if (jo_is_sprite_anim_stopped(controlled_player->walking_anim_id))
+                jo_start_sprite_anim_loop(controlled_player->walking_anim_id);
+        }
+        else if (controlled_player->run == 1)
+        {
+            jo_reset_sprite_anim(controlled_player->walking_anim_id);
+            jo_reset_sprite_anim(controlled_player->running2_anim_id);
+
+            if (jo_is_sprite_anim_stopped(controlled_player->running1_anim_id))
+                jo_start_sprite_anim_loop(controlled_player->running1_anim_id);
+        }
+        else if (controlled_player->run == 2)
+        {
+            jo_reset_sprite_anim(controlled_player->walking_anim_id);
+            jo_reset_sprite_anim(controlled_player->running1_anim_id);
+
+            if (jo_is_sprite_anim_stopped(controlled_player->running2_anim_id))
+                jo_start_sprite_anim_loop(controlled_player->running2_anim_id);
+        }
+
+        if (speed_step >= 6)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->running2_anim_id, 3);
+            controlled_player->run = 2;
+        }
+        else if (speed_step >= 5)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->running1_anim_id, 4);
+            controlled_player->run = 1;
+        }
+        else if (speed_step >= 4)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->running1_anim_id, 5);
+            controlled_player->run = 1;
+        }
+        else if (speed_step >= 3)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->running1_anim_id, 6);
+            controlled_player->run = 1;
+        }
+        else if (speed_step >= 2)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->running1_anim_id, 7);
+            controlled_player->run = 1;
+        }
+        else if (speed_step >= 1)
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->walking_anim_id, 8);
+            controlled_player->run = 0;
+        }
+        else
+        {
+            jo_set_sprite_anim_frame_rate(controlled_player->walking_anim_id, 9);
+            controlled_player->run = 0;
+        }
+    }
+
+    if (is_knuckles)
+    {
+        knuckles_update_animation_for(controlled_player, physics);
+    }
+    else
+    {
+        player_update_punch_state_for_character(controlled_player);
+        player_update_kick_state_for_character(controlled_player);
+    }
+
+    if (is_tails)
+    {
+        if (controlled_player->kick)
+        {
+            if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 180)
+            {
+                controlled_player->tails_kick_timer = 0;
+                controlled_player->tails_kick_duration = TAILS_KICK1_ROTATION_TIME;
+                controlled_player->tails_kick_total_degrees = 180;
+                controlled_player->tails_kick_rotation_active = true;
+            }
+
+            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
+                ++controlled_player->tails_kick_timer;
+
+            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
+            {
+                if (controlled_player->kick2_requested)
+                {
+                    controlled_player->kick = false;
+                    controlled_player->kick2 = true;
+                    controlled_player->kick2_requested = false;
+                    controlled_player->perform_kick2 = true;
+
+                    controlled_player->tails_kick_timer = 0;
+                    controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
+                    controlled_player->tails_kick_total_degrees = 360;
+                    controlled_player->tails_kick_rotation_active = true;
+                }
+                else
+                {
+                    controlled_player->kick = false;
+                    controlled_player->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+                    controlled_player->tails_kick_rotation_active = false;
+                }
+            }
+        }
+        else if (controlled_player->kick2)
+        {
+            if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 360)
+            {
+                controlled_player->tails_kick_timer = 0;
+                controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
+                controlled_player->tails_kick_total_degrees = 360;
+                controlled_player->tails_kick_rotation_active = true;
+            }
+
+            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
+                ++controlled_player->tails_kick_timer;
+
+            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
+            {
+                controlled_player->kick2 = false;
+                controlled_player->attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
+                controlled_player->tails_kick_rotation_active = false;
+            }
+        }
+        else if (controlled_player->tails_kick_rotation_active)
+        {
+            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
+                ++controlled_player->tails_kick_timer;
+            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
+                controlled_player->tails_kick_rotation_active = false;
+        }
+
+        if (!controlled_player->tails_kick_rotation_active && !controlled_player->kick && !controlled_player->kick2)
+        {
+            controlled_player->tails_kick_timer = 0;
+            controlled_player->tails_kick_duration = 0;
+            controlled_player->tails_kick_total_degrees = 0;
+        }
+    }
+}
+
+bool player_should_draw_tail(const character_t *controlled_player)
+{
+    if (controlled_player == JO_NULL)
+        return false;
+
+    if (controlled_player->character_id != CHARACTER_ID_TAILS)
+        return false;
+
+    if (controlled_player->spin)
+        return false;
+    if (controlled_player->life <= 0)
+        return false;
+    if (controlled_player->stun_timer > 0)
+        return false;
+    if (controlled_player->kick2)
+        return false;
+    if (controlled_player->tails_kick_rotation_active)
+        return false;
+
+    return true;
+}
+
+void player_reset_tail_state(character_t *controlled_player)
+{
+    if (controlled_player == JO_NULL)
+        return;
+
+    controlled_player->tail_timer = 0;
+    controlled_player->tail_frame = 0;
+
+    controlled_player->tails_kick_timer = 0;
+    controlled_player->tails_kick_duration = 0;
+    controlled_player->tails_kick_total_degrees = 0;
+    controlled_player->tails_kick_rotation_active = false;
+}
+
+int player_get_tail_offset_x(const character_t *controlled_player)
+{
+    (void)controlled_player;
+    /* Tails uses a fixed tail offset; other chars do not draw a tail. */
+    return 14;
+}
+
+int player_get_defeated_sprite_height(const character_t *controlled_player)
+{
+    (void)controlled_player;
+    /* Height used for the “defeated” sprite vertical offset. */
+    return 32;
+}
+
+void player_draw(character_t *controlled_player, jo_sidescroller_physics_params *physics)
+{
+    int anim_sprite_id;
+
+    if (controlled_player == JO_NULL || physics == JO_NULL)
+        return;
+
+    bool apply_flip = controlled_player->flip;
+    if (apply_flip)
+        jo_sprite_enable_horizontal_flip();
+
+    /* Character-specific drawing (Sonic/Amy use WRAM). */
+    if (controlled_player->character_id == CHARACTER_ID_AMY)
+    {
+        amy_set_current(controlled_player, physics);
+        amy_draw(controlled_player);
+        amy_set_current(&player, NULL);
+    }
+    else if (controlled_player->character_id == CHARACTER_ID_SONIC)
+    {
+        sonic_set_current(controlled_player, physics);
+        sonic_draw(controlled_player);
+        sonic_set_current(&player, NULL);
+    }
+    else
+    {
+        /* Common draw path for non-WRAM characters */
+        if (controlled_player->spin)
+        {
+            jo_sprite_draw3D_and_rotate2(controlled_player->spin_sprite_id,
+                                         controlled_player-> x,
+                                         controlled_player->y,
+                                         CHARACTER_SPRITE_Z,
+                                         controlled_player->angle);
+            if (controlled_player->flip)
+                controlled_player->angle -= CHARACTER_SPIN_SPEED;
+            else
+                controlled_player->angle += CHARACTER_SPIN_SPEED;
+        }
+        else if (controlled_player->life <= 0 && controlled_player->defeated_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(controlled_player->defeated_sprite_id,
+                              controlled_player->x,
+                              controlled_player->y + (CHARACTER_HEIGHT - player_get_defeated_sprite_height(controlled_player)),
+                              CHARACTER_SPRITE_Z);
+        }
+        else if (controlled_player->stun_timer > 0 && controlled_player->damage_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(controlled_player->damage_sprite_id,
+                              controlled_player->x,
+                              controlled_player->y,
+                              CHARACTER_SPRITE_Z);
+        }
+        else if (controlled_player->punch || controlled_player->punch2)
+        {
+            anim_sprite_id = (controlled_player->punch_anim_id >= 0) ? jo_get_anim_sprite(controlled_player->punch_anim_id) : -1;
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, controlled_player->x, controlled_player->y, CHARACTER_SPRITE_Z);
+        }
+        else if (controlled_player->kick || controlled_player->kick2)
+        {
+            /* Tails has custom kick‑rotation logic stored in the character state. */
+            if (controlled_player->character_id == CHARACTER_ID_TAILS)
+            {
+                int kick_sprite_id = game_flow_get_player2_kick_sprite_id();
+                int kick_angle = 0;
+
+                if (controlled_player->tails_kick_duration > 0)
+                    kick_angle = (controlled_player->tails_kick_total_degrees * controlled_player->tails_kick_timer) / controlled_player->tails_kick_duration;
+                if (controlled_player->flip)
+                    kick_angle = -kick_angle;
+
+                if (kick_sprite_id >= 0)
+                    jo_sprite_draw3D_and_rotate2(kick_sprite_id, controlled_player->x, controlled_player->y, CHARACTER_SPRITE_Z, kick_angle);
+            }
+            else
+            {
+                anim_sprite_id = (controlled_player->kick_anim_id >= 0) ? jo_get_anim_sprite(controlled_player->kick_anim_id) : -1;
+                if (anim_sprite_id >= 0)
+                    jo_sprite_draw3D2(anim_sprite_id, controlled_player->x, controlled_player->y, CHARACTER_SPRITE_Z);
+            }
+        }
+        else if (controlled_player->jump)
+        {
+            jo_sprite_draw3D2(controlled_player->jump_sprite_id, controlled_player->x, controlled_player->y, CHARACTER_SPRITE_Z);
+        }
+        else
+        {
+            if (controlled_player->walk && controlled_player->run == 0)
+                anim_sprite_id = (controlled_player->walking_anim_id >= 0) ? jo_get_anim_sprite(controlled_player->walking_anim_id) : -1;
+            else if (controlled_player->walk && controlled_player->run == 1)
+                anim_sprite_id = (controlled_player->running1_anim_id >= 0) ? jo_get_anim_sprite(controlled_player->running1_anim_id) : -1;
+            else if (controlled_player->walk && controlled_player->run == 2)
+                anim_sprite_id = (controlled_player->running2_anim_id >= 0) ? jo_get_anim_sprite(controlled_player->running2_anim_id) : -1;
+            else
+                anim_sprite_id = (controlled_player->stand_sprite_id >= 0) ? jo_get_anim_sprite(controlled_player->stand_sprite_id) : -1;
+
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, controlled_player->x, controlled_player->y, CHARACTER_SPRITE_Z);
+        }
+    }
+
+    if (apply_flip)
+        jo_sprite_disable_horizontal_flip();
+}
+
+void player_runtime_update(character_t *controlled_player,
+                            jo_sidescroller_physics_params *physics,
+                            float *world_x,
+                            float *world_y,
+                            bool *initialized,
+                            bool *defeated,
+                            int *jump_cooldown,
+                            int *jump_hold_ms,
+                            bool *jump_cut_applied,
+                            int *airborne_time_ms,
+                            int player_index,
+                            int map_pos_x,
+                            int map_pos_y)
+{
+    if (controlled_player == JO_NULL || physics == JO_NULL || world_x == JO_NULL || world_y == JO_NULL
+        || initialized == JO_NULL || defeated == JO_NULL || jump_cooldown == JO_NULL || jump_hold_ms == JO_NULL
+        || jump_cut_applied == JO_NULL || airborne_time_ms == JO_NULL)
+        return;
+
+    if (!*initialized)
+    {
+        world_physics_init_character(physics);
+        physics->speed = 0.0f;
+        physics->speed_y = 0.0f;
+        physics->is_in_air = false;
+
+        *jump_cooldown = 0;
+        *jump_hold_ms = 0;
+        *jump_cut_applied = false;
+        *airborne_time_ms = 0;
+
+        *world_x = world_map_get_player_start_x(player_index, controlled_player->group);
+        *world_y = world_map_get_player_start_y(player_index, controlled_player->group);
+
+        controlled_player->x = (int)*world_x - map_pos_x;
+        controlled_player->y = (int)*world_y - map_pos_y;
+        controlled_player->flip = false;
+        controlled_player->can_jump = true;
+        if (controlled_player->life <= 0)
+            controlled_player->life = 50;
+
+        player_reset_tail_state(controlled_player);
+
+        *initialized = true;
+    }
+
+    controlled_player->x = (int)*world_x - map_pos_x;
+    controlled_player->y = (int)*world_y - map_pos_y;
+
+    int world_pos_x = map_pos_x;
+    world_handle_character_collision(physics, controlled_player, &world_pos_x, map_pos_y);
+
+    *world_x = (float)(world_pos_x + controlled_player->x);
+    *world_y = (float)(map_pos_y + controlled_player->y);
+
+    controlled_player->speed = (int)JO_ABS(physics->speed);
+
+    if (physics->is_in_air)
+    {
+        bool show_jump_sprite = false;
+
+        *airborne_time_ms += GAME_FRAME_MS;
+        if (physics->speed_y < 0.0f)
+            show_jump_sprite = true;
+        else if (physics->speed_y >= AIRBORNE_FALL_SPEED_THRESHOLD)
+            show_jump_sprite = true;
+        else if (*airborne_time_ms >= AIRBORNE_SPRITE_DELAY_MS)
+            show_jump_sprite = true;
+
+        controlled_player->jump = show_jump_sprite;
+        controlled_player->falling = (show_jump_sprite && physics->speed_y > 0.0f);
+    }
+    else
+    {
+        *airborne_time_ms = 0;
+        controlled_player->jump = false;
+        controlled_player->falling = false;
+    }
+
+    player_update_animation_state(controlled_player, physics);
 }
 
 void player_update_kick_state(character_t *controlled_player,

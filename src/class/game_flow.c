@@ -666,7 +666,7 @@ void game_flow_reset_fight(void *user_data)
         player2.punch2 = false;
         player2.kick = false;
         player2.kick2 = false;
-        game_loop_reset_player2_runtime();
+        player2_reset_runtime(*ctx->map_pos_x, *ctx->map_pos_y);
     }
     damage_fx_reset();
     *ctx->player_defeated = false;

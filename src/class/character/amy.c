@@ -377,8 +377,15 @@ static int amy_ensure_wram_sprite(character_t *chr)
 {
     if (chr->wram_sprite_id < 0)
     {
-        chr->wram_sprite_id = amy_create_blank_sprite();
-        runtime_log("amy: created wram sprite id=%d for char=%d", chr->wram_sprite_id, chr->character_id);
+        /* Prefer reusing the global sprite only for the primary player instance */
+        extern character_t player;
+        if (chr == &player && amy_sprite_id >= 0)
+            chr->wram_sprite_id = amy_sprite_id;
+
+        if (chr->wram_sprite_id < 0)
+            chr->wram_sprite_id = amy_create_blank_sprite();
+
+        runtime_log("amy: wram sprite %d for char=%d", chr->wram_sprite_id, chr->character_id);
     }
 
     if (chr->wram_sprite_id < 0)

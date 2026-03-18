@@ -39,3 +39,4 @@
 # OS noise files
 Thumbs.db
 .DS_Store
+build_compile_log.txt

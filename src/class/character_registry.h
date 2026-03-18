@@ -49,4 +49,24 @@ character_combat_profile_t character_registry_get_combat_profile(ui_character_ch
 character_combat_profile_t character_registry_get_combat_profile_by_character_id(int character_id);
 void character_registry_apply_combat_profile(character_t *character, ui_character_choice_t choice);
 
+// Helpers for bot asset loading (character sprite definitions are owned by the character system).
+const jo_tile *character_get_move_tiles(ui_character_choice_t choice, int *out_count);
+const jo_tile *character_get_stand_tiles(ui_character_choice_t choice, int *out_count);
+const jo_tile *character_get_punch_tiles(ui_character_choice_t choice, int *out_count);
+const jo_tile *character_get_kick_tiles(ui_character_choice_t choice, int *out_count);
+const jo_tile *character_get_tail_tiles(ui_character_choice_t choice, int *out_count);
+
+const char *character_get_walk_tga(ui_character_choice_t choice);
+const char *character_get_run1_tga(ui_character_choice_t choice);
+const char *character_get_run2_tga(ui_character_choice_t choice);
+const char *character_get_stand_tga(ui_character_choice_t choice);
+const char *character_get_jump_tga(ui_character_choice_t choice);
+const char *character_get_spin_tga(ui_character_choice_t choice);
+const char *character_get_damage_tga(ui_character_choice_t choice);
+const char *character_get_defeated_tga(ui_character_choice_t choice);
+const jo_tile *character_get_defeated_tiles(int *out_count);
+const char *character_get_punch_tga(ui_character_choice_t choice);
+const char *character_get_kick_tga(ui_character_choice_t choice);
+const char *character_get_tail_tga(ui_character_choice_t choice);
+
 #endif
