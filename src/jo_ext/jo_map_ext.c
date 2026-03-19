@@ -56,9 +56,9 @@ static void jo_map_ext_store_tile(const unsigned int layer,
         sprite_id = jo_get_anim_sprite(sprite_or_anim_id);
     else
         sprite_id = sprite_or_anim_id;
-    /* Store coordinates adjusted for centered screen drawing (matches jo_map_draw). */
-    new_tile->x = x - JO_TV_WIDTH_2 + JO_DIV_BY_2(__jo_sprite_def[sprite_id].width);
-    new_tile->y = y - JO_TV_HEIGHT_2 + JO_DIV_BY_2(__jo_sprite_def[sprite_id].height);
+    /* Store raw world coords; draw will convert to screen-centered coords. */
+    new_tile->x = x;
+    new_tile->y = y;
     new_tile->width = __jo_sprite_def[sprite_id].width;
     new_tile->height = __jo_sprite_def[sprite_id].height;
     new_tile->is_animated = is_animated;
@@ -131,8 +131,8 @@ bool jo_map_set_tile_sprite_ext(const unsigned int layer, const unsigned short t
     tile->sprite_or_anim_id = sprite_id;
     tile->width = __jo_sprite_def[sprite_id].width;
     tile->height = __jo_sprite_def[sprite_id].height;
-    tile->x = tile->real_x - JO_TV_WIDTH_2 + JO_DIV_BY_2(tile->width);
-    tile->y = tile->real_y - JO_TV_HEIGHT_2 + JO_DIV_BY_2(tile->height);
+    tile->x = tile->real_x;
+    tile->y = tile->real_y;
     return true;
 }
 
@@ -245,13 +245,11 @@ void jo_map_draw_ext(const unsigned int layer, const short screen_x, const short
         if (!current_tile->is_visible_on_screen)
             continue;
 
-        /* Use the same centered coordinates approach as jo_map_draw. */
-        current_tile->pos.x = current_tile->x - screen_x;
-        current_tile->pos.y = current_tile->y - screen_y;
-        if (current_tile->is_animated)
-            jo_sprite_draw(jo_get_anim_sprite(current_tile->sprite_or_anim_id), &current_tile->pos, true, false);
-        else
-            jo_sprite_draw(current_tile->sprite_or_anim_id, &current_tile->pos, true, false);
+        /* Convert from world to centered screen coordinates. */
+        int sprite_id = current_tile->is_animated ? jo_get_anim_sprite(current_tile->sprite_or_anim_id) : current_tile->sprite_or_anim_id;
+        current_tile->pos.x = (current_tile->x - screen_x) - JO_TV_WIDTH_2 + JO_DIV_BY_2(current_tile->width);
+        current_tile->pos.y = (current_tile->y - screen_y) - JO_TV_HEIGHT_2 + JO_DIV_BY_2(current_tile->height);
+        jo_sprite_draw(sprite_id, &current_tile->pos, true, false);
     }
 }
 

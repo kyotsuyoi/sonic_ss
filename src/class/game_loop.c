@@ -1235,11 +1235,11 @@ void game_loop_draw(void)
     else
         g_free_cam_player = -1;
 
-    /* Map position is authoritative for physics/collision; camera defines the visible portion of the world. */
+    /* Camera world is already the top-left of the visible viewport. */
     int render_map_x = (int)g_camera_world_x;
     int render_map_y = (int)g_camera_world_y;
-    int screen_x = render_map_x - JO_TV_WIDTH_2;
-    int screen_y = render_map_y - JO_TV_HEIGHT_2;
+    int screen_x = render_map_x;
+    int screen_y = render_map_y;
 
     if (g_ctx->ui_state->diag_draw_backgrounds)
     {
@@ -1253,7 +1253,7 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->diag_vram_uploads)
     {
-        /* Ensure tiles visible in the current camera view are prepared. */
+        /* Prepare and draw using the actual visible camera viewport. */
         world_map_prepare_visible_tiles(screen_x, screen_y);
 
         jo_map_draw_ext(WORLD_MAP_ID, (short)screen_x, (short)screen_y);
