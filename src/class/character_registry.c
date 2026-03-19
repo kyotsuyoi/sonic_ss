@@ -13,12 +13,6 @@ static ui_character_choice_t character_registry_choice_from_character_id(int cha
     {
     case CHARACTER_ID_AMY:
         return UiCharacterAmy;
-    case CHARACTER_ID_TAILS:
-        return UiCharacterTails;
-    case CHARACTER_ID_KNUCKLES:
-        return UiCharacterKnuckles;
-    case CHARACTER_ID_SHADOW:
-        return UiCharacterShadow;
     case CHARACTER_ID_SONIC:
     default:
         return UiCharacterSonic;
@@ -37,24 +31,6 @@ character_handlers_t character_registry_get(ui_character_choice_t choice)
         handlers.update_animation = amy_running_animation_handling;
         handlers.display = display_amy;
         break;
-    case UiCharacterTails:
-        handlers.load = load_tails;
-        handlers.unload = unload_tails;
-        handlers.update_animation = tails_running_animation_handling;
-        handlers.display = display_tails;
-        break;
-    case UiCharacterKnuckles:
-        handlers.load = load_knuckles;
-        handlers.unload = unload_knuckles;
-        handlers.update_animation = knuckles_running_animation_handling;
-        handlers.display = display_knuckles;
-        break;
-    case UiCharacterShadow:
-        handlers.load = load_shadow;
-        handlers.unload = unload_shadow;
-        handlers.update_animation = shadow_running_animation_handling;
-        handlers.display = display_shadow;
-        break;
     case UiCharacterSonic:
     default:
         handlers.load = load_sonic;
@@ -71,47 +47,24 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
 {
     character_animation_profile_t profile;
 
-    /* Default to the most common profile (Knuckles / Tails), then override for special cases. */
-    profile.move_count = 4;
+    profile.move_count = 8;
     profile.stand_count = 4;
-    profile.punch_count = 4;
-    profile.kick_count = 4;
+    profile.punch_count = 8;
+    profile.kick_count = 8;
 
-    switch (choice)
+    if (choice == UiCharacterAmy)
     {
-    case UiCharacterAmy:
-        /* Amy uses an 8-frame walk/run sheet and an 8-frame punch/kick sheet. */
         profile.move_count = 8;
         profile.stand_count = 4;
         profile.punch_count = 8;
         profile.kick_count = 8;
-        break;
-    case UiCharacterTails:
-        profile.move_count = 4;
-        profile.stand_count = 4;
-        profile.punch_count = 4;
-        profile.kick_count = 4;
-        break;
-    case UiCharacterKnuckles:
-        profile.move_count = 4;
-        profile.stand_count = 4;
-        profile.punch_count = 4;
-        profile.kick_count = 4;
-        break;
-    case UiCharacterShadow:
-        profile.move_count = 4;
-        profile.stand_count = 3;
-        profile.punch_count = 4;
-        profile.kick_count = 4;
-        break;
-    case UiCharacterSonic:
-    default:
-        /* Sonic uses an 8-frame walk/run sheet and an 8-frame punch/kick sheet. */
+    }
+    else
+    {
         profile.move_count = 8;
         profile.stand_count = 4;
         profile.punch_count = 8;
         profile.kick_count = 8;
-        break;
     }
 
     return profile;
@@ -119,6 +72,7 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
 
 character_combat_profile_t character_registry_get_combat_profile(ui_character_choice_t choice)
 {
+    (void)choice;
     character_combat_profile_t profile;
 
     profile.hit_range_punch1 = 10;
@@ -140,29 +94,6 @@ character_combat_profile_t character_registry_get_combat_profile(ui_character_ch
     profile.charged_kick_range_bonus = 4;
     profile.charged_kick_stun_bonus = 14;
     profile.charged_kick_knockback_mult = 1.70f;
-
-    if (choice == UiCharacterTails)
-    {
-        profile.hit_range_kick1 = 16;
-        profile.hit_range_kick2 = 20;
-        profile.attack_forward_impulse_light = 0.65f;
-        profile.attack_forward_impulse_heavy = 1.00f;
-        profile.knockback_kick1 = 1.8f;
-        profile.knockback_kick2 = 2.4f;
-    }
-
-    if (choice == UiCharacterKnuckles)
-    {
-        profile.hit_range_kick1 = 13;
-        profile.hit_range_kick2 = 18;
-        profile.attack_forward_impulse_light = 0.85f;
-        profile.attack_forward_impulse_heavy = 1.75f;
-        profile.knockback_kick1 = 2.4f;
-        profile.knockback_kick2 = 3.6f;
-        profile.charged_kick_enabled = true;
-        /* Ensure Knuckles charged kick is noticeably stronger (matching PvP behavior). */
-        profile.charged_kick_damage = 15;
-    }
 
     return profile;
 }
@@ -203,15 +134,6 @@ void character_registry_apply_combat_profile(character_t *character, ui_characte
     {
     case UiCharacterAmy:
         character->character_id = CHARACTER_ID_AMY;
-        break;
-    case UiCharacterTails:
-        character->character_id = CHARACTER_ID_TAILS;
-        break;
-    case UiCharacterKnuckles:
-        character->character_id = CHARACTER_ID_KNUCKLES;
-        break;
-    case UiCharacterShadow:
-        character->character_id = CHARACTER_ID_SHADOW;
         break;
     case UiCharacterSonic:
     default:

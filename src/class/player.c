@@ -3,6 +3,32 @@
 #include "player.h"
 #include "game_audio.h"
 #include "game_constants.h"
+
+character_action_status_t character_update_cooldowns(character_t *character, int *jump_cooldown)
+{
+    if (character == JO_NULL)
+        return CharacterActionBlockedDefeated;
+
+    if (jump_cooldown != JO_NULL && *jump_cooldown > 0)
+        (*jump_cooldown)--;
+
+    if (character->attack_cooldown > 0)
+        character->attack_cooldown--;
+
+    if (character->stun_timer > 0)
+        character->stun_timer--;
+
+    if (character->life <= 0)
+        return CharacterActionBlockedDefeated;
+    if (character->stun_timer > 0)
+        return CharacterActionBlockedStun;
+    if (jump_cooldown != JO_NULL && *jump_cooldown > 0)
+        return CharacterActionBlockedJumpCooldown;
+    if (character->attack_cooldown > 0)
+        return CharacterActionBlockedAttackCooldown;
+
+    return CharacterActionAllowed;
+}
 #include "world_map.h"
 #include "world_physics.h"
 #include "world_collision.h"
@@ -147,6 +173,27 @@ void player_instance_update_runtime(player_instance_t *inst, int *map_pos_x, int
                           map_pos_y);
 }
 
+void player_apply_defeated_state(character_t *controlled_player,
+                                jo_sidescroller_physics_params *physics,
+                                bool *defeated_flag)
+{
+    if (controlled_player == JO_NULL || physics == JO_NULL)
+        return;
+
+    if (defeated_flag != JO_NULL)
+        *defeated_flag = true;
+
+    controlled_player->walk = false;
+    controlled_player->run = 0;
+    controlled_player->spin = false;
+    controlled_player->punch = false;
+    controlled_player->punch2 = false;
+    controlled_player->kick = false;
+    controlled_player->kick2 = false;
+
+    jo_physics_apply_friction(physics);
+}
+
 void player_instance_handle_input(player_instance_t *inst,
                                      const control_input_t *input,
                                      jo_sound *jump_sfx,
@@ -160,45 +207,56 @@ void player_instance_handle_input(player_instance_t *inst,
 
     if (inst->character->life <= 0)
     {
-        inst->character->walk = false;
-        inst->character->run = 0;
-        inst->character->spin = false;
-        inst->character->punch = false;
-        inst->character->punch2 = false;
-        inst->character->kick = false;
-        inst->character->kick2 = false;
-        jo_physics_apply_friction(&inst->physics);
+        inst->active = true; // keep alive to continue draw/update paths for defeated state
+        player_apply_defeated_state(inst->character, &inst->physics, &inst->defeated);
         return;
     }
 
-    if (inst->jump_cooldown > 0)
-        inst->jump_cooldown--;
+    character_action_status_t status = character_update_cooldowns(inst->character, &inst->jump_cooldown);
 
-    if (inst->character->attack_cooldown > 0)
-        inst->character->attack_cooldown--;
+    if (status != CharacterActionAllowed)
+    {
+        if (status == CharacterActionBlockedDefeated)
+        {
+            inst->active = true; // keep active for defeated logic and draw
+            player_apply_defeated_state(inst->character, &inst->physics, &inst->defeated);
+            return;
+        }
 
-    if (inst->character->stun_timer > 0)
-    {
-        inst->character->stun_timer--;
-        inst->character->walk = false;
-        inst->character->run = 0;
-        inst->character->spin = false;
-        jo_physics_apply_friction(&inst->physics);
+        if (status == CharacterActionBlockedStun)
+        {
+            player_apply_defeated_state(inst->character, &inst->physics, JO_NULL);
+            return;
+        }
+
+        if (status == CharacterActionBlockedJumpCooldown || status == CharacterActionBlockedAttackCooldown)
+        {
+            control_handle_character_commands(&inst->physics,
+                                              inst->character,
+                                              &inst->jump_cooldown,
+                                              &inst->jump_hold_ms,
+                                              &inst->jump_cut_applied,
+                                              jump_sfx,
+                                              jump_sfx_channel,
+                                              spin_sfx,
+                                              punch_sfx,
+                                              kick_sfx,
+                                              input);
+            return;
+        }
     }
-    else
-    {
-        control_handle_character_commands(&inst->physics,
-                                          inst->character,
-                                          &inst->jump_cooldown,
-                                          &inst->jump_hold_ms,
-                                          &inst->jump_cut_applied,
-                                          jump_sfx,
-                                          jump_sfx_channel,
-                                          spin_sfx,
-                                          punch_sfx,
-                                          kick_sfx,
-                                          input);
-    }
+
+    control_handle_character_commands(&inst->physics,
+                                      inst->character,
+                                      &inst->jump_cooldown,
+                                      &inst->jump_hold_ms,
+                                      &inst->jump_cut_applied,
+                                      jump_sfx,
+                                      jump_sfx_channel,
+                                      spin_sfx,
+                                      punch_sfx,
+                                      kick_sfx,
+                                      input);
 }
 
 void player2_sync_mode(bool multiplayer_versus)
@@ -463,7 +521,7 @@ static void player_input_punch(character_t *controlled_player,
 							   jo_sound *kick_sfx,
 							   bool a_down)
 {
-	if (!controlled_player->punch && !controlled_player->punch2 && !controlled_player->kick && !controlled_player->kick2 && !physics->is_in_air && controlled_player->attack_cooldown == 0 && a_down)
+	if (!controlled_player->punch && !controlled_player->punch2 && !controlled_player->kick && !controlled_player->kick2 && !physics->is_in_air && !controlled_player->jump && controlled_player->attack_cooldown == 0 && a_down)
 	{
 		controlled_player->punch = true;
 		controlled_player->hit_done_punch1 = false;
@@ -587,7 +645,7 @@ static void player_input_kick(character_t *controlled_player,
 		controlled_player->spin = false;
 	}
 
-	if (!controlled_player->kick && !controlled_player->kick2 && !controlled_player->punch && !controlled_player->punch2 && !physics->is_in_air && controlled_player->attack_cooldown == 0 && c_down)
+	if (!controlled_player->kick && !controlled_player->kick2 && !controlled_player->punch && !controlled_player->punch2 && !physics->is_in_air && !controlled_player->jump && controlled_player->attack_cooldown == 0 && c_down)
 	{
 		controlled_player->kick = true;
 		controlled_player->hit_done_kick1 = false;
@@ -930,6 +988,19 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
     if (controlled_player == JO_NULL || physics == JO_NULL)
         return;
 
+    if (controlled_player->life <= 0)
+    {
+        controlled_player->walk = false;
+        controlled_player->run = 0;
+        controlled_player->spin = false;
+        controlled_player->punch = false;
+        controlled_player->punch2 = false;
+        controlled_player->kick = false;
+        controlled_player->kick2 = false;
+        jo_physics_apply_friction(physics);
+        return;
+    }
+
     bool is_tails = (controlled_player->character_id == CHARACTER_ID_TAILS);
     bool is_knuckles = (controlled_player->character_id == CHARACTER_ID_KNUCKLES);
     bool is_sonic = (controlled_player->character_id == CHARACTER_ID_SONIC);
@@ -1061,15 +1132,9 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         }
     }
 
-    if (is_knuckles)
-    {
-        knuckles_update_animation_for(controlled_player, physics);
-    }
-    else
-    {
-        player_update_punch_state_for_character(controlled_player);
-        player_update_kick_state_for_character(controlled_player);
-    }
+    /* Knuckles-specific flow removed from gameplay; fallback to common hit state. */
+    player_update_punch_state_for_character(controlled_player);
+    player_update_kick_state_for_character(controlled_player);
 
     if (is_tails)
     {

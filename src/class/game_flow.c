@@ -283,16 +283,9 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     player2.speed = 0;
     player2.life = 50;
 
-    if (selected_character == UiCharacterTails)
-    {
-        player2_tail_base_id = tails_get_tail_base_id();
-        player2_kick_sprite_id = tails_get_kick_sprite_id();
-    }
-    else
-    {
-        player2_tail_base_id = -1;
-        player2_kick_sprite_id = -1;
-    }
+    // As gameplay do not include Tails/Knuckles/Shadow in runtime, leave P2 tail/kick as disabled.
+    player2_tail_base_id = -1;
+    player2_kick_sprite_id = -1;
 
     player = saved_player;
 }

@@ -36,7 +36,7 @@ Available characters:
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
 
-### 4. Checklist (Road to v0.2) (51%)
+### 4. Checklist (Road to v0.2) (53%)
 
 - [x] Knuckles bot misses the range of the aerial attack and the super punch.
 - [x] Knuckles incorrectly allows jumping while holding the super punch.
@@ -59,9 +59,9 @@ Available characters:
 
 - [ ] Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
   - [ ] Sprite packing: grouping multiple sprites into the same block to reduce overhead.
-  - [ ] Sonic sprites (95%) - Bots are missing.
-  - [ ] Tails sprites.
-  - [ ] Amy sprites (95%) - Bots are missing.
+  - [x] Sonic sprites -> Players (100%) - Bots (100%).
+  - [x] Amy sprites -> Players (100%) - Bots (100%).
+  - [ ] Tails sprites -> Players (50%) - Bots (50%).
   - [ ] Knuckles sprites.
   - [ ] Shadow sprites.
   - [ ] All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
@@ -74,4 +74,11 @@ Available characters:
 - [x] Check why debug_battle_add_damage doesn’t get called for all IDs.
 - [ ] Create spectator mode to watch bots fight.
 
-- [ ] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.
+- [X] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.
+
+💡 Próximo ajuste opcional
+Se quiser, posso agora adicionar:
+
+lógica BOT_NAV_* (mapa vertical e colisão) para saltos em plataforma
+“switch de estilo agressivo/defensivo” por bot.group ou vida baixa
+animação de combo em bot_instance_update com últimos estados de prev_* para evitar recomecar input indevido.

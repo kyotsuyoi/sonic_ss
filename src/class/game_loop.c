@@ -266,12 +266,20 @@ static void game_loop_apply_hit_effect(character_t *target,
     g_dbg_knock_force = knockback_force;        
 
     if (target_physics != JO_NULL)
-        target_physics->speed = (float)direction * knockback_force;
+    {
+        if (target->life <= 0)
+        {
+            target_physics->speed = 0.0f;
+            target_physics->speed_y = 0.0f;
+            target_physics->is_in_air = false;
+        }
+        else
+        {
+            target_physics->speed = (float)direction * knockback_force;
+        }
 
-    // if (direction == -1)
-    //     target_physics->speed *= 0.65;          
-    
-    g_dbg_knock_speed = target_physics->speed;  
+        g_dbg_knock_speed = target_physics->speed;
+    }
 
     if (stun_frames <= 0)
         return;
@@ -642,6 +650,54 @@ static void game_loop_process_player_attack(character_t *attacker,
         target->kick2 = false;
         target->spin = false;
     }
+}
+
+void game_loop_process_attack(character_t *attacker,
+                                  jo_sidescroller_physics_params *attacker_physics,
+                                  character_t *target,
+                                  jo_sidescroller_physics_params *target_physics,
+                                  bool *target_defeated,
+                                  int attacker_world_x,
+                                  int attacker_world_y,
+                                  int target_world_x,
+                                  int target_world_y,
+                                  bool *prev_punch,
+                                  bool *prev_punch2,
+                                  bool *prev_kick,
+                                  bool *prev_kick2)
+{
+    (void)prev_punch;
+    (void)prev_punch2;
+    (void)prev_kick;
+    (void)prev_kick2;
+
+    if (target_defeated != JO_NULL && *target_defeated)
+        return;
+
+    if (attacker == JO_NULL || target == JO_NULL || attacker_physics == JO_NULL || target_physics == JO_NULL)
+        return;
+
+    if (attacker->life <= 0 || target->life <= 0)
+        return;
+
+    if (attacker->group != 0 && attacker->group == target->group)
+        return;
+
+    // Leverage existing player attack logic in this module.
+    // Reuse the static process function that already does damage, knockback and effects.
+    game_loop_process_player_attack(attacker,
+                                    attacker_physics,
+                                    target,
+                                    target_physics,
+                                    target_defeated,
+                                    attacker_world_x,
+                                    attacker_world_y,
+                                    target_world_x,
+                                    target_world_y,
+                                    prev_punch,
+                                    prev_punch2,
+                                    prev_kick,
+                                    prev_kick2);
 }
 
 static void game_loop_process_player_vs_player_hits(void)

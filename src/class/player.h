@@ -7,6 +7,15 @@
 
 #define PLAYER_MAX_DEFAULT_COUNT (2)
 
+typedef enum
+{
+    CharacterActionAllowed = 0,
+    CharacterActionBlockedDefeated,
+    CharacterActionBlockedStun,
+    CharacterActionBlockedJumpCooldown,
+    CharacterActionBlockedAttackCooldown
+} character_action_status_t;
+
 typedef struct player_instance
 {
     int id;
@@ -71,6 +80,12 @@ int player_get_tail_offset_x(const character_t *controlled_player);
 int player_get_defeated_sprite_height(const character_t *controlled_player);
 
 void player_draw(character_t *controlled_player, jo_sidescroller_physics_params *physics);
+
+void player_apply_defeated_state(character_t *controlled_player,
+                                 jo_sidescroller_physics_params *physics,
+                                 bool *defeated_flag);
+
+character_action_status_t character_update_cooldowns(character_t *character, int *jump_cooldown);
 
 void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 								  character_t *controlled_player,

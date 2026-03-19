@@ -24,6 +24,21 @@ void game_loop_input(void);
 void game_loop_update(void);
 void game_loop_debug_frame(void);
 
+/* External attack helper for bots (player<->bot attack resolution). */
+void game_loop_process_attack(character_t *attacker,
+                              jo_sidescroller_physics_params *attacker_physics,
+                              character_t *target,
+                              jo_sidescroller_physics_params *target_physics,
+                              bool *target_defeated,
+                              int attacker_world_x,
+                              int attacker_world_y,
+                              int target_world_x,
+                              int target_world_y,
+                              bool *prev_punch,
+                              bool *prev_punch2,
+                              bool *prev_kick,
+                              bool *prev_kick2);
+
 /* Helpers used by debug display */
 int game_loop_get_map_pos_x(void);
 int game_loop_get_map_pos_y(void);

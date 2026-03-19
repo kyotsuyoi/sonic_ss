@@ -12,6 +12,8 @@
 #include "world_map.h"
 #include "character_registry.h"
 #include "character/tails.h"
+#include "character/sonic.h"
+#include "character/amy.h"
 #include "runtime_log.h"
 
 #define SPRITE_DIR "SPT"
@@ -118,6 +120,7 @@ struct bot_instance
     bool prev_player2_kick;
     bool prev_player2_kick2;
     bool bot_uses_shared_player_sprites;
+    bool bot_use_player_flow;
     bool bot_is_ally;
     int bot_airborne_time_ms;
     bool bot_show_jump_sprite;
@@ -217,6 +220,7 @@ static jo_sidescroller_physics_params *target_player_physics_ctx = &physics;
 #define prev_player2_kick (ctx->prev_player2_kick)
 #define prev_player2_kick2 (ctx->prev_player2_kick2)
 #define bot_uses_shared_player_sprites (ctx->bot_uses_shared_player_sprites)
+#define bot_use_player_flow (ctx->bot_use_player_flow)
 #define bot_is_ally_flag (ctx->bot_is_ally)
 #define bot_airborne_time_ms (ctx->bot_airborne_time_ms)
 #define bot_show_jump_sprite (ctx->bot_show_jump_sprite)
@@ -303,6 +307,7 @@ static void bot_reset_asset_ids(void)
     bot_kick_base_id = -1;
     bot_walking_anim_id = -1;
     bot_running1_anim_id = -1;
+    bot_use_player_flow = false;
     bot_running2_anim_id = -1;
     bot_stand_anim_id = -1;
     bot_punch_anim_id = -1;
@@ -351,6 +356,11 @@ static bool bot_should_draw_tail(void)
         return false;
 
     return true;
+}
+
+static bool bot_uses_player_flow(void)
+{
+    return bot_character == BotCharacterSonic || bot_character == BotCharacterAmy;
 }
 
 static void bot_draw_tail(void)
@@ -863,7 +873,53 @@ static void bot_update_animation(void)
     jo_reset_sprite_anim(bot.punch_anim_id);
     jo_reset_sprite_anim(bot.kick_anim_id);
 
-    /* Animation selection is driven by `bot.walk` / `bot.run` (set by AI input). */
+    /* Derive run state from physics speed, so walk/run sprite selection works. */
+    speed_step = (int)JO_ABS(bot_physics.speed);
+
+    if (bot.walk)
+    {
+        if (speed_step >= 6)
+        {
+            bot.run = 2;
+            if (bot.running2_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.running2_anim_id, 3);
+        }
+        else if (speed_step >= 5)
+        {
+            bot.run = 1;
+            if (bot.running1_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.running1_anim_id, 4);
+        }
+        else if (speed_step >= 4)
+        {
+            bot.run = 1;
+            if (bot.running1_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.running1_anim_id, 5);
+        }
+        else if (speed_step >= 3)
+        {
+            bot.run = 1;
+            if (bot.running1_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.running1_anim_id, 6);
+        }
+        else if (speed_step >= 2)
+        {
+            bot.run = 1;
+            if (bot.running1_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.running1_anim_id, 7);
+        }
+        else
+        {
+            bot.run = 0;
+            if (bot.walking_anim_id >= 0)
+                jo_set_sprite_anim_frame_rate(bot.walking_anim_id, 8);
+        }
+    }
+    else
+    {
+        bot.run = 0;
+    }
+
     int movement_anim_id = -1;
     if (bot.walk)
     {
@@ -1590,9 +1646,39 @@ void bot_instance_init(bot_instance_t *instance,
     desired_bot_character = selected_bot_character;
     if (desired_bot_character < BotCharacterSonic || desired_bot_character >= BotCharacterCount)
         desired_bot_character = BotCharacterSonic;
+
+    bool player_flow = (desired_bot_character == BotCharacterSonic || desired_bot_character == BotCharacterAmy);
     use_shared_player_assets = (selected_player_character == desired_bot_character);
 
-    if (use_shared_player_assets)
+    if (player_flow)
+    {
+        if (!bot_loaded || bot_character != desired_bot_character || !bot_uses_shared_player_sprites)
+        {
+            bot_instance_unload(instance);
+            bot_reset_asset_ids();
+            bot_character = desired_bot_character;
+            bot_uses_shared_player_sprites = false;
+            bot_use_player_flow = true;
+
+            ui_character_choice_t ui_choice = bot_ui_character_from_bot_character(bot_character);
+            character_handlers_t handlers = character_registry_get(ui_choice);
+
+            if (bot_character == BotCharacterSonic)
+                sonic_set_current(&bot, &bot_physics);
+            else if (bot_character == BotCharacterAmy)
+                amy_set_current(&bot, &bot_physics);
+
+            handlers.load();
+
+            if (bot_character == BotCharacterSonic)
+                sonic_set_current(&player, NULL);
+            else if (bot_character == BotCharacterAmy)
+                amy_set_current(&player, NULL);
+
+            bot_loaded = true;
+        }
+    }
+    else if (use_shared_player_assets)
     {
         if (!bot_loaded || bot_character != desired_bot_character || !bot_uses_shared_player_sprites)
         {
@@ -1633,25 +1719,29 @@ if (bot_character == BotCharacterAmy && bot_amy_sheet_ready && instance->bot_wra
         bot_uses_shared_player_sprites = false;
     }
 
-    bot = (character_t){0};
-    bot.wram_sprite_id = -1;
+    if (!bot_use_player_flow)
+    {
+        bot = (character_t){0};
+        bot.wram_sprite_id = -1;
+        bot.walking_anim_id = bot_walking_anim_id;
+        bot.running1_anim_id = bot_running1_anim_id;
+        bot.running2_anim_id = bot_running2_anim_id;
+        bot.stand_sprite_id = bot_stand_anim_id;
+        bot.jump_sprite_id = bot_jump_sprite_id;
+        bot.spin_sprite_id = bot_spin_asset_sprite_id;
+        bot.punch_anim_id = bot_punch_anim_id;
+        bot.kick_anim_id = bot_kick_anim_id;
+        bot.life = 50;
+        bot.flip = true;
+        bot.can_jump = true;
+        bot.stun_timer = 0;
+    }
+
     bot_jump_sfx = *game_audio_get_jump_sfx();
     bot_world_x = player_world_x;
     bot_world_y = player_world_y;
     bot.x = bot_screen_x(0);
     bot.y = bot_screen_y(0);
-    bot.walking_anim_id = bot_walking_anim_id;
-    bot.running1_anim_id = bot_running1_anim_id;
-    bot.running2_anim_id = bot_running2_anim_id;
-    bot.stand_sprite_id = bot_stand_anim_id;
-    bot.jump_sprite_id = bot_jump_sprite_id;
-    bot.spin_sprite_id = bot_spin_asset_sprite_id;
-    bot.punch_anim_id = bot_punch_anim_id;
-    bot.kick_anim_id = bot_kick_anim_id;
-    bot.life = 50;
-    bot.flip = true;
-    bot.can_jump = true;
-    bot.stun_timer = 0;
     character_registry_apply_combat_profile(&bot, bot_ui_character_from_bot_character(bot_character));
     bot.group = selected_bot_group;
 
@@ -1697,6 +1787,17 @@ void bot_instance_unload(bot_instance_t *instance)
     {
         bot_reset_asset_ids();
         bot_uses_shared_player_sprites = false;
+        bot_use_player_flow = false;
+        return;
+    }
+
+    if (bot_use_player_flow)
+    {
+        bot_reset_asset_ids();
+        bot_uses_shared_player_sprites = false;
+        bot_use_player_flow = false;
+        bot_loaded = false;
+        bot_defeated = false;
         return;
     }
 
@@ -1898,8 +1999,20 @@ void bot_instance_update(bot_instance_t *instance,
     }
 
     bot_apply_physics(map_pos_x, map_pos_y);
-    bot_update_animation();
-    bot_update_tail_loop();
+
+    /* Keep jump state synced with physics (same as player runtime path). */
+    bot.jump = bot_show_jump_sprite;
+    bot.falling = bot_show_jump_sprite && (bot_physics.speed_y > 0.0f);
+
+    if (bot_use_player_flow)
+    {
+        player_update_animation_state(&bot, &bot_physics);
+    }
+    else
+    {
+        bot_update_animation();
+        bot_update_tail_loop();
+    }
 
     remember_player_attack_states(player_ref,
                                   &prev_player_punch,
@@ -1934,6 +2047,21 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
     // Ensure WRAM sprite sheets are loaded and per-bot VRAM sprite is allocated.
     // This guards against scenarios where the sheet becomes available after the bot
     // was initially loaded (e.g., player sheet load happens later).
+    if (!bot_loaded)
+        return;
+
+    bot.x = bot_screen_x(map_pos_x);
+    bot.y = bot_screen_y(map_pos_y);
+
+    if (bot.x < -64 || bot.x > 384 || bot.y < -64 || bot.y > 288)
+        return;
+
+    if (bot_use_player_flow)
+    {
+        player_draw(&bot, &bot_physics);
+        return;
+    }
+
     if (bot_character == BotCharacterAmy)
     {
         bot_init_amy_sheet();
@@ -1946,12 +2074,6 @@ void bot_instance_draw(bot_instance_t *instance, int map_pos_x, int map_pos_y)
         if (bot_sonic_sheet_ready && ctx->bot_wram_sheet_sprite_id < 0)
             ctx->bot_wram_sheet_sprite_id = bot_create_blank_sprite();
     }
-
-    if (!bot_loaded)
-        return;
-
-    bot.x = bot_screen_x(map_pos_x);
-    bot.y = bot_screen_y(map_pos_y);
 
     if (bot.x < -64 || bot.x > 384 || bot.y < -64 || bot.y > 288)
         return;
