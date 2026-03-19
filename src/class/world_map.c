@@ -692,13 +692,13 @@ static bool world_map_create_pools(void)
         if (!world_groups[group_index].used)
             continue;
 
-        slot_count = world_groups[group_index].max_visible_assets;
+        /* Keep one stable VRAM slot per asset in the group so tiles do not
+           visually change when the camera or players move. */
+        slot_count = world_groups[group_index].asset_count;
         if (slot_count <= 0)
             slot_count = 1;
-        if (slot_count > world_groups[group_index].asset_count)
-            slot_count = world_groups[group_index].asset_count;
-        if (slot_count > 16)
-            slot_count = 16;
+        if (slot_count > 64)
+            slot_count = 64;
 
         world_groups[group_index].pool_id = rotating_sprite_pool_create(world_groups[group_index].width,
                                                                         world_groups[group_index].height,

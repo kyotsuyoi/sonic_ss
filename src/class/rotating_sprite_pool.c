@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "runtime_log.h"
 
-#define ROTATING_SPRITE_POOL_MAX_SLOTS 16
+#define ROTATING_SPRITE_POOL_MAX_SLOTS 64
 #define ROTATING_SPRITE_NAME_MAX 32
 #define ROTATING_SPRITE_DIR_MAX 16
 
