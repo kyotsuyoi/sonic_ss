@@ -75,10 +75,3 @@ Available characters:
 - [ ] Create spectator mode to watch bots fight.
 
 - [X] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.
-
-💡 Próximo ajuste opcional
-Se quiser, posso agora adicionar:
-
-lógica BOT_NAV_* (mapa vertical e colisão) para saltos em plataforma
-“switch de estilo agressivo/defensivo” por bot.group ou vida baixa
-animação de combo em bot_instance_update com últimos estados de prev_* para evitar recomecar input indevido.
