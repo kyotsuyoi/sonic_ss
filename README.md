@@ -36,7 +36,7 @@ Available characters:
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
 
-### 4. Checklist (Road to v0.2) (50%)
+### 4. Checklist (Road to v0.2) (51%)
 
 - [x] Knuckles bot misses the range of the aerial attack and the super punch.
 - [x] Knuckles incorrectly allows jumping while holding the super punch.
@@ -50,9 +50,9 @@ Available characters:
 - [x] Physical hardware (SAROO) became extremely slow, need to find out why (emulator is OK).
   - [x] The method jo_clear_background is called in a loop and wipes the entire VRAM.
 
-- [ ] Camera control.
+- [X] Camera control.
 - [ ] Auto camera that stays at a midpoint between the players.
-- [ ] Allow the camera to follow player 1 or player 2.
+- [X] Allow the camera to follow player 1 or player 2.
 
 - [x] Debug menu to adjust stun, knockback, pulse, and damage in-game.
   - [x] Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
@@ -74,3 +74,4 @@ Available characters:
 - [x] Check why debug_battle_add_damage doesn’t get called for all IDs.
 - [ ] Create spectator mode to watch bots fight.
 
+- [ ] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.

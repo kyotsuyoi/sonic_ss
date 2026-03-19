@@ -56,6 +56,7 @@ static void jo_map_ext_store_tile(const unsigned int layer,
         sprite_id = jo_get_anim_sprite(sprite_or_anim_id);
     else
         sprite_id = sprite_or_anim_id;
+    /* Store coordinates adjusted for centered screen drawing (matches jo_map_draw). */
     new_tile->x = x - JO_TV_WIDTH_2 + JO_DIV_BY_2(__jo_sprite_def[sprite_id].width);
     new_tile->y = y - JO_TV_HEIGHT_2 + JO_DIV_BY_2(__jo_sprite_def[sprite_id].height);
     new_tile->width = __jo_sprite_def[sprite_id].width;
@@ -244,6 +245,7 @@ void jo_map_draw_ext(const unsigned int layer, const short screen_x, const short
         if (!current_tile->is_visible_on_screen)
             continue;
 
+        /* Use the same centered coordinates approach as jo_map_draw. */
         current_tile->pos.x = current_tile->x - screen_x;
         current_tile->pos.y = current_tile->y - screen_y;
         if (current_tile->is_animated)

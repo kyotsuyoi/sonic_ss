@@ -27,6 +27,8 @@ void game_loop_debug_frame(void);
 /* Helpers used by debug display */
 int game_loop_get_map_pos_x(void);
 int game_loop_get_map_pos_y(void);
+int game_loop_get_camera_pos_x(void);
+int game_loop_get_camera_pos_y(void);
 
 /* External helpers */
 void game_loop_mark_ui_dirty(void);

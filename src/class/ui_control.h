@@ -48,6 +48,7 @@ typedef enum
     UiDebugModeOff = 0,
     UiDebugModeHardware,
     UiDebugModePlayer,
+    UiDebugModeCamera,
     UiDebugModeAttack,
     UiDebugModeMemory,
     //UiDebugModeDamage,

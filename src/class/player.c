@@ -1,4 +1,5 @@
 #include <jo/jo.h>
+#include <string.h>
 #include "player.h"
 #include "game_audio.h"
 #include "game_constants.h"
@@ -32,17 +33,37 @@ character_t player2;
 /* Toggle for showing debug logs for punch/kick state machines. */
 bool g_show_attack_debug = false;
 
-/* Player2 runtime state (kept inside player module to avoid game_loop-specific logic). */
-static bool g_player2_active = false;
-static bool g_player2_initialized = false;
-static bool g_player2_defeated = false;
-static jo_sidescroller_physics_params g_player2_physics;
-static float g_player2_world_x = 0.0f;
-static float g_player2_world_y = 0.0f;
-static int g_player2_jump_cooldown = 0;
-static int g_p2_jump_hold_ms = 0;
-static bool g_p2_jump_cut_applied = false;
-static int g_p2_airborne_time_ms = 0;
+/* Runtime state for each player instance (P1 / P2 / bots). */
+static player_instance_t g_player_instances[PLAYER_MAX_DEFAULT_COUNT];
+static bool g_players_initialized = false;
+
+static void player_init_instances(void)
+{
+    if (g_players_initialized)
+        return;
+
+    for (int i = 0; i < PLAYER_MAX_DEFAULT_COUNT; ++i)
+    {
+        g_player_instances[i].id = i;
+        g_player_instances[i].active = (i == 0); /* P1 is always active by default */
+        g_player_instances[i].character = (i == 0) ? &player : &player2;
+        memset(&g_player_instances[i].physics, 0, sizeof(g_player_instances[i].physics));
+        g_player_instances[i].world_x = (float)g_player_instances[i].character->x;
+        g_player_instances[i].world_y = (float)g_player_instances[i].character->y;
+        g_player_instances[i].initialized = false;
+        g_player_instances[i].defeated = false;
+        g_player_instances[i].jump_cooldown = 0;
+        g_player_instances[i].jump_hold_ms = 0;
+        g_player_instances[i].jump_cut_applied = false;
+        g_player_instances[i].airborne_time_ms = 0;
+        g_player_instances[i].prev_punch = false;
+        g_player_instances[i].prev_punch2 = false;
+        g_player_instances[i].prev_kick = false;
+        g_player_instances[i].prev_kick2 = false;
+    }
+
+    g_players_initialized = true;
+}
 
 /* Debug snapshot for player-vs-player hitbox checks */
 static int g_dbg_pvp_center_dx = 0;
@@ -58,80 +79,167 @@ static bool g_dbg_pvp_hit_k1 = false;
 static bool g_dbg_pvp_hit_k2 = false;
 static bool g_dbg_pvp_available = false;
 
-character_t *player_get_instance(int index)
+player_instance_t *player_get_instance(int index)
 {
-	if (index == 1)
-		return &player2;
+    player_init_instances();
 
-	return &player;
+    if (index < 0 || index >= PLAYER_MAX_DEFAULT_COUNT)
+        return JO_NULL;
+
+    return &g_player_instances[index];
+}
+
+player_instance_t *player_get_default_player(void)
+{
+    return player_get_instance(0);
+}
+
+player_instance_t *player_get_default_player2(void)
+{
+    return player_get_instance(1);
 }
 
 bool player2_is_active(void)
 {
-	return g_player2_active;
+    player_instance_t *inst = player_get_default_player2();
+    return inst != JO_NULL && inst->active;
+}
+
+static void player_instance_reset_runtime(player_instance_t *inst, int *map_pos_x, int *map_pos_y)
+{
+    if (inst == JO_NULL)
+        return;
+
+    inst->initialized = false;
+    inst->defeated = false;
+    inst->jump_cooldown = 0;
+    inst->jump_hold_ms = 0;
+    inst->jump_cut_applied = false;
+    inst->airborne_time_ms = 0;
+    inst->prev_punch = false;
+    inst->prev_punch2 = false;
+    inst->prev_kick = false;
+    inst->prev_kick2 = false;
+    player_reset_tail_state(inst->character);
+
+    /* Use the current character screen position (set by reset_fight), not an offset from others. */
+    inst->world_x = (float)(*map_pos_x + inst->character->x);
+    inst->world_y = (float)(*map_pos_y + inst->character->y);
+}
+
+void player_instance_update_runtime(player_instance_t *inst, int *map_pos_x, int *map_pos_y)
+{
+    if (inst == JO_NULL || !inst->active)
+        return;
+
+    player_runtime_update(inst->character,
+                          &inst->physics,
+                          &inst->world_x,
+                          &inst->world_y,
+                          &inst->initialized,
+                          &inst->defeated,
+                          &inst->jump_cooldown,
+                          &inst->jump_hold_ms,
+                          &inst->jump_cut_applied,
+                          &inst->airborne_time_ms,
+                          inst->id,
+                          map_pos_x,
+                          map_pos_y);
+}
+
+void player_instance_handle_input(player_instance_t *inst,
+                                     const control_input_t *input,
+                                     jo_sound *jump_sfx,
+                                     int jump_sfx_channel,
+                                     jo_sound *spin_sfx,
+                                     jo_sound *punch_sfx,
+                                     jo_sound *kick_sfx)
+{
+    if (inst == JO_NULL || !inst->active)
+        return;
+
+    if (inst->character->life <= 0)
+    {
+        inst->character->walk = false;
+        inst->character->run = 0;
+        inst->character->spin = false;
+        inst->character->punch = false;
+        inst->character->punch2 = false;
+        inst->character->kick = false;
+        inst->character->kick2 = false;
+        jo_physics_apply_friction(&inst->physics);
+        return;
+    }
+
+    if (inst->jump_cooldown > 0)
+        inst->jump_cooldown--;
+
+    if (inst->character->attack_cooldown > 0)
+        inst->character->attack_cooldown--;
+
+    if (inst->character->stun_timer > 0)
+    {
+        inst->character->stun_timer--;
+        inst->character->walk = false;
+        inst->character->run = 0;
+        inst->character->spin = false;
+        jo_physics_apply_friction(&inst->physics);
+    }
+    else
+    {
+        control_handle_character_commands(&inst->physics,
+                                          inst->character,
+                                          &inst->jump_cooldown,
+                                          &inst->jump_hold_ms,
+                                          &inst->jump_cut_applied,
+                                          jump_sfx,
+                                          jump_sfx_channel,
+                                          spin_sfx,
+                                          punch_sfx,
+                                          kick_sfx,
+                                          input);
+    }
 }
 
 void player2_sync_mode(bool multiplayer_versus)
 {
-	if (!multiplayer_versus)
-	{
-		g_player2_active = false;
-		g_player2_initialized = false;
-		g_player2_defeated = false;
-		g_player2_jump_cooldown = 0;
-		g_p2_jump_hold_ms = 0;
-		g_p2_jump_cut_applied = false;
-		g_p2_airborne_time_ms = 0;
-		player_reset_tail_state(&player2);
-		return;
-	}
+    player_instance_t *p2 = player_get_default_player2();
+    if (p2 == JO_NULL)
+        return;
 
-	g_player2_active = true;
+    if (!multiplayer_versus)
+    {
+        p2->active = false;
+        return;
+    }
+
+    p2->active = true;
 }
 
-void player2_reset_runtime(int map_pos_x, int map_pos_y)
+void player2_reset_runtime(int *map_pos_x, int *map_pos_y)
 {
-	g_player2_initialized = false;
-	g_player2_defeated = false;
-	g_player2_jump_cooldown = 0;
-	g_p2_jump_hold_ms = 0;
-	g_p2_jump_cut_applied = false;
-	g_p2_airborne_time_ms = 0;
-	player_reset_tail_state(&player2);
+    player_instance_t *p2 = player_get_default_player2();
+    if (p2 == JO_NULL)
+        return;
 
-	/* Use the current player2 screen position (set by reset_fight), not an offset from player1. */
-	g_player2_world_x = (float)(map_pos_x + player2.x);
-	g_player2_world_y = (float)(map_pos_y + player2.y);
+    player_instance_reset_runtime(p2, map_pos_x, map_pos_y);
 }
 
-void player2_update_runtime(int map_pos_x, int map_pos_y)
+void player2_update_runtime(int *map_pos_x, int *map_pos_y)
 {
-	if (!g_player2_active)
-		return;
-
-	player_runtime_update(&player2,
-	                      &g_player2_physics,
-	                      &g_player2_world_x,
-	                      &g_player2_world_y,
-	                      &g_player2_initialized,
-	                      &g_player2_defeated,
-	                      &g_player2_jump_cooldown,
-	                      &g_p2_jump_hold_ms,
-	                      &g_p2_jump_cut_applied,
-	                      &g_p2_airborne_time_ms,
-	                      1,
-	                      map_pos_x,
-	                      map_pos_y);
+    player_instance_update_runtime(player_get_default_player2(), map_pos_x, map_pos_y);
 }
 
 bool player2_is_defeated(void)
 {
-	return player2.life <= 0;
+    player_instance_t *p2 = player_get_default_player2();
+    return (p2 != JO_NULL) ? (p2->character->life <= 0) : true;
 }
 
 jo_sidescroller_physics_params *player2_get_physics(void)
 {
-	return &g_player2_physics;
+    player_instance_t *p2 = player_get_default_player2();
+    return (p2 != JO_NULL) ? &p2->physics : JO_NULL;
 }
 
 static bool player_debug_is_attack_in_range(int attacker_x,
@@ -175,7 +283,8 @@ static bool player_debug_is_attack_in_range(int attacker_x,
 
 void player2_update_pvp_hitbox_snapshot(int p1_world_x, int p1_world_y, int p2_world_x, int p2_world_y)
 {
-	if (!g_player2_active)
+	player_instance_t *p2 = player_get_default_player2();
+	if (p2 == JO_NULL || !p2->active)
 	{
 		g_dbg_pvp_available = false;
 		return;
@@ -243,50 +352,14 @@ bool player2_debug_get_hitbox_snapshot(debug_hitbox_snapshot_t *snapshot)
 
 void player2_handle_input(const control_input_t *input)
 {
-	if (!g_player2_active)
-		return;
-
-	if (player2.life <= 0)
-	{
-		player2.walk = false;
-		player2.run = 0;
-		player2.spin = false;
-		player2.punch = false;
-		player2.punch2 = false;
-		player2.kick = false;
-		player2.kick2 = false;
-		jo_physics_apply_friction(&g_player2_physics);
-		return;
-	}
-
-	if (g_player2_jump_cooldown > 0)
-		g_player2_jump_cooldown--;
-
-	if (player2.attack_cooldown > 0)
-		player2.attack_cooldown--;
-
-	if (player2.stun_timer > 0)
-	{
-		player2.stun_timer--;
-		player2.walk = false;
-		player2.run = 0;
-		player2.spin = false;
-		jo_physics_apply_friction(&g_player2_physics);
-	}
-	else
-	{
-		control_handle_character_commands(&g_player2_physics,
-		                                  &player2,
-		                                  &g_player2_jump_cooldown,
-		                                  &g_p2_jump_hold_ms,
-		                                  &g_p2_jump_cut_applied,
-		                                  game_audio_get_jump_sfx(),
-		                                  0,
-		                                  game_audio_get_spin_sfx(),
-		                                  game_audio_get_punch_sfx(),
-		                                  game_audio_get_kick_sfx(),
-		                                  input);
-	}
+    player_instance_t *p2 = player_get_default_player2();
+    player_instance_handle_input(p2,
+                                 input,
+                                 game_audio_get_jump_sfx(),
+                                 0,
+                                 game_audio_get_spin_sfx(),
+                                 game_audio_get_punch_sfx(),
+                                 game_audio_get_kick_sfx());
 }
 
 int player_get_max_instances(void)
@@ -567,9 +640,6 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 	// }
 	if (physics->is_in_air)
 	{
-		if (spin_pressed)
-			controlled_player->spin = true;
-
 		if (left_pressed)
 		{
 			controlled_player->flip = true;
@@ -583,6 +653,10 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 	}
 	else
 	{
+		// Ensure spin is cleared when touching the ground (both P1 and P2).
+		controlled_player->spin = false;
+		controlled_player->angle = 0;
+
 		controlled_player->air_kick_used = false;
 		if (jo_physics_is_standing(physics))
 		{
@@ -627,6 +701,10 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 	}
 
 	player_update_variable_jump(physics, b_down, jump_hold_ms, jump_cut_applied);
+
+	// Allow spin to start if player is airborne (or just started a jump).
+	if (spin_pressed && (physics->is_in_air || controlled_player->jump))
+		controlled_player->spin = true;
 
 	player_input_punch(controlled_player, physics, punch_sfx, kick_sfx, a_down);
 	player_input_kick(controlled_player, physics, punch_sfx, kick_sfx, c_down, c_hold);
@@ -1234,8 +1312,8 @@ void player_runtime_update(character_t *controlled_player,
                             bool *jump_cut_applied,
                             int *airborne_time_ms,
                             int player_index,
-                            int map_pos_x,
-                            int map_pos_y)
+                            int *map_pos_x,
+                            int *map_pos_y)
 {
     if (controlled_player == JO_NULL || physics == JO_NULL || world_x == JO_NULL || world_y == JO_NULL
         || initialized == JO_NULL || defeated == JO_NULL || jump_cooldown == JO_NULL || jump_hold_ms == JO_NULL
@@ -1257,8 +1335,8 @@ void player_runtime_update(character_t *controlled_player,
         *world_x = world_map_get_player_start_x(player_index, controlled_player->group);
         *world_y = world_map_get_player_start_y(player_index, controlled_player->group);
 
-        controlled_player->x = (int)*world_x - map_pos_x;
-        controlled_player->y = (int)*world_y - map_pos_y;
+        controlled_player->x = (int)*world_x - *map_pos_x;
+        controlled_player->y = (int)*world_y - *map_pos_y;
         controlled_player->flip = false;
         controlled_player->can_jump = true;
         if (controlled_player->life <= 0)
@@ -1269,14 +1347,15 @@ void player_runtime_update(character_t *controlled_player,
         *initialized = true;
     }
 
-    controlled_player->x = (int)*world_x - map_pos_x;
-    controlled_player->y = (int)*world_y - map_pos_y;
+controlled_player->x = (int)*world_x - *map_pos_x;
+        controlled_player->y = (int)*world_y - *map_pos_y;
 
-    int world_pos_x = map_pos_x;
-    world_handle_character_collision(physics, controlled_player, &world_pos_x, map_pos_y);
+        int world_pos_x = *map_pos_x;
+        world_handle_character_collision(physics, controlled_player, &world_pos_x, *map_pos_y);
+        *map_pos_x = world_pos_x;
 
-    *world_x = (float)(world_pos_x + controlled_player->x);
-    *world_y = (float)(map_pos_y + controlled_player->y);
+        *world_x = (float)(*map_pos_x + controlled_player->x);
+        *world_y = (float)(*map_pos_y + controlled_player->y);
 
     controlled_player->speed = (int)JO_ABS(physics->speed);
 

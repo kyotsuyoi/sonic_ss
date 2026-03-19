@@ -9,6 +9,12 @@
 #include "debug.h"
 #include "world_map.h"
 #include "vram_cache.h"
+#include "game_loop.h"
+#include "game_flow.h"
+
+/* Must match CAMERA_TARGET_SCREEN_X/Y in game_loop.c for debug output. */
+#define CAMERA_TARGET_SCREEN_X 130
+#define CAMERA_TARGET_SCREEN_Y 75
 
 #define MENU_SPRITE_Y 88
 #define MENU_NAME_Y 6
@@ -533,7 +539,7 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
 {
     ui_control_clear_text_layer();
 
-    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "ATK SPRITE", "MEM", "SPAWN"};
+    static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "CAMERA", "ATK SPRITE", "MEM", "SPAWN"};
     static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "VERBOSE", "SPRITE"};
     int sprite_log_page = runtime_log_get_sprite_page() + 1;
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
@@ -547,7 +553,7 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
         debug_balance_profile_t *profile = debug_balance_get_profile(player.character_id);
 
         int row = state->debug_balance_selected_row;
-        int col = state->debug_balance_selected_col;
+        (void)state->debug_balance_selected_col; // keep compiler happy
 
         jo_printf(6, 8, "BALANCE: %s", character_names[player.character_id]);
         jo_printf(4, 10, "ROW  DMG   KB    STN   IMP");
@@ -1994,8 +2000,10 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 else
                     state->debug_mode = (ui_debug_mode_t)(state->debug_mode + 1);
 
-                /* Only show player debug when in PLAYER/HARDWARE modes. */
-                state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
+                /* Show debug overlay during gameplay for these modes. */
+                state->debug_enabled = (state->debug_mode == UiDebugModeHardware
+                                       || state->debug_mode == UiDebugModePlayer
+                                       || state->debug_mode == UiDebugModeCamera);
                 g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
                 pause_interacted = true;
             }
@@ -2048,8 +2056,10 @@ void ui_control_handle_pause_input(ui_control_state_t *state,
                 else
                     state->debug_mode = (ui_debug_mode_t)(state->debug_mode - 1);
 
-                /* Only show player debug when in PLAYER/HARDWARE modes. */
-                state->debug_enabled = (state->debug_mode == UiDebugModeHardware || state->debug_mode == UiDebugModePlayer);
+                /* Show debug overlay during gameplay for these modes. */
+                state->debug_enabled = (state->debug_mode == UiDebugModeHardware
+                                       || state->debug_mode == UiDebugModePlayer
+                                       || state->debug_mode == UiDebugModeCamera);
                 g_show_attack_debug = (state->debug_mode == UiDebugModeAttack);
                 pause_interacted = true;
             }

@@ -212,11 +212,13 @@ static int frame_accumulator = 0;
 
 #define DEBUG_DISPLAY_HARDWARE 0
 #define DEBUG_DISPLAY_PLAYER   1
+#define DEBUG_DISPLAY_CAMERA   2
 
 static int debug_display_mode = DEBUG_DISPLAY_PLAYER;
 
 static void debug_draw_hardware(void);
 static void debug_draw_player(void);
+static void debug_draw_camera(void);
 static void debug_draw_hitbox_snapshot(const char *title, const debug_hitbox_snapshot_t *snapshot);
 
 static unsigned int initial_stack;
@@ -247,6 +249,8 @@ void debug_set_display_mode(debug_display_mode_t mode)
 {
     if (mode == DebugDisplayHardware)
         debug_display_mode = DEBUG_DISPLAY_HARDWARE;
+    else if (mode == DebugDisplayCamera)
+        debug_display_mode = DEBUG_DISPLAY_CAMERA;
     else
         debug_display_mode = DEBUG_DISPLAY_PLAYER;
 }
@@ -255,6 +259,8 @@ debug_display_mode_t debug_get_display_mode(void)
 {
     if (debug_display_mode == DEBUG_DISPLAY_HARDWARE)
         return DebugDisplayHardware;
+    else if (debug_display_mode == DEBUG_DISPLAY_CAMERA)
+        return DebugDisplayCamera;
 
     return DebugDisplayPlayer;
 }
@@ -278,6 +284,12 @@ void debug_draw(void)
     if (debug_display_mode == DEBUG_DISPLAY_HARDWARE)
     {
         debug_draw_hardware();
+        return;
+    }
+
+    if (debug_display_mode == DEBUG_DISPLAY_CAMERA)
+    {
+        debug_draw_camera();
         return;
     }
 
@@ -327,6 +339,21 @@ static void debug_draw_player(void)
         debug_draw_hitbox_snapshot("HITBOX DBG", &snapshot);
 
     jo_printf(0, 15 + DEBUG_SAFE_TOP_LINES, "P:%3d,%3d M:%4d,%4d", player.x, player.y, game_loop_get_map_pos_x(), game_loop_get_map_pos_y());
+}
+
+static void debug_draw_camera(void)
+{    
+        /* Camera / world position debug */
+        int mapx = game_loop_get_map_pos_x();
+        int mapy = game_loop_get_map_pos_y();
+        int camx = game_loop_get_camera_pos_x();
+        int camy = game_loop_get_camera_pos_y();
+        int worldx = mapx + player.x;
+        int worldy = mapy + player.y;
+
+        jo_printf(0, 12 + DEBUG_SAFE_TOP_LINES, "PHYS: %4d,%4d", mapx, mapy);
+        jo_printf(0, 13 + DEBUG_SAFE_TOP_LINES, "WORLD: %4d,%4d", worldx, worldy);
+        jo_printf(0, 14 + DEBUG_SAFE_TOP_LINES, "CAM: %4d,%4d", camx, camy);
 }
 
 void debug_battle_stats_reset(void)

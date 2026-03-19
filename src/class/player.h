@@ -7,12 +7,49 @@
 
 #define PLAYER_MAX_DEFAULT_COUNT (2)
 
+typedef struct player_instance
+{
+    int id;
+    bool active;
+    character_t *character;
+    jo_sidescroller_physics_params physics;
+
+    /* Runtime state (jump/cooldowns, etc.) */
+    float world_x;
+    float world_y;
+    bool initialized;
+    bool defeated;
+    int jump_cooldown;
+    int jump_hold_ms;
+    bool jump_cut_applied;
+    int airborne_time_ms;
+
+    /* Previous attack input state (for hit detection timing) */
+    bool prev_punch;
+    bool prev_punch2;
+    bool prev_kick;
+    bool prev_kick2;
+} player_instance_t;
+
 extern character_t player;
 extern character_t player2;
 extern bool g_show_attack_debug;
 
-character_t *player_get_instance(int index);
+player_instance_t *player_get_instance(int index);
 int player_get_max_instances(void);
+
+player_instance_t *player_get_default_player(void);
+player_instance_t *player_get_default_player2(void);
+
+/* Generic instance operations (for player/bot etc). */
+void player_instance_update_runtime(player_instance_t *inst, int *map_pos_x, int *map_pos_y);
+void player_instance_handle_input(player_instance_t *inst,
+                                  const control_input_t *input,
+                                  jo_sound *jump_sfx,
+                                  int jump_sfx_channel,
+                                  jo_sound *spin_sfx,
+                                  jo_sound *punch_sfx,
+                                  jo_sound *kick_sfx);
 
 void player_update_punch_state(character_t *controlled_player,
 							   int punch_combo_trigger_frame,
@@ -67,14 +104,14 @@ void player_runtime_update(character_t *controlled_player,
                             bool *jump_cut_applied,
                             int *airborne_time_ms,
                             int player_index,
-                            int map_pos_x,
-                            int map_pos_y);
+                            int *map_pos_x,
+                            int *map_pos_y);
 
 // Player2 runtime helpers (used by game_loop to keep player2 behavior in the player module)
 void player2_sync_mode(bool multiplayer_versus);
 bool player2_is_active(void);
-void player2_update_runtime(int map_pos_x, int map_pos_y);
-void player2_reset_runtime(int map_pos_x, int map_pos_y);
+void player2_update_runtime(int *map_pos_x, int *map_pos_y);
+void player2_reset_runtime(int *map_pos_x, int *map_pos_y);
 
 // Runtime queries
 bool player2_is_defeated(void);

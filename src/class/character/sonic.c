@@ -349,9 +349,6 @@ static void sonic_draw_for_character(character_t *chr)
     if (character_draw_sheet_frame(chr, sprite_id, &sonic_sheet))
         return;
 
-    // Fall back in case the sheet isn't ready.
-    character_draw_legacy_frame(chr);
-
     if (chr->spin)
     {
         jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);

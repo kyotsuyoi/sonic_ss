@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 #include <jo/jo.h>
 #include "character_common.h"
 #include "game_constants.h"
@@ -255,6 +256,17 @@ bool character_draw_sheet_frame(character_t *chr, int sprite_id, const jo_img *s
         return false;
 
     character_copy_sheet_frame_to_sprite(sprite_id, sheet, col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
+
+    if (chr->spin)
+    {
+        jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+        if (chr->flip)
+            chr->angle -= CHARACTER_SPIN_SPEED;
+        else
+            chr->angle += CHARACTER_SPIN_SPEED;
+        return true;
+    }
+
     jo_sprite_draw3D2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
     return true;
 }

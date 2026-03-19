@@ -7,7 +7,8 @@
 typedef enum
 {
 	DebugDisplayHardware = 0,
-	DebugDisplayPlayer
+	DebugDisplayPlayer,
+	DebugDisplayCamera
 } debug_display_mode_t;
 
 typedef struct

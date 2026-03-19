@@ -9,6 +9,9 @@
 #include "jo_ext/jo_map_ext.h"
 #include <stdlib.h>
 
+/* Ensure rand() is declared even if the toolchain's stdlib headers omit it. */
+extern int rand(void);
+
 #define BOT_ENGAGE_RANGE 9
 #define BOT_APPROACH_DISTANCE 16
 #define BOT_JUMP_MIN_VERTICAL_GAP 18

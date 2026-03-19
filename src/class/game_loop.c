@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include "player.h"
+
+/* Ensure srand is declared even if some platform headers are missing it. */
+extern void srand(unsigned int);
 #include "game_constants.h"
 #include "bot.h"
 #include "control.h"
@@ -23,18 +26,7 @@
 #include "jo_ext/jo_map_ext.h"
 
 static game_loop_context_t *g_ctx;
-static bool g_prev_p1_punch = false;
-static bool g_prev_p1_punch2 = false;
-static bool g_prev_p1_kick = false;
-static bool g_prev_p1_kick2 = false;
-static bool g_prev_p2_punch = false;
-static bool g_prev_p2_punch2 = false;
-static bool g_prev_p2_kick = false;
-static bool g_prev_p2_kick2 = false;
-static int g_p1_jump_hold_ms = 0;
-static int g_p2_jump_hold_ms = 0;
-static bool g_p1_jump_cut_applied = false;
-static bool g_p2_jump_cut_applied = false;
+
 static int g_dbg_pvp_center_dx = 0;
 static int g_dbg_pvp_center_dy = 0;
 static int g_dbg_pvp_hreach_p1 = 0;
@@ -47,11 +39,36 @@ static bool g_dbg_pvp_hit_punch2 = false;
 static bool g_dbg_pvp_hit_k1 = false;
 static bool g_dbg_pvp_hit_k2 = false;
 static bool g_dbg_pvp_available = false;
-static int g_p1_airborne_time_ms = 0;
-static int g_p2_airborne_time_ms = 0;
 static int g_runtime_playing_update_logs = 0;
 static int g_runtime_playing_draw_logs = 0;
 static bool g_ui_text_dirty = true;
+
+/* Camera world position (what gets rendered). */
+static float g_camera_world_x = 0.0f;
+static float g_camera_world_y = 0.0f;
+static bool g_camera_world_initialized = false;
+
+/* Player world position used for physics/collision (may diverge from camera during free cam). */
+static int g_player_map_pos_x = 0;
+static int g_player_map_pos_y = 0;
+
+/* Screen location where the player should appear when the camera is following normally. */
+static const int CAMERA_TARGET_SCREEN_X = 160; /* center of 320px width */
+static const int CAMERA_TARGET_SCREEN_Y = 75;
+
+/* When true, camera follows Player 2 instead of Player 1. */
+static bool g_camera_follow_player2 = false;
+
+static const float CAMERA_FREE_SPEED = 4.0f;
+static const float CAMERA_RETURN_SPEED = 0.12f; /* slower for smoother return */
+static bool g_prev_free_cam = false;
+
+/* Free cam cooldown (frames) after taking damage. */
+static int g_free_cam_lock_frames = 0;
+static const int FREE_CAM_LOCK_FRAMES = 60; /* ~1 second at 60fps */
+
+/* Which player is currently controlling free cam (0 = P1, 1 = P2, -1 = none) */
+static int g_free_cam_player = -1;
 
 
 static bool game_loop_is_attack_in_range(int attacker_x,
@@ -196,6 +213,34 @@ static bool game_loop_is_attack_in_range(int attacker_x,
         && target_top <= attacker_bottom;
 }
 
+static void game_loop_center_camera_on_current_target(void)
+{
+    float player_world_x;
+    float player_world_y;
+
+    if (g_camera_follow_player2 && player2_is_active())
+    {
+        player_world_x = (float)(*g_ctx->map_pos_x + player2.x + (CHARACTER_WIDTH / 2));
+        player_world_y = (float)(*g_ctx->map_pos_y + player2.y);
+    }
+    else
+    {
+        player_world_x = (float)(*g_ctx->map_pos_x + player.x + (CHARACTER_WIDTH / 2));
+        player_world_y = (float)(*g_ctx->map_pos_y + player.y);
+    }
+
+    g_camera_world_x = player_world_x - CAMERA_TARGET_SCREEN_X;
+    g_camera_world_y = player_world_y - CAMERA_TARGET_SCREEN_Y;
+}
+
+static void game_loop_exit_free_cam_and_lock(void)
+{
+    g_prev_free_cam = false;
+    g_free_cam_player = -1;
+    g_free_cam_lock_frames = FREE_CAM_LOCK_FRAMES;
+    game_loop_center_camera_on_current_target();
+}
+
 static void game_loop_apply_hit_effect(character_t *target,
                                        jo_sidescroller_physics_params *target_physics,
                                        bool attacker_flip,
@@ -203,6 +248,16 @@ static void game_loop_apply_hit_effect(character_t *target,
                                        int stun_frames)
 {
     int direction = attacker_flip ? -1 : 1;
+
+    /* If the currently free-cam controlling player got hit, exit free cam. */
+    if (g_free_cam_player >= 0)
+    {
+        if ((g_free_cam_player == 0 && target == &player) ||
+            (g_free_cam_player == 1 && target == &player2))
+        {
+            game_loop_exit_free_cam_and_lock();
+        }
+    }
 
     
     //jo_printf(1, 20, "KB dir=%d f=%.2f flip=%d", direction, knockback_force, attacker_flip ? 1 : 0);
@@ -611,42 +666,47 @@ static void game_loop_process_player_vs_player_hits(void)
 
     bool player2_defeated = (player2.life <= 0);
 
-    game_loop_process_player_attack(&player,
-                                    g_ctx->physics,
-                                    &player2,
-                                    player2_get_physics(),
-                                    &player2_defeated,
-                                    p1_world_x,
-                                    p1_world_y,
-                                    p2_world_x,
-                                    p2_world_y,
-                                    &g_prev_p1_punch,
-                                    &g_prev_p1_punch2,
-                                    &g_prev_p1_kick,
-                                    &g_prev_p1_kick2);
+    {
+        player_instance_t *p1 = player_get_default_player();
+        player_instance_t *p2 = player_get_default_player2();
 
-    game_loop_process_player_attack(&player2,
-                                    player2_get_physics(),
-                                    &player,
-                                    g_ctx->physics,
-                                    g_ctx->player_defeated,
-                                    p2_world_x,
-                                    p2_world_y,
-                                    p1_world_x,
-                                    p1_world_y,
-                                    &g_prev_p2_punch,
-                                    &g_prev_p2_punch2,
-                                    &g_prev_p2_kick,
-                                    &g_prev_p2_kick2);
+        game_loop_process_player_attack(p1->character,
+                                        &p1->physics,
+                                        p2->character,
+                                        &p2->physics,
+                                        &player2_defeated,
+                                        p1_world_x,
+                                        p1_world_y,
+                                        p2_world_x,
+                                        p2_world_y,
+                                        &p1->prev_punch,
+                                        &p1->prev_punch2,
+                                        &p1->prev_kick,
+                                        &p1->prev_kick2);
 
-    g_prev_p1_punch = false;
-    g_prev_p1_punch2 = false;
-    g_prev_p1_kick = false;
-    g_prev_p1_kick2 = false;
-    g_prev_p2_punch = false;
-    g_prev_p2_punch2 = false;
-    g_prev_p2_kick = false;
-    g_prev_p2_kick2 = false;
+        game_loop_process_player_attack(p2->character,
+                                        &p2->physics,
+                                        p1->character,
+                                        &p1->physics,
+                                        g_ctx->player_defeated,
+                                        p2_world_x,
+                                        p2_world_y,
+                                        p1_world_x,
+                                        p1_world_y,
+                                        &p2->prev_punch,
+                                        &p2->prev_punch2,
+                                        &p2->prev_kick,
+                                        &p2->prev_kick2);
+
+        p1->prev_punch = false;
+        p1->prev_punch2 = false;
+        p1->prev_kick = false;
+        p1->prev_kick2 = false;
+        p2->prev_punch = false;
+        p2->prev_punch2 = false;
+        p2->prev_kick = false;
+        p2->prev_kick2 = false;
+    }
 }
 
 static const char *character_short_name(int character_id)
@@ -809,6 +869,7 @@ void game_loop_update(void)
         g_runtime_playing_update_logs = 0;
         g_runtime_playing_draw_logs = 0;
         player2_sync_mode(false);
+        player2_reset_runtime(g_ctx->map_pos_x, g_ctx->map_pos_y);
         game_flow_process_loading(g_ctx->game_flow_ctx);
         return;
     }
@@ -866,6 +927,8 @@ void game_loop_debug_frame(void)
 {
     if (g_ctx->ui_state->debug_mode == UiDebugModeHardware)
         debug_set_display_mode(DebugDisplayHardware);
+    else if (g_ctx->ui_state->debug_mode == UiDebugModeCamera)
+        debug_set_display_mode(DebugDisplayCamera);
     else
         debug_set_display_mode(DebugDisplayPlayer);
 
@@ -887,6 +950,16 @@ int game_loop_get_map_pos_y(void)
     return *g_ctx->map_pos_y;
 }
 
+int game_loop_get_camera_pos_x(void)
+{
+    return (int)g_camera_world_x;
+}
+
+int game_loop_get_camera_pos_y(void)
+{
+    return (int)g_camera_world_y;
+}
+
 void game_loop_mark_ui_dirty(void)
 {
     g_ui_text_dirty = true;
@@ -894,7 +967,6 @@ void game_loop_mark_ui_dirty(void)
 
 void game_loop_draw(void)
 {
-    int prev_y;
     static bool g_prev_need_text_layer = false;
     static ui_menu_screen_t g_prev_menu_screen = UiMenuScreenMain;
     static ui_game_state_t g_prev_game_state = UiGameStateMenu;
@@ -919,13 +991,24 @@ void game_loop_draw(void)
         g_ui_text_dirty = true;
     }
 
+    bool entering_playing = (g_prev_game_state != UiGameStatePlaying && g_ctx->ui_state->current_game_state == UiGameStatePlaying);
+
     g_prev_need_text_layer = need_text_layer;
     g_prev_menu_screen = g_ctx->ui_state->menu_screen;
     g_prev_game_state = g_ctx->ui_state->current_game_state;
     g_prev_game_paused = g_ctx->ui_state->game_paused;
     g_prev_diag_menu_only = g_ctx->ui_state->diag_menu_only;
 
-    jo_vdp2_move_nbg0(0, 0);
+    if (entering_playing || !g_camera_world_initialized)
+    {
+        g_camera_world_x = *g_ctx->map_pos_x;
+        g_camera_world_y = *g_ctx->map_pos_y;
+        g_player_map_pos_x = *g_ctx->map_pos_x;
+        g_player_map_pos_y = *g_ctx->map_pos_y;
+        g_camera_world_initialized = true;
+        g_prev_free_cam = false;
+    }
+
 
     if (g_ui_text_dirty)
     {
@@ -1007,12 +1090,7 @@ void game_loop_draw(void)
             runtime_log_verbose("draw: bg mode");
             ++g_runtime_playing_draw_logs;
         }
-        world_background_draw_parallax(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
-        if (g_runtime_playing_draw_logs < 2)
-        {
-            runtime_log_verbose("draw: parallax");
-            ++g_runtime_playing_draw_logs;
-        }
+        /* We'll apply camera offset to the background draw below. */
     }
     else
     {
@@ -1023,10 +1101,162 @@ void game_loop_draw(void)
     // This is required so deferred loads (like SNC_FUL) can complete.
     vram_cache_do_uploads();
 
+    player_instance_t *p1 = player_get_default_player();
+
+    /* Camera free mode (R held) allows independent movement in world space. */
+    bool free_cam_p1 = !g_camera_follow_player2 && jo_is_pad1_key_pressed(JO_KEY_R);
+    bool free_cam_p2 = g_camera_follow_player2 && input_mapping_is_player2_key_pressed(JO_KEY_R);
+
+    if (g_free_cam_lock_frames > 0)
+        --g_free_cam_lock_frames;
+
+    /* Prevent re-entering free cam while on cooldown. */
+    if (g_free_cam_lock_frames > 0)
+    {
+        free_cam_p1 = false;
+        free_cam_p2 = false;
+    }
+
+    bool camera_free_mode = free_cam_p1 || free_cam_p2;
+    bool entering_free_cam = camera_free_mode && !g_prev_free_cam;
+
+    /* If entering free cam, freeze the player whose input is controlling the camera. */
+    if (entering_free_cam)
+    {
+        if (free_cam_p1)
+        {
+            g_player_map_pos_x = *g_ctx->map_pos_x;
+            g_player_map_pos_y = *g_ctx->map_pos_y;
+            p1->character->walk = false;
+            p1->character->run = 0;
+            p1->character->spin = false;
+            p1->physics.speed = 0.0f;
+            p1->physics.speed_y = 0.0f;
+        }
+        else if (free_cam_p2)
+        {
+            player_instance_t *p2 = player_get_default_player2();
+            if (p2 != JO_NULL)
+            {
+                p2->character->walk = false;
+                p2->character->run = 0;
+                p2->character->spin = false;
+                p2->physics.speed = 0.0f;
+                p2->physics.speed_y = 0.0f;
+            }
+        }
+    }
+
+    /* Prevent P1 movement from affecting the global map scroll when camera is following P2. */
+    int tmp_player1_map_pos_x = *g_ctx->map_pos_x;
+    int tmp_player1_map_pos_y = *g_ctx->map_pos_y;
+
+    int *player_map_pos_x = g_ctx->map_pos_x;
+    int *player_map_pos_y = g_ctx->map_pos_y;
+
+    if (g_camera_follow_player2 && player2_is_active())
+    {
+        player_map_pos_x = &tmp_player1_map_pos_x;
+        player_map_pos_y = &tmp_player1_map_pos_y;
+    }
+
+    player_instance_update_runtime(p1, player_map_pos_x, player_map_pos_y);
+
+    /* Keep the frozen map position used for drawing offsets in sync with the actual map_pos. */
+    g_player_map_pos_x = *g_ctx->map_pos_x;
+    g_player_map_pos_y = *g_ctx->map_pos_y;
+
+    /* Update camera position after the player has moved. */
+    if (camera_free_mode)
+    {
+        jo_printf(25, 1, "FREE CAM");
+
+        if (free_cam_p1)
+        {
+            if (jo_is_pad1_key_pressed(JO_KEY_LEFT))
+                g_camera_world_x -= CAMERA_FREE_SPEED;
+            if (jo_is_pad1_key_pressed(JO_KEY_RIGHT))
+                g_camera_world_x += CAMERA_FREE_SPEED;
+            if (jo_is_pad1_key_pressed(JO_KEY_UP))
+                g_camera_world_y -= CAMERA_FREE_SPEED;
+            if (jo_is_pad1_key_pressed(JO_KEY_DOWN))
+                g_camera_world_y += CAMERA_FREE_SPEED;
+        }
+        else if (free_cam_p2)
+        {
+            if (input_mapping_is_player2_key_pressed(JO_KEY_LEFT))
+                g_camera_world_x -= CAMERA_FREE_SPEED;
+            if (input_mapping_is_player2_key_pressed(JO_KEY_RIGHT))
+                g_camera_world_x += CAMERA_FREE_SPEED;
+            if (input_mapping_is_player2_key_pressed(JO_KEY_UP))
+                g_camera_world_y -= CAMERA_FREE_SPEED;
+            if (input_mapping_is_player2_key_pressed(JO_KEY_DOWN))
+                g_camera_world_y += CAMERA_FREE_SPEED;
+        }
+    }
+    else
+    {
+        jo_printf(25, 1, "        ");
+
+        float player_world_x;
+        float player_world_y;
+
+        if (g_camera_follow_player2 && player2_is_active())
+        {
+            player_world_x = (float)(*g_ctx->map_pos_x + player2.x + (CHARACTER_WIDTH / 2));
+            player_world_y = (float)(*g_ctx->map_pos_y + player2.y);
+        }
+        else
+        {
+            player_world_x = (float)(g_player_map_pos_x + p1->character->x + (CHARACTER_WIDTH / 2));
+            player_world_y = (float)(g_player_map_pos_y + p1->character->y);
+        }
+
+        float target_world_x = player_world_x - CAMERA_TARGET_SCREEN_X;
+        float target_world_y = player_world_y - CAMERA_TARGET_SCREEN_Y;
+
+        float dx = target_world_x - g_camera_world_x;
+        float dy = target_world_y - g_camera_world_y;
+
+        g_camera_world_x += dx * CAMERA_RETURN_SPEED;
+        g_camera_world_y += dy * CAMERA_RETURN_SPEED;
+
+        if (JO_ABS(dx) < 1.0f)
+            g_camera_world_x = target_world_x;
+        if (JO_ABS(dy) < 1.0f)
+            g_camera_world_y = target_world_y;
+    }
+
+    g_prev_free_cam = camera_free_mode;
+
+    /* Track which player is currently in free cam, for damage-triggered exit. */
+    if (camera_free_mode)
+        g_free_cam_player = free_cam_p1 ? 0 : 1;
+    else
+        g_free_cam_player = -1;
+
+    /* Map position is authoritative for physics/collision; camera defines the visible portion of the world. */
+    int render_map_x = (int)g_camera_world_x;
+    int render_map_y = (int)g_camera_world_y;
+    int screen_x = render_map_x - JO_TV_WIDTH_2;
+    int screen_y = render_map_y - JO_TV_HEIGHT_2;
+
+    if (g_ctx->ui_state->diag_draw_backgrounds)
+    {
+        world_background_draw_parallax(render_map_x, render_map_y);
+        if (g_runtime_playing_draw_logs < 2)
+        {
+            runtime_log_verbose("draw: parallax");
+            ++g_runtime_playing_draw_logs;
+        }
+    }
+
     if (g_ctx->ui_state->diag_vram_uploads)
     {
-        world_map_prepare_visible_tiles(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
-        jo_map_draw_ext(WORLD_MAP_ID, *g_ctx->map_pos_x, *g_ctx->map_pos_y);
+        /* Ensure tiles visible in the current camera view are prepared. */
+        world_map_prepare_visible_tiles(screen_x, screen_y);
+
+        jo_map_draw_ext(WORLD_MAP_ID, (short)screen_x, (short)screen_y);
 
         if (g_runtime_playing_draw_logs < 3)
         {
@@ -1048,49 +1278,51 @@ void game_loop_draw(void)
         runtime_log_verbose("draw: map");
         ++g_runtime_playing_draw_logs;
     }
-    prev_y = player.y;
-    world_handle_player_collision(g_ctx->physics, &player, g_ctx->map_pos_x, *g_ctx->map_pos_y);
-    world_camera_handle(&player, prev_y, g_ctx->map_pos_y);
+
     if (g_runtime_playing_draw_logs < 5)
     {
         runtime_log_verbose("draw: camera");
         ++g_runtime_playing_draw_logs;
     }
-    player2_sync_mode(g_ctx->ui_state->menu_multiplayer_versus);
-    player2_update_runtime(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
-    game_flow_update_animation();
 
-    if (g_ctx->physics->is_in_air)
-    {
-        bool show_jump_sprite = false;
+    /* Draw player relative to the current camera position. */
+    int saved_x = p1->character->x;
+    int saved_y = p1->character->y;
+    int player_offset_x = (int)(g_player_map_pos_x - g_camera_world_x);
+    int player_offset_y = (int)(g_player_map_pos_y - g_camera_world_y);
 
-        g_p1_airborne_time_ms += GAME_FRAME_MS;
-        if (g_ctx->physics->speed_y < 0.0f)
-            show_jump_sprite = true;
-        else if (g_ctx->physics->speed_y >= AIRBORNE_FALL_SPEED_THRESHOLD)
-            show_jump_sprite = true;
-        else if (g_p1_airborne_time_ms >= AIRBORNE_SPRITE_DELAY_MS)
-            show_jump_sprite = true;
 
-        player.jump = show_jump_sprite;
-        player.falling = (show_jump_sprite && g_ctx->physics->speed_y > 0.0f);
-    }
-    else
-    {
-        g_p1_airborne_time_ms = 0;
-        player.jump = false;
-        player.falling = false;
-    }
+    p1->character->x += player_offset_x;
+    p1->character->y += player_offset_y;
 
     game_flow_display_character();
 
+    p1->character->x = saved_x;
+    p1->character->y = saved_y;
+
+    player2_sync_mode(g_ctx->ui_state->menu_multiplayer_versus);
+    /* Update player2 physics using the shared world origin (map_pos).
+       We offset when drawing so P2 stays in sync with the camera even during free cam. */
+    player2_update_runtime(g_ctx->map_pos_x, g_ctx->map_pos_y);
+    game_flow_update_animation();
+
     /* Player2 uses the same draw path as Player1 (no special-case draw code). */
     if (player2_is_active())
+    {
+        int saved_x2 = player2.x;
+        int saved_y2 = player2.y;
+        player2.x += player_offset_x;
+        player2.y += player_offset_y;
         player_draw(&player2, player2_get_physics());
+        player2.x = saved_x2;
+        player2.y = saved_y2;
+    }
 
-    bot_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
-    damage_fx_draw(*g_ctx->map_pos_x, *g_ctx->map_pos_y);
+    bot_draw(render_map_x, render_map_y);
+    damage_fx_draw(render_map_x, render_map_y);
+
     game_loop_draw_health_bars();
+
     if (g_runtime_playing_draw_logs < 6)
     {
         runtime_log_verbose("draw: chars");
@@ -1102,6 +1334,9 @@ void game_loop_draw(void)
 
     if (g_ctx->ui_state->debug_mode == UiDebugModeHardware)
         debug_set_display_mode(DebugDisplayHardware);
+    else
+        if (g_ctx->ui_state->debug_mode == UiDebugModeCamera)
+        debug_set_display_mode(DebugDisplayCamera);
     else
         debug_set_display_mode(DebugDisplayPlayer);
 
@@ -1147,38 +1382,74 @@ void game_loop_input(void)
         return;
     }
 
-    if (*g_ctx->jump_cooldown > 0)
-        (*g_ctx->jump_cooldown)--;
+    bool free_cam_p1 = !g_camera_follow_player2 && jo_is_pad1_key_pressed(JO_KEY_R);
+    bool free_cam_p2 = g_camera_follow_player2 && input_mapping_is_player2_key_pressed(JO_KEY_R);
+    bool camera_free_mode = free_cam_p1 || free_cam_p2;
+    bool entering_free_cam = camera_free_mode && !g_prev_free_cam;
+
+    if (entering_free_cam)
+    {
+        if (free_cam_p1)
+        {
+            player_instance_t *p1 = player_get_default_player();
+            g_player_map_pos_x = *g_ctx->map_pos_x;
+            g_player_map_pos_y = *g_ctx->map_pos_y;
+            p1->character->walk = false;
+            p1->character->run = 0;
+            p1->character->spin = false;
+            p1->physics.speed = 0.0f;
+            p1->physics.speed_y = 0.0f;
+        }
+        else if (free_cam_p2)
+        {
+            player_instance_t *p2 = player_get_default_player2();
+            if (p2 != JO_NULL)
+            {
+                p2->character->walk = false;
+                p2->character->run = 0;
+                p2->character->spin = false;
+                p2->physics.speed = 0.0f;
+                p2->physics.speed_y = 0.0f;
+            }
+        }
+    }
+
+    /* Camera focus toggle (L): swap focus between P1/P2 when the camera currently follows that player. */
+    if (jo_is_pad1_key_pressed(JO_KEY_L) && !g_camera_follow_player2)
+    {
+        if (player2_is_active())
+            g_camera_follow_player2 = true;
+    }
+    if (input_mapping_is_player2_key_pressed(JO_KEY_L) && g_camera_follow_player2)
+    {
+        g_camera_follow_player2 = false;
+    }
+
+    /* If free cam is active, block input only for the controlling player. */
+    if (!camera_free_mode || free_cam_p2)
+    {
+        /* Player1 uses the same input flow as Player2 via the generic player instance API. */
+        player_instance_t *p1 = player_get_default_player();
+        if (p1 != JO_NULL && !free_cam_p1)
+        {
+            control_input_t player1_input;
+            input_mapping_read_player1(&player1_input);
+            player_instance_handle_input(p1,
+                                         &player1_input,
+                                         game_audio_get_jump_sfx(),
+                                         1,
+                                         game_audio_get_spin_sfx(),
+                                         game_audio_get_punch_sfx(),
+                                         game_audio_get_kick_sfx());
+        }
+    }
 
     player2_sync_mode(g_ctx->ui_state->menu_multiplayer_versus);
-    if (player2_is_active())
+    if (player2_is_active() && !free_cam_p2)
     {
         control_input_t player2_input;
         input_mapping_read_player2(&player2_input);
         player2_handle_input(&player2_input);
     }
-
-    if (player.attack_cooldown > 0)
-        player.attack_cooldown--;
-
-    if (player.stun_timer > 0)
-    {
-        player.stun_timer--;
-        player.walk = false;
-        player.run = 0;
-        player.spin = false;
-        jo_physics_apply_friction(g_ctx->physics);
-        return;
-    }
-
-    control_handle_player_commands(g_ctx->physics,
-                                   &player,
-                                   g_ctx->jump_cooldown,
-                                   &g_p1_jump_hold_ms,
-                                   &g_p1_jump_cut_applied,
-                                   game_audio_get_jump_sfx(),
-                                   game_audio_get_spin_sfx(),
-                                   game_audio_get_punch_sfx(),
-                                   game_audio_get_kick_sfx());
 }
 
