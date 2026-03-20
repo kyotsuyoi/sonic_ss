@@ -36,7 +36,7 @@ Available characters:
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
 
-## v0.1.X
+## v0.2.X
 ### Checklist (Road to v0.2) (60%)
 
 - ✅ Knuckles bot misses the range of the aerial attack and the super punch.
