@@ -24,7 +24,7 @@ Available characters:
 - Knuckles — OK
 - Shadow — OK
 
-## Screenshots
+## v0.1.X
 
 ### 1. Splash Screen (Press Start)
 ![Splash Screen](readme_src/spl_scr.png)
