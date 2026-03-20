@@ -48,23 +48,23 @@ Available characters:
 - ✅ Some logs and debug output stay permanently on and need to be disabled by default (causes a bug in jo_print).
 
 - ✅ Physical hardware (SAROO) became extremely slow, need to find out why (emulator is OK).
--   ✅ The method jo_clear_background is called in a loop and wipes the entire VRAM.
+- - ✅ The method jo_clear_background is called in a loop and wipes the entire VRAM.
 
 - ✅ Camera control.
 - ⬜ Auto camera that stays at a midpoint between the players.
 - ✅ Allow the camera to follow player 1 or player 2.
 
 - ✅ Debug menu to adjust stun, knockback, pulse, and damage in-game.
--   ✅ Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
+- - ✅ Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
 
 - ⬜ Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
--   ⬜ Sprite packing: grouping multiple sprites into the same block to reduce overhead.
--   ✅ Sonic sprites -> Players (100%) - Bots (100%).
--   ✅ Amy sprites -> Players (100%) - Bots (100%).
--   ⬜ Tails sprites -> Players (50%) - Bots (50%).
--   ⬜ Knuckles sprites.
--   ⬜ Shadow sprites.
--   ⬜ All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
+- - ⬜ Sprite packing: grouping multiple sprites into the same block to reduce overhead.
+- - ✅ Sonic sprites -> Players (100%) - Bots (100%).
+- - ✅ Amy sprites -> Players (100%) - Bots (100%).
+- - ⬜ Tails sprites -> Players (50%) - Bots (50%).
+- - ⬜ Knuckles sprites.
+- - ⬜ Shadow sprites.
+- - ⬜ All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
 
 - ⬜ Bot strategy (25%).
 - ✅ Make the bots follow the same sprite control flow as the players.
