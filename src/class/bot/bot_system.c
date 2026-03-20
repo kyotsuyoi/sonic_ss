@@ -2,10 +2,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <float.h>
-#include "bot.h"
 
 /* Ensure rand() is declared regardless of toolchain header behavior. */
 extern int rand(void);
+#include "bot_system.h"
 #include "player.h"
 #include "game_constants.h"
 #include "world_collision.h"
@@ -60,6 +60,10 @@ extern int rand(void);
 #define BOT_NAV_MAX_GROUND_DELTA 20
 #define BOT_JUMP_REACTION_DELAY_FRAMES 8
 
+#define BOT_MAX_DEFAULT_COUNT 6
+
+typedef struct bot_instance bot_instance_t;
+
 struct bot_instance
 {
     character_t character;
@@ -80,6 +84,8 @@ struct bot_instance
     bool prev_punch2;
     bool prev_kick;
     bool prev_kick2;
+    int tactic;
+    int tactic_ticks;
     ui_character_choice_t choice;
     int group;
 };
@@ -233,6 +239,8 @@ static void bot_initialize_instance(bot_instance_t *inst,
     inst->prev_punch2 = false;
     inst->prev_kick = false;
     inst->prev_kick2 = false;
+    inst->tactic = 1; /* balanced */
+    inst->tactic_ticks = 0;
     inst->choice = bot_normalize_choice(selected_bot_character);
     inst->group = group;
 
@@ -387,7 +395,87 @@ static void bot_apply_simple_ai(bot_instance_t *inst,
 
         inst->prev_target_airborne = target_airborne;
 
-        // Jump logic: only jump para aerial opportunities, not ground repos.
+        // Stateful strategy selection (per bot instance)
+        if (inst->tactic_ticks <= 0)
+        {
+            int style_choice = rand() % 100;
+            if (style_choice < 35)
+                inst->tactic = 0; /* aggressive */
+            else if (style_choice < 70)
+                inst->tactic = 1; /* balanced */
+            else
+                inst->tactic = 2; /* evasive */
+
+            inst->tactic_ticks = 30 + (rand() % 30);
+        }
+        --inst->tactic_ticks;
+
+        bool strategy_aggressive = (inst->tactic == 0);
+        bool strategy_balanced = (inst->tactic == 1);
+        bool strategy_evasive = (inst->tactic == 2);
+
+        bool defensive_mode = (inst->character.life > 0 && inst->character.life < 16);
+        bool attack_now = (rand() % 100) < (defensive_mode ? 35 : 65);
+
+        // Keep a little spacing when too close and low health
+        if (distance_abs < (desired_min_distance + 4) && defensive_mode)
+        {
+            if (desired_dir < 0)
+                right_pressed = true;
+            else
+                left_pressed = true;
+        }
+
+        // Strategy-based movement for varied behavior
+        if (distance_abs > desired_max_distance + 4)
+        {
+            if (strategy_aggressive || (strategy_balanced && (rand() % 100) < 85))
+            {
+                if (desired_dir < 0)
+                    left_pressed = true;
+                else
+                    right_pressed = true;
+            }
+        }
+        else if (distance_abs < desired_min_distance - 3)
+        {
+            if (strategy_evasive || (strategy_balanced && (rand() % 100) < 50))
+            {
+                if (desired_dir < 0)
+                    right_pressed = true;
+                else
+                    left_pressed = true;
+            }
+        }
+
+        // Actually use tactical movement: sometimes hold position and use aerial or spacing.
+        if (distance_abs > desired_max_distance + 4)
+        {
+            if ((rand() % 100) < 75)
+            {
+                if (desired_dir < 0)
+                    left_pressed = true;
+                else
+                    right_pressed = true;
+            }
+            else
+            {
+                left_pressed = false;
+                right_pressed = false;
+            }
+        }
+        else if (distance_abs < desired_min_distance - 3)
+        {
+            if ((rand() % 100) < (defensive_mode ? 70 : 45))
+            {
+                if (desired_dir < 0)
+                    right_pressed = true;
+                else
+                    left_pressed = true;
+            }
+        }
+
+        // Jump logic: only jump for aerial opportunities, not ground repos.
         if (inst->character.can_jump && inst->jump_cooldown == 0 && on_ground && distance_abs <= BOT_JUMP_MAX_HORIZONTAL_GAP)
         {
             bool vertical_target = (vertical_gap >= BOT_JUMP_MIN_VERTICAL_GAP && vertical_gap <= BOT_JUMP_MAX_VERTICAL_GAP);
@@ -450,7 +538,9 @@ static void bot_apply_simple_ai(bot_instance_t *inst,
         bool in_engage_range = (distance_abs >= desired_min_distance && distance_abs <= desired_max_distance);
         bool can_ground_attack = on_ground;
 
-        if (inst->character.attack_cooldown == 0 && !inst->character.punch2 && !inst->character.kick2)
+        // Reuse defensive_mode + attack_now already defined earlier in function.
+
+        if (inst->character.attack_cooldown == 0 && !inst->character.punch2 && !inst->character.kick2 && attack_now)
         {
             if (can_ground_attack && !inst->character.punch && !inst->character.kick)
             {
@@ -483,6 +573,51 @@ static void bot_apply_simple_ai(bot_instance_t *inst,
                 + (inst->jump_cooldown * 11)) % 100;
             if (air_noise < BOT_AIR_KICK_TRIGGER_CHANCE)
                 c_down = true;
+        }
+
+        // Mid-air press to make bot more unpredictable in close range
+        if (!on_ground && distance_abs <= desired_max_distance + 8 && distance_abs >= desired_min_distance - 2 && !inst->character.air_kick_used)
+        {
+            c_down = true;
+        }
+
+        // If enemy is in moderate range, try jump assault occasionally
+        if (on_ground && !target_airborne && distance_abs > desired_min_distance && distance_abs <= desired_max_distance + 10 && (rand() % 100) < 30)
+        {
+            b_pressed = true;
+            b_down = true;
+        }
+
+        // During jump/fall, maybe use a descending attack (air dive) or aerial combo.
+        if (!on_ground && inst->character.falling)
+        {
+            if (distance_abs <= kick_range + 9 && !inst->character.air_kick_used)
+            {
+                if (rand() % 100 < (strategy_aggressive ? 80 : 50))
+                    c_down = true; // dive kick from above
+            }
+            else if (distance_abs <= punch2_range + 3 && rand() % 100 < 45)
+            {
+                a_down = true; // aerial punch
+            }
+        }
+
+        // If on ground and close, try combo options (punch->kick or kick->punch)
+        if (on_ground && attack_now && distance_abs <= desired_max_distance)
+        {
+            if (strategy_aggressive && distance_abs <= punch2_range + 1)
+            {
+                a_down = true;
+                // combo continuation if first punch already landed
+                if (inst->character.punch && !inst->character.punch2)
+                    a_down = true;
+            }
+            else if (strategy_balanced && distance_abs <= kick_range + 1)
+            {
+                c_down = true;
+                if (inst->character.kick && !inst->character.kick2)
+                    c_down = true;
+            }
         }
     }
 

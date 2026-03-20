@@ -3,6 +3,7 @@
 #include "player.h"
 #include "game_audio.h"
 #include "game_constants.h"
+#include "game_flow.h"
 
 character_action_status_t character_update_cooldowns(character_t *character, int *jump_cooldown)
 {
@@ -798,7 +799,14 @@ void player_update_punch_state(character_t *controlled_player,
 	if (controlled_player == JO_NULL || controlled_player->punch_anim_id < 0)
 		return;
 
-	/* read current animation state early so stage‑2 logic always has valid values */
+	/* Ensure animation is reset if not in punch action, to avoid frame desync after hit */
+	if (!controlled_player->punch && !controlled_player->punch2)
+	{
+		jo_set_sprite_anim_frame(controlled_player->punch_anim_id, 0);
+		jo_reset_sprite_anim(controlled_player->punch_anim_id);
+		return;
+	}
+
 	anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
 	anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
 
@@ -1002,7 +1010,6 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
     }
 
     bool is_tails = (controlled_player->character_id == CHARACTER_ID_TAILS);
-    bool is_knuckles = (controlled_player->character_id == CHARACTER_ID_KNUCKLES);
     bool is_sonic = (controlled_player->character_id == CHARACTER_ID_SONIC);
     bool is_amy = (controlled_player->character_id == CHARACTER_ID_AMY);
 
@@ -1465,7 +1472,14 @@ void player_update_kick_state(character_t *controlled_player,
 	if (controlled_player == JO_NULL || controlled_player->kick_anim_id < 0)
 		return;
 
-	/* read current animation state early so stage-2 logic always has valid values */
+	/* Ensure animation is reset if not in kick action, to avoid frame desync after hit */
+	if (!controlled_player->kick && !controlled_player->kick2)
+	{
+		jo_set_sprite_anim_frame(controlled_player->kick_anim_id, 0);
+		jo_reset_sprite_anim(controlled_player->kick_anim_id);
+		return;
+	}
+
 	anim_frame = jo_get_sprite_anim_frame(controlled_player->kick_anim_id);
 	anim_stopped = jo_is_sprite_anim_stopped(controlled_player->kick_anim_id);
 

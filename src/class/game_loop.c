@@ -2,11 +2,11 @@
 #include <stdlib.h>
 #include <time.h>
 #include "player.h"
+#include "bot/bot_system.h"
 
 /* Ensure srand is declared even if some platform headers are missing it. */
 extern void srand(unsigned int);
 #include "game_constants.h"
-#include "bot.h"
 #include "control.h"
 #include "ui_control.h"
 #include "game_flow.h"
@@ -101,6 +101,8 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
     {
         if (cid == CHARACTER_ID_TAILS)
             return 0; /* Tails combo kick uses the same single-frame animation */
+        if (cid == CHARACTER_ID_SONIC || cid == CHARACTER_ID_AMY)
+            return 6; /* Sonic/Amy: kick2 (air kick) hit at penultimate frame of 8-frame sheet */
         if (cid == CHARACTER_ID_KNUCKLES && (attacker->charged_kick_active || attacker->charged_kick_phase > 0))
             return 2;
         return 2;

@@ -36,7 +36,7 @@ Available characters:
 ![Battlefield](readme_src/btl_fld01.gif)
 ![Battlefield](readme_src/btl_fld02.gif)
 
-### 4. Checklist (Road to v0.2) (53%)
+### 4. Checklist (Road to v0.2) (60%)
 
 - [x] Knuckles bot misses the range of the aerial attack and the super punch.
 - [x] Knuckles incorrectly allows jumping while holding the super punch.
@@ -50,9 +50,9 @@ Available characters:
 - [x] Physical hardware (SAROO) became extremely slow, need to find out why (emulator is OK).
   - [x] The method jo_clear_background is called in a loop and wipes the entire VRAM.
 
-- [X] Camera control.
+- [x] Camera control.
 - [ ] Auto camera that stays at a midpoint between the players.
-- [X] Allow the camera to follow player 1 or player 2.
+- [x] Allow the camera to follow player 1 or player 2.
 
 - [x] Debug menu to adjust stun, knockback, pulse, and damage in-game.
   - [x] Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
@@ -66,12 +66,11 @@ Available characters:
   - [ ] Shadow sprites.
   - [ ] All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
 
-- [ ] Bot strategy.
-- [ ] Make the bots follow the same sprite control flow as the players.
-- [ ] Equalize Shadow’s class.
+- [ ] Bot strategy (25%).
+- [x] Make the bots follow the same sprite control flow as the players.
 - [ ] Knuckles’ charged attack should allow up to 3 hits before being canceled.
 - [ ] Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
 - [x] Check why debug_battle_add_damage doesn’t get called for all IDs.
 - [ ] Create spectator mode to watch bots fight.
 
-- [X] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.
+- [x] Problem with tiles that suddenly change; this started happening after implementing FREE CAM.

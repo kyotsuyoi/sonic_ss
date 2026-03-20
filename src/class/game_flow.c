@@ -1,10 +1,10 @@
 #include <jo/jo.h>
 #include "game_flow.h"
+#include "bot/bot_system.h"
 #include "game_constants.h"
 #include "player.h"
 #include "sprite_safe.h"
 #include "character_registry.h"
-#include "bot.h"
 #include "character/sonic.h"
 #include "character/amy.h"
 #include "character/tails.h"

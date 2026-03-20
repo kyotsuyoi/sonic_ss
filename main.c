@@ -1,6 +1,5 @@
 #include <jo/jo.h>
 #include "src/class/game_constants.h"
-#include "src/class/bot.h"
 #include "src/class/player.h"
 #include "src/class/control.h"
 #include "src/class/ui_control.h"

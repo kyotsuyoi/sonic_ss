@@ -1,6 +1,5 @@
 #include "debug.h"
 #include "player.h"
-#include "bot.h"
 #include "game_loop.h"
 #include "character_registry.h"
 #include "game_constants.h"
@@ -65,8 +64,9 @@ void debug_track_player_damage_received(int attacker_id, int damage)
     g_debug_last_damage_received = damage;
     g_debug_last_damage_received_from = attacker_id;
 
-    if (attacker_id >= CHARACTER_ID_SONIC && attacker_id <= CHARACTER_ID_SHADOW)
-        g_debug_battle_damage_dealt[attacker_id] += damage;
+    /* NOTE: Do not increment g_debug_battle_damage_dealt here. The damage dealt
+       counter is tracked by debug_battle_add_damage to avoid double-counting the
+       attacker damage when target is player. */
 }
 
 void debug_track_player_knockback_dealt(float knockback)
