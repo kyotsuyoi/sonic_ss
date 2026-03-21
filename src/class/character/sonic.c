@@ -24,7 +24,7 @@ void sonic_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
 }
 
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 40
+#define DEFEATED_SPRITE_WIDTH 48
 #define DEFEATED_SPRITE_HEIGHT 32
 
 static bool sonic_loaded = false;
@@ -141,7 +141,7 @@ static const jo_tile SonicKickTiles[] =
 
 static const jo_tile SonicDefeatedTile[] =
 {
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
+    {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
 static void sonic_copy_defeated_sheet_frame_to_sprite(int sprite_id)

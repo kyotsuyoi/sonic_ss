@@ -31,7 +31,8 @@
 #define DAMAGE_FX_SPRITE_Z (430)
 
 /* Defeated/blood sprite dimensions (used by bots and character sprites) */
-#define DEFEATED_SPRITE_WIDTH (40)
+#define DEFEATED_SPRITE_TILE_WIDTH (40) /* must be multiple of 8 for jo_sprite_add_tga_tileset */
+#define DEFEATED_SPRITE_WIDTH (46) /* desired displayed width */
 #define DEFEATED_SPRITE_HEIGHT (32)
 
 #define STUN_LIGHT_FRAMES (18)

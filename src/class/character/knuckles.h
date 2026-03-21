@@ -16,6 +16,7 @@ typedef character_t knuckles_t;
 
 void knuckles_running_animation_handling(void);
 void display_knuckles(void);
+void knuckles_set_current(character_t *chr, jo_sidescroller_physics_params *phy);
 
 /* Parameterized variants for Player 2 / multi-character use. */
 void knuckles_update_animation_for(character_t *character, jo_sidescroller_physics_params *physics);

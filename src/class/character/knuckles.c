@@ -3,10 +3,22 @@
 #include "knuckles.h"
 #include "character_registry.h"
 
-#define character_ref player
-extern jo_sidescroller_physics_params physics;
+static character_t *knuckles_ref = &player;
+static jo_sidescroller_physics_params *knuckles_physics = &physics;
+
+#define character_ref (*knuckles_ref)
+#define physics (*knuckles_physics)
+
+void knuckles_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    if (chr != NULL)
+        knuckles_ref = chr;
+    if (phy != NULL)
+        knuckles_physics = phy;
+}
+
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 40
+#define DEFEATED_SPRITE_WIDTH 46
 #define DEFEATED_SPRITE_HEIGHT 32
 #define KNUCKLES_FRAME_COUNT 4
 #define KNUCKLES_COMBO2_START_FRAME 2
@@ -84,7 +96,7 @@ static const jo_tile KnucklesKickTiles[] =
 
 static const jo_tile KnucklesDefeatedTile[] =
 {
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
+    {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
 static void knuckles_reset_animation_lists_except(character_t *chr, int active_anim_id)

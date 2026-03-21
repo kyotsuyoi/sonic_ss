@@ -7,17 +7,7 @@
 #include "knuckles.h"
 #include "shadow.h"
 
-static ui_character_choice_t character_registry_choice_from_character_id(int character_id)
-{
-    switch (character_id)
-    {
-    case CHARACTER_ID_AMY:
-        return UiCharacterAmy;
-    case CHARACTER_ID_SONIC:
-    default:
-        return UiCharacterSonic;
-    }
-}
+static ui_character_choice_t character_registry_choice_from_character_id(int character_id);
 
 character_handlers_t character_registry_get(ui_character_choice_t choice)
 {
@@ -30,6 +20,12 @@ character_handlers_t character_registry_get(ui_character_choice_t choice)
         handlers.unload = unload_amy;
         handlers.update_animation = amy_running_animation_handling;
         handlers.display = display_amy;
+        break;
+    case UiCharacterTails:
+        handlers.load = load_tails;
+        handlers.unload = unload_tails;
+        handlers.update_animation = tails_running_animation_handling;
+        handlers.display = display_tails;
         break;
     case UiCharacterSonic:
     default:
@@ -52,7 +48,14 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
     profile.punch_count = 8;
     profile.kick_count = 8;
 
-    if (choice == UiCharacterAmy)
+    if (choice == UiCharacterTails)
+    {
+        profile.move_count = 8;
+        profile.stand_count = 4;
+        profile.punch_count = 8;
+        profile.kick_count = 5; // Tails has 5 kick frames (0-4)
+    }
+    else if (choice == UiCharacterAmy)
     {
         profile.move_count = 8;
         profile.stand_count = 4;
@@ -103,6 +106,24 @@ character_combat_profile_t character_registry_get_combat_profile_by_character_id
     return character_registry_get_combat_profile(character_registry_choice_from_character_id(character_id));
 }
 
+static ui_character_choice_t character_registry_choice_from_character_id(int character_id)
+{
+    switch (character_id)
+    {
+    case CHARACTER_ID_AMY:
+        return UiCharacterAmy;
+    case CHARACTER_ID_TAILS:
+        return UiCharacterTails;
+    case CHARACTER_ID_KNUCKLES:
+        return UiCharacterKnuckles;
+    case CHARACTER_ID_SHADOW:
+        return UiCharacterShadow;
+    case CHARACTER_ID_SONIC:
+    default:
+        return UiCharacterSonic;
+    }
+}
+
 void character_registry_apply_combat_profile(character_t *character, ui_character_choice_t choice)
 {
     character_combat_profile_t profile;
@@ -134,6 +155,15 @@ void character_registry_apply_combat_profile(character_t *character, ui_characte
     {
     case UiCharacterAmy:
         character->character_id = CHARACTER_ID_AMY;
+        break;
+    case UiCharacterTails:
+        character->character_id = CHARACTER_ID_TAILS;
+        break;
+    case UiCharacterKnuckles:
+        character->character_id = CHARACTER_ID_KNUCKLES;
+        break;
+    case UiCharacterShadow:
+        character->character_id = CHARACTER_ID_SHADOW;
         break;
     case UiCharacterSonic:
     default:

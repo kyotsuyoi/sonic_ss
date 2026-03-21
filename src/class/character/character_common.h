@@ -14,10 +14,12 @@ void character_running_animation_handling(character_t *chr, jo_sidescroller_phys
 
 /* Helpers shared by multiple characters (Sonic/Amy) */
 int character_create_blank_sprite(void);
+int character_create_blank_sprite_with_size(int width, int height);
 int character_create_blank_animation(int frame_count);
 int character_ensure_wram_sprite(character_t *chr, int *global_sprite_id);
 int character_ensure_defeated_wram_sprite(character_t *chr, int defeated_width, int defeated_height);
 void character_copy_sheet_frame_to_sprite(int sprite_id, const jo_img *sheet, int frame_x, int frame_y);
+void character_copy_sheet_frame_to_sprite_with_size(int sprite_id, const jo_img *sheet, int frame_x, int frame_y, int width, int height);
 void character_copy_defeated_sheet_frame_to_sprite(int sprite_id, const jo_img *sheet, int defeated_width, int defeated_height);
 
 bool character_load_sheet(jo_img *sheet, const char *filename, const char *dir, jo_color transparent);

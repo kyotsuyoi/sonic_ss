@@ -200,6 +200,8 @@ static void setup_player2_character(ui_character_choice_t selected_character)
         sonic_set_current(&player2, NULL);
     else if (selected_character == UiCharacterAmy)
         amy_set_current(&player2, NULL);
+    else if (selected_character == UiCharacterTails)
+        tails_set_current(&player2, NULL);
 
     player2_handlers.load();
 
@@ -208,6 +210,8 @@ static void setup_player2_character(ui_character_choice_t selected_character)
         sonic_set_current(&player, NULL);
     else if (selected_character == UiCharacterAmy)
         amy_set_current(&player, NULL);
+    else if (selected_character == UiCharacterTails)
+        tails_set_current(&player, NULL);
 
     /* Ensure player2 combat stats (including charged kick) match the selected character. */
     character_registry_apply_combat_profile(&player2, selected_character);
@@ -221,12 +225,12 @@ static void setup_player2_character(ui_character_choice_t selected_character)
     punch_count = anim_profile.punch_count;
     kick_count = anim_profile.kick_count;
 
-    walking_base_id = game_flow_anim_base_id_from_anim(player.walking_anim_id);
-    running1_base_id = game_flow_anim_base_id_from_anim(player.running1_anim_id);
-    running2_base_id = game_flow_anim_base_id_from_anim(player.running2_anim_id);
-    stand_base_id = game_flow_anim_base_id_from_anim(player.stand_sprite_id);
-    punch_base_id = game_flow_anim_base_id_from_anim(player.punch_anim_id);
-    kick_base_id = game_flow_anim_base_id_from_anim(player.kick_anim_id);
+    walking_base_id = game_flow_anim_base_id_from_anim(player2.walking_anim_id);
+    running1_base_id = game_flow_anim_base_id_from_anim(player2.running1_anim_id);
+    running2_base_id = game_flow_anim_base_id_from_anim(player2.running2_anim_id);
+    stand_base_id = game_flow_anim_base_id_from_anim(player2.stand_sprite_id);
+    punch_base_id = game_flow_anim_base_id_from_anim(player2.punch_anim_id);
+    kick_base_id = game_flow_anim_base_id_from_anim(player2.kick_anim_id);
 
     game_flow_remove_player2_runtime_anims();
 
@@ -298,6 +302,14 @@ static void ensure_active_character_loaded(ui_character_choice_t selected_charac
         active_handlers.unload();
 
     select_active_character(selected_character);
+
+    /* Ensure correct character context when loading. */
+    if (selected_character == UiCharacterSonic)
+        sonic_set_current(&player, NULL);
+    else if (selected_character == UiCharacterAmy)
+        amy_set_current(&player, NULL);
+    else if (selected_character == UiCharacterTails)
+        tails_set_current(&player, NULL);
 
     // Ensure animation creation state is reset so first-time load works correctly.
     sprite_safe_reset();
@@ -858,11 +870,35 @@ void game_flow_debug_force_cdda_stop(void)
 
 void game_flow_update_animation(void)
 {
+    player_instance_t *p1 = player_get_default_player();
+
+    if (p1 != JO_NULL)
+    {
+        if (active_character == UiCharacterSonic)
+            sonic_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterAmy)
+            amy_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterTails)
+            tails_set_current(&player, &p1->physics);
+    }
+
     active_handlers.update_animation();
 }
 
 void game_flow_display_character(void)
 {
+    player_instance_t *p1 = player_get_default_player();
+
+    if (p1 != JO_NULL)
+    {
+        if (active_character == UiCharacterSonic)
+            sonic_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterAmy)
+            amy_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterTails)
+            tails_set_current(&player, &p1->physics);
+    }
+
     active_handlers.display();
 }
 

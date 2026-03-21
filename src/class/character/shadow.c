@@ -5,10 +5,22 @@
 #include "game_constants.h"
 #include "character_registry.h"
 
-extern jo_sidescroller_physics_params physics;
+static character_t *shadow_ref = &player;
+static jo_sidescroller_physics_params *shadow_physics = &physics;
+
+#define character_ref (*shadow_ref)
+#define physics (*shadow_physics)
+
+void shadow_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    if (chr != NULL)
+        shadow_ref = chr;
+    if (phy != NULL)
+        shadow_physics = phy;
+}
 
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 40
+#define DEFEATED_SPRITE_WIDTH 46
 #define DEFEATED_SPRITE_HEIGHT 32
 
 /*
@@ -93,7 +105,7 @@ static const jo_tile ShadowKickTiles[] =
 
 static const jo_tile ShadowDefeatedTile[] =
 {
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
+    {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
 static void shadow_reset_animation_lists_except(int active_anim_id)

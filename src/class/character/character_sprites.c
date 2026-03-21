@@ -134,7 +134,7 @@ static const jo_tile TailsTailTiles[] =
 
 static const jo_tile BotDefeatedTile[] =
 {
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT}
+    {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT}
 };
 
 static const jo_tile* character_get_move_tiles_internal(ui_character_choice_t choice, int *out_count)

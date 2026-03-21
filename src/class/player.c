@@ -1,6 +1,7 @@
 #include <jo/jo.h>
 #include <string.h>
 #include "player.h"
+#include "character/tails.h"
 #include "game_audio.h"
 #include "game_constants.h"
 #include "game_flow.h"
@@ -896,8 +897,8 @@ void player_update_punch_state(character_t *controlled_player,
 				controlled_player->punch2_requested = false;
 				controlled_player->perform_punch2 = true;
 
-				/* For Sonic/Amy, stage2 is a full 4-frame animation (frames 4-7). */
-				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+				/* For Sonic/Amy/Tails, stage2 is a full 4-frame animation (frames 4-7). */
+				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY || controlled_player->character_id == CHARACTER_ID_TAILS)
 				{
 					controlled_player->punch_stage2_ticks = 0;
 					jo_set_sprite_anim_frame(controlled_player->punch_anim_id, punch_stage2_start_frame);
@@ -928,7 +929,7 @@ void player_update_punch_state(character_t *controlled_player,
 
 	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
 	if (controlled_player->punch_stage2_ticks > 0
-		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY))
+		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY || controlled_player->character_id == CHARACTER_ID_TAILS))
 	{
 		int half = DEFAULT_SPRITE_FRAME_DURATION;
 		if (controlled_player->punch_stage2_ticks > half)
@@ -979,16 +980,17 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	// Sonic and Amy use 8-frame punch sheets (4 frames punch1 + 4 frames punch2)
-	if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+	// Sonic/Amy/Tails use 8-frame punch sheets (4 frames punch1 + 4 frames punch2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC ||
+		controlled_player->character_id == CHARACTER_ID_AMY ||
+		controlled_player->character_id == CHARACTER_ID_TAILS)
 	{
 		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
 		player_update_punch_state(controlled_player, 3, 3, 4, 7, true, true, false);
 		return;
 	}
 
-	/* Unified 4-frame profile matching the working Knuckles combo flow. */
-	/* 2 + 2 frames: stage1 frames 0-1, stage2 frames 2-3. Allow combo trigger at frame 1. */
+	/* Unified 4-frame profile for remaining characters: stage1=0-1, stage2=2-3 */
 	player_update_punch_state(controlled_player, 1, 1, 2, 3, true, true, false);
 }
 void player_update_animation_state(character_t *controlled_player, jo_sidescroller_physics_params *physics)
@@ -1034,7 +1036,7 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         controlled_player->tails_kick_rotation_active = false;
     }
 
-    /* Sonic/Amy use WRAM-sheet animation handlers which rely on a global current character pointer. */
+    /* Sonic/Amy/Tails use WRAM-sheet animation handlers which rely on a global current character pointer. */
     if (is_sonic)
     {
         sonic_set_current(controlled_player, physics);
@@ -1048,6 +1050,14 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         amy_set_current(controlled_player, physics);
         amy_running_animation_handling();
         amy_set_current(&player, NULL);
+        return;
+    }
+
+    if (is_tails)
+    {
+        tails_set_current(controlled_player, physics);
+        tails_running_animation_handling();
+        tails_set_current(&player, NULL);
         return;
     }
 
@@ -1290,6 +1300,12 @@ void player_draw(character_t *controlled_player, jo_sidescroller_physics_params 
         sonic_set_current(controlled_player, physics);
         sonic_draw(controlled_player);
         sonic_set_current(&player, NULL);
+    }
+	    else if (controlled_player->character_id == CHARACTER_ID_TAILS)
+    {
+        tails_set_current(controlled_player, physics);
+        tails_draw(controlled_player);
+        tails_set_current(&player, NULL);
     }
     else
     {
@@ -1581,8 +1597,8 @@ void player_update_kick_state(character_t *controlled_player,
 				controlled_player->kick2_requested = false;
 				controlled_player->perform_kick2 = true;
 
-				/* For Sonic/Amy, stage2 is a full 4-frame animation (frames 4-7). */
-				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+				/* For Sonic/Amy/Tails, stage2 is a full 4-frame animation (frames 4-7). */
+				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY || controlled_player->character_id == CHARACTER_ID_TAILS)
 				{
 					controlled_player->kick_stage2_ticks = 0;
 					jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
@@ -1613,7 +1629,7 @@ void player_update_kick_state(character_t *controlled_player,
 
 	/* manual control of stage2 frames: ensure frame2 then frame3 each for DEFAULT ticks */
 	if (controlled_player->kick_stage2_ticks > 0
-		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY))
+		&& !(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY || controlled_player->character_id == CHARACTER_ID_TAILS))
 	{
 		int half = DEFAULT_SPRITE_FRAME_DURATION;
 		if (controlled_player->kick_stage2_ticks > half)
@@ -1664,15 +1680,24 @@ void player_update_kick_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	// Sonic and Amy use an 8-frame kick sheet (4 frames kick1 + 4 frames kick2)
-	if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY)
+	// Sonic/Amy use an 8-frame kick sheet (4 frames kick1 + 4 frames kick2)
+	if (controlled_player->character_id == CHARACTER_ID_SONIC ||
+		controlled_player->character_id == CHARACTER_ID_AMY)
 	{
 		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
 		player_update_kick_state(controlled_player, 3, 3, 4, 7, true, true, false);
 		return;
 	}
 
-	/* Unified 4-frame profile matching the punch combo flow:
+	// Tails uses 5 frames for kick sequence (0-4), for both kick1 and kick2/air-kick
+	if (controlled_player->character_id == CHARACTER_ID_TAILS)
+	{
+		/* stage1 frames 0-4, stage2 frames 0-4 (combo trigger at frame 4) */
+		player_update_kick_state(controlled_player, 4, 4, 0, 4, true, true, false);
+		return;
+	}
+
+	/* Unified 4-frame profile for remaining characters:
 	   stage1 frames 0-1, stage2 frames 2-3 */
 	player_update_kick_state(controlled_player, 1, 1, 2, 3, true, true, false);
 }

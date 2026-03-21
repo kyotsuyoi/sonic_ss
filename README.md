@@ -62,7 +62,7 @@ Available characters:
 - - ⬜ Sprite packing: grouping multiple sprites into the same block to reduce overhead.
 - - ✅ Sonic sprites -> Players (100%) - Bots (100%).
 - - ✅ Amy sprites -> Players (100%) - Bots (100%).
-- - ⬜ Tails sprites -> Players (50%) - Bots (50%).
+- - ⬜ Tails sprites -> Players (100%) - Bots (50%).
 - - ⬜ Knuckles sprites.
 - - ⬜ Shadow sprites.
 - - ⬜ All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).

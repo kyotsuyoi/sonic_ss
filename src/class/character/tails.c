@@ -1,113 +1,121 @@
 #include <jo/jo.h>
-#include "sonic.h"
+#include <string.h>
 #include "tails.h"
 #include "player.h"
+#include "character_common.h"
 #include "character_registry.h"
+#include "sprite_safe.h"
+#include "runtime_log.h"
 
-#define character_ref player
-extern jo_sidescroller_physics_params physics;
+extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
+
+static character_t *tails_ref = &player;
+static jo_sidescroller_physics_params *tails_physics = &physics;
+
+#define character_ref (*tails_ref)
+#define physics (*tails_physics)
+
+void tails_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    if (chr != NULL)
+        tails_ref = chr;
+    if (phy != NULL)
+        tails_physics = phy;
+}
+
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 40
+#define DEFEATED_SPRITE_WIDTH 48
 #define DEFEATED_SPRITE_HEIGHT 32
-#define TAILS_KICK1_ROTATION_TIME 16
-#define TAILS_KICK2_ROTATION_TIME 32
-#define TAILS_TAIL_FRAME_COUNT 4
-#define TAILS_TAIL_FRAME_DURATION 5
-#define TAILS_TAIL_OFFSET_X 14
-#define TAILS_TAIL_Z CHARACTER_SPRITE_Z
 
 static bool tails_loaded = false;
-static int tails_walking_base_id;
-static int tails_running1_base_id;
-static int tails_running2_base_id;
-static int tails_stand_base_id;
-static int tails_punch_base_id;
-static int tails_kick_base_id;
-static int tails_walking_anim_id;
-static int tails_running1_anim_id;
-static int tails_running2_anim_id;
-static int tails_stand_anim_id;
-static int tails_punch_anim_id;
-static int tails_kick_anim_id;
-static int tails_spin_sprite_id;
-static int tails_jump_sprite_id;
-static int tails_kick_sprite_id;
-static int tails_damage_sprite_id;
+static bool tails_sheet_ready = false;
+static jo_img tails_sheet = {0};
+static bool tails_tail_sheet_ready = false;
+static jo_img tails_tail_sheet = {0};
+static int tails_sprite_id = -1;
+static int tails_kick_wram_sprite_id = -1;
+static int tails_run2_wram_sprite_id = -1;
+static int tails_tail_wram_sprite_id = -1;
+static int tails_tail_anim_id = -1;
+
+static bool tails_defeated_sheet_ready = false;
+static jo_img tails_defeated_sheet = {0};
+
+// NOTE: per-character animation state is stored directly on the character so
+// multiple instances (Player 1 / Player 2 / bots) do not interfere with each other.
+// This avoids the case where P2 overwrites P1's current animation/frame.
+
+// Dummy anims used for internal timing / combo logic (punch/kick/speed).
+static int tails_stand_anim_id = -1;
+static int tails_walking_anim_id = -1;
+static int tails_running1_anim_id = -1;
+static int tails_running2_anim_id = -1;
+static int tails_punch_anim_id = -1;
+static int tails_kick_anim_id = -1;
+
 static int tails_defeated_sprite_id;
-static int tails_tail_base_id;
-static int tails_kick_timer = 0;
-static int tails_kick_duration = 0;
-static int tails_kick_total_degrees = 0;
-static bool tails_kick_rotation_active = false;
-static int tails_tail_frame = 0;
-static int tails_tail_timer = 0;
+
+// TAILS_FUL.TGA layout (8x6):
+// Row 0: 0-3 = stand, 4 = jump, 5 = damage, 6 = spin, 7 = unused
+// Row 1: walk (8 frames)
+// Row 2: run1 (8 frames)
+// Row 3: run2 (8 frames)
+// Row 4: punch (4 punch1 + 4 punch2)
+// Row 5: kick  (4 kick1 + 4 kick2)
+static const jo_tile TailsStandTiles[] =
+{
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile TailsJumpTile[] =
+{
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile TailsDamageTile[] =
+{
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile TailsSpinTile[] =
+{
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
 
 static const jo_tile TailsWalkingTiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
- };
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
 
 static const jo_tile TailsRunning1Tiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
-// static const jo_tile TailsRunning2Tiles[] =
-// {
-//     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-//     {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-// };
-
-static const jo_tile TailsStandTiles[] =
+static const jo_tile TailsRunning2Tiles[] =
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile TailsPunchTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile TailsKickTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 8, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 9, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 10, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 11, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    // {CHARACTER_WIDTH * 12, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    // Tails RUN2 agora tem 4 sprites 64x36 (correção de peculiaridade do asset)
+    {0, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH * 2, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH * 2, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH * 2, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH * 2, CHARACTER_HEIGHT},
 };
 
 static const jo_tile TailsTailTiles[] =
@@ -115,67 +123,70 @@ static const jo_tile TailsTailTiles[] =
     {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
     {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
+    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile TailsPunchTiles[] =
+{
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+};
+
+static const jo_tile TailsKickTiles[] =
+{
+    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
+    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
 static const jo_tile TailsDefeatedTile[] =
 {
-    {0, 0, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT},
+    {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
-static void tails_update_tail_loop(void)
+static void tails_copy_defeated_sheet_frame_to_sprite(int sprite_id)
 {
-    ++tails_tail_timer;
-    if (tails_tail_timer >= TAILS_TAIL_FRAME_DURATION)
-    {
-        tails_tail_timer = 0;
-        tails_tail_frame = (tails_tail_frame + 1) % TAILS_TAIL_FRAME_COUNT;
-    }
+    character_copy_defeated_sheet_frame_to_sprite(sprite_id, &tails_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
-static bool tails_should_draw_tail(void)
+static int tails_ensure_defeated_wram_sprite(character_t *chr)
 {
-    if (tails_tail_base_id < 0)
-        return false;
-    if (character_ref.spin)
-        return false;
-    if (character_ref.life <= 0)
-        return false;
-    if (character_ref.stun_timer > 0)
-        return false;
-    if (character_ref.kick2)
-        return false;
-    if (tails_kick_rotation_active)
-        return false;
-
-    return true;
+    return character_ensure_defeated_wram_sprite(chr, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
-static void tails_draw_tail(void)
+static void tails_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
 {
-    int tail_x;
-
-    if (!tails_should_draw_tail())
-        return;
-
-    tail_x = character_ref.x + (character_ref.flip ? TAILS_TAIL_OFFSET_X : -TAILS_TAIL_OFFSET_X);
-    jo_sprite_draw3D2(tails_tail_base_id + tails_tail_frame, tail_x, character_ref.y, TAILS_TAIL_Z);
+    character_copy_sheet_frame_to_sprite(sprite_id, &tails_sheet, frame_x, frame_y);
 }
 
-static void tails_reset_animation_lists_except(int active_anim_id)
+static int tails_create_blank_animation(int frame_count)
 {
-    if (character_ref.walking_anim_id >= 0 && character_ref.walking_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.walking_anim_id);
-    if (character_ref.running1_anim_id >= 0 && character_ref.running1_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.running1_anim_id);
-    if (character_ref.running2_anim_id >= 0 && character_ref.running2_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.running2_anim_id);
-    if (character_ref.stand_sprite_id >= 0 && character_ref.stand_sprite_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.stand_sprite_id);
-    if (character_ref.punch_anim_id >= 0 && character_ref.punch_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.punch_anim_id);
-    if (character_ref.kick_anim_id >= 0 && character_ref.kick_anim_id != active_anim_id)
-        jo_reset_sprite_anim(character_ref.kick_anim_id);
+    return character_create_blank_animation(frame_count);
+}
+
+static int tails_create_blank_sprite(void)
+{
+    return character_create_blank_sprite();
+}
+
+// The full WRAM-per-character sprite approach avoids P1/P2 sharing the same
+// backing sprite, which would cause one entity to overwrite the other's frame
+// each update.
+static int tails_ensure_wram_sprite(character_t *chr)
+{
+    return character_ensure_wram_sprite(chr, &tails_sprite_id);
 }
 
 /*
@@ -193,170 +204,225 @@ Speed -> Animation mapping:
 - `run` selects which animation variant is drawn (0 = walking, 1 = running1, 2 = running2).
 This mapping keeps the visual animation speed consistent with the character's physical speed.
 */
+/*
+Per-character WRAM animation timing is now driven by the dummy sprite animations
+(the ones created via `sprite_safe_create_anim`) rather than manually ticking a
+frame counter.
+
+This matches Tails's behavior and ensures stand/walk/run timing is consistent.
+*/
+
 void tails_running_animation_handling(void)
 {
-    int speed_step;
+    character_running_animation_handling(&character_ref, &physics);
+}
 
-    tails_update_tail_loop();
-
-    if (jo_physics_is_standing(&physics))
+static void tails_draw_for_character(character_t *chr)
+{
+    if (!tails_sheet_ready)
     {
-        jo_reset_sprite_anim(character_ref.running1_anim_id);
-        jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-        if (!jo_is_sprite_anim_stopped(character_ref.walking_anim_id)){
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.stand_sprite_id);
-        }else{
-            if (jo_is_sprite_anim_stopped(character_ref.stand_sprite_id))
-                jo_start_sprite_anim_loop(character_ref.stand_sprite_id);
-
-            if (jo_get_sprite_anim_frame(character_ref.stand_sprite_id) == 0)
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 70);
+        // Legacy per-frame animation path.
+        if (chr->spin)
+        {
+            jo_sprite_draw3D_and_rotate2(chr->spin_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+            if (chr->flip)
+                chr->angle -= CHARACTER_SPIN_SPEED;
             else
-                jo_set_sprite_anim_frame_rate(character_ref.stand_sprite_id, 2);
+                chr->angle += CHARACTER_SPIN_SPEED;
+            return;
         }
+
+        if (chr->life <= 0 && chr->defeated_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(chr->defeated_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->stun_timer > 0 && chr->damage_sprite_id >= 0)
+        {
+            jo_sprite_draw3D2(chr->damage_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->punch || chr->punch2)
+        {
+            int anim_sprite_id = (chr->punch_anim_id >= 0) ? jo_get_anim_sprite(chr->punch_anim_id) : -1;
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->kick || chr->kick2)
+        {
+            int anim_sprite_id = (chr->kick_anim_id >= 0) ? jo_get_anim_sprite(chr->kick_anim_id) : -1;
+            if (anim_sprite_id >= 0)
+                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        if (chr->jump)
+        {
+            jo_sprite_draw3D2(chr->jump_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+            return;
+        }
+
+        int anim_sprite_id;
+        if (chr->walk && chr->run == 0)
+            anim_sprite_id = (chr->walking_anim_id >= 0) ? jo_get_anim_sprite(chr->walking_anim_id) : -1;
+        else if (chr->walk && chr->run == 1)
+            anim_sprite_id = (chr->running1_anim_id >= 0) ? jo_get_anim_sprite(chr->running1_anim_id) : -1;
+        else if (chr->walk && chr->run == 2)
+            anim_sprite_id = (chr->running2_anim_id >= 0) ? jo_get_anim_sprite(chr->running2_anim_id) : -1;
+        else
+            anim_sprite_id = (chr->stand_sprite_id >= 0) ? jo_get_anim_sprite(chr->stand_sprite_id) : -1;
+
+        if (anim_sprite_id >= 0)
+            jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+        return;
+    }
+
+    if (character_draw_defeated(chr, tails_ensure_defeated_wram_sprite(chr), &tails_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT))
+        return;
+
+    // Tail overlay: loop 0..7 do TLS_TLS.TGA, aparece atrás do personagem.
+    // Não exibir em spin, defeated, stun, run2 ou kicks ativos.
+    if (!chr->spin && chr->life > 0 && chr->stun_timer <= 0 && !chr->kick && !chr->kick2 && chr->run != 2 && tails_tail_sheet_ready && tails_tail_wram_sprite_id >= 0 && tails_tail_anim_id >= 0)
+    {
+        if (jo_is_sprite_anim_stopped(tails_tail_anim_id))
+            jo_start_sprite_anim_loop(tails_tail_anim_id);
+
+        int tail_frame = jo_get_sprite_anim_frame(tails_tail_anim_id) % JO_TILE_COUNT(TailsTailTiles);
+        if (tail_frame < 0)
+            tail_frame = 0;
+
+        character_copy_sheet_frame_to_sprite_with_size(
+            tails_tail_wram_sprite_id,
+            &tails_tail_sheet,
+            tail_frame * CHARACTER_WIDTH,
+            0,
+            CHARACTER_WIDTH,
+            CHARACTER_HEIGHT);
+
+        int tail_x = chr->x + (chr->flip ? 16 : -16);
+        int tail_y = chr->y + 4;
+        jo_sprite_draw3D2(tails_tail_wram_sprite_id, tail_x, tail_y, CHARACTER_SPRITE_Z + 1);
+    }
+
+    if (chr->kick || chr->kick2)
+    {
+        int kick_frame = (chr->kick_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->kick_anim_id) : 0;
+        int frame_x;
+        int frame_width;
+
+        if (kick_frame <= 1)
+        {
+            frame_x = kick_frame * CHARACTER_WIDTH;
+            frame_width = CHARACTER_WIDTH;
+        }
+        else
+        {
+            frame_x = 2 * CHARACTER_WIDTH + (kick_frame - 2) * (CHARACTER_WIDTH * 2);
+            frame_width = CHARACTER_WIDTH * 2;
+        }
+
+        if (tails_kick_wram_sprite_id < 0)
+            tails_kick_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
+
+        // Build a 64x36 temp frame so target width always matches.
+        jo_img temp = {0};
+        temp.width = CHARACTER_WIDTH * 2;
+        temp.height = CHARACTER_HEIGHT;
+        temp.data = (unsigned short *)jo_malloc((size_t)temp.width * (size_t)temp.height * sizeof(unsigned short));
+        if (temp.data == JO_NULL)
+            return;
+        for (size_t i = 0; i < (size_t)temp.width * (size_t)temp.height; ++i)
+            ((unsigned short *)temp.data)[i] = JO_COLOR_Transparent;
+
+        unsigned short *src = (unsigned short *)tails_sheet.data;
+        unsigned short *dst = (unsigned short *)temp.data;
+        int sheet_width = tails_sheet.width;
+
+        for (int y = 0; y < CHARACTER_HEIGHT; ++y)
+        {
+            unsigned short *src_row = src + (CHARACTER_HEIGHT * 5 + y) * sheet_width + frame_x;
+            unsigned short *dst_row = dst + y * temp.width;
+            memcpy(dst_row, src_row, frame_width * sizeof(unsigned short));
+        }
+
+        jo_sprite_replace(&temp, tails_kick_wram_sprite_id);
+        jo_free_img(&temp);
+
+        int draw_x = chr->x;
+        if (kick_frame <= 1 && chr->flip)
+        {
+            // For left-facing small frames, adjust left to keep body steady.
+            draw_x = chr->x - (CHARACTER_WIDTH);
+        }
+
+        if (kick_frame >= 2 && chr->flip)
+        {
+            // For left-facing large frames, adjust left to center on same body location.
+            draw_x = chr->x - (CHARACTER_WIDTH-16);
+        }
+
+        if (kick_frame >= 2 && !chr->flip)
+        {
+            // For right-facing large frames, adjust left to center on same body location.
+            draw_x = chr->x - (CHARACTER_WIDTH / 2);
+        }
+
+        jo_sprite_draw3D2(tails_kick_wram_sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
+        return;
+    }
+
+    if (chr->walk && chr->run == 2)
+    {
+        int run_frame = (chr->running2_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->running2_anim_id) : 0;
+        int frame_index = run_frame % 4;
+
+        if (tails_run2_wram_sprite_id < 0)
+            tails_run2_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
+
+        character_copy_sheet_frame_to_sprite_with_size(
+            tails_run2_wram_sprite_id,
+            &tails_sheet,
+            frame_index * (CHARACTER_WIDTH * 2),
+            CHARACTER_HEIGHT * 3,
+            CHARACTER_WIDTH * 2,
+            CHARACTER_HEIGHT);
+
+        int draw_x = chr->x - (CHARACTER_WIDTH / 2);
+        jo_sprite_draw3D2(tails_run2_wram_sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
+        return;
+    }
+
+    int sprite_id = tails_ensure_wram_sprite(chr);
+    if (sprite_id < 0)
+        return;
+
+    if (character_draw_sheet_frame(chr, sprite_id, &tails_sheet))
+        return;
+
+    if (chr->spin)
+    {
+        jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+        if (chr->flip)
+            chr->angle -= CHARACTER_SPIN_SPEED;
+        else
+            chr->angle += CHARACTER_SPIN_SPEED;
     }
     else
     {
-        if (character_ref.run == 0)
-        {
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.walking_anim_id))
-                jo_start_sprite_anim_loop(character_ref.walking_anim_id);
-        }
-        else if (character_ref.run == 1)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running1_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running1_anim_id);
-        }
-        else if (character_ref.run == 2)
-        {
-            jo_reset_sprite_anim(character_ref.walking_anim_id);
-            jo_reset_sprite_anim(character_ref.running1_anim_id);
-
-            if (jo_is_sprite_anim_stopped(character_ref.running2_anim_id))
-                jo_start_sprite_anim_loop(character_ref.running2_anim_id);
-        }
-
-        speed_step = (int)JO_ABS(physics.speed);
-
-        if (speed_step >= 6){
-            jo_set_sprite_anim_frame_rate(character_ref.running2_anim_id, 3);
-            character_ref.run = 2;
-        }else if (speed_step >= 5){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 4);
-            character_ref.run = 1;
-        }else if (speed_step >= 4){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 5);
-            character_ref.run = 1;
-        }else if (speed_step >= 3){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 6);
-            character_ref.run = 1;
-        }else if (speed_step >= 2){
-            jo_set_sprite_anim_frame_rate(character_ref.running1_anim_id, 7);
-            character_ref.run = 1;
-        }else if (speed_step >= 1){
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 8);
-            character_ref.run = 0;
-        }else{
-            jo_set_sprite_anim_frame_rate(character_ref.walking_anim_id, 9);
-            character_ref.run = 0;
-        }
+        jo_sprite_draw3D2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
     }
+}
 
-    player_update_punch_state_for_character(&character_ref);
-
-    if (character_ref.kick)
-    {
-        if (!tails_kick_rotation_active || tails_kick_total_degrees != 180)
-        {
-            tails_kick_timer = 0;
-            tails_kick_duration = TAILS_KICK1_ROTATION_TIME;
-            tails_kick_total_degrees = 180;
-            tails_kick_rotation_active = true;
-
-            /* Ensure the kick animation advances so hit detection can trigger. */
-            if (character_ref.kick_anim_id >= 0)
-            {
-                tails_reset_animation_lists_except(character_ref.kick_anim_id);
-                jo_start_sprite_anim(character_ref.kick_anim_id);
-                jo_set_sprite_anim_frame_rate(character_ref.kick_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
-            }
-        }
-
-        if (tails_kick_timer < tails_kick_duration)
-            ++tails_kick_timer;
-
-        if (tails_kick_timer >= tails_kick_duration)
-        {
-            if (character_ref.kick2_requested)
-            {
-                character_ref.kick = false;
-                character_ref.kick2 = true;
-                character_ref.kick2_requested = false;
-                character_ref.perform_kick2 = true;
-
-                tails_kick_timer = 0;
-                tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
-                tails_kick_total_degrees = 360;
-                tails_kick_rotation_active = true;
-
-                /* Start kick2 animation to allow hit detection. */
-                if (character_ref.kick_anim_id >= 0)
-                {
-                    tails_reset_animation_lists_except(character_ref.kick_anim_id);
-                    jo_start_sprite_anim(character_ref.kick_anim_id);
-                    jo_set_sprite_anim_frame_rate(character_ref.kick_anim_id, DEFAULT_SPRITE_FRAME_DURATION);
-                }
-            }
-            else
-            {
-                character_ref.kick = false;
-                character_ref.attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                tails_kick_rotation_active = false;
-            }
-        }
-    }
-    else if (character_ref.kick2)
-    {
-        if (!tails_kick_rotation_active || tails_kick_total_degrees != 360)
-        {
-            tails_kick_timer = 0;
-            tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
-            tails_kick_total_degrees = 360;
-            tails_kick_rotation_active = true;
-        }
-
-        if (tails_kick_timer < tails_kick_duration)
-            ++tails_kick_timer;
-
-        if (tails_kick_timer >= tails_kick_duration)
-        {
-            character_ref.kick2 = false;
-            character_ref.attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-            tails_kick_rotation_active = false;
-        }
-    }
-    else if (tails_kick_rotation_active)
-    {
-        if (tails_kick_timer < tails_kick_duration)
-            ++tails_kick_timer;
-        if (tails_kick_timer >= tails_kick_duration)
-            tails_kick_rotation_active = false;
-    }
-
-    if (!tails_kick_rotation_active && !character_ref.kick && !character_ref.kick2)
-    {
-        tails_kick_timer = 0;
-        tails_kick_duration = 0;
-        tails_kick_total_degrees = 0;
-    }
+void tails_draw(character_t *chr)
+{
+    tails_draw_for_character(chr);
 }
 
 void display_tails(void)
@@ -371,58 +437,8 @@ void display_tails(void)
     if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    tails_draw_tail();
-
-    if (character_ref.spin)
-    {
-        tails_reset_animation_lists_except(-1);
-        jo_sprite_draw3D_and_rotate2(character_ref.spin_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
-        if (character_ref.flip)
-            character_ref.angle -= CHARACTER_SPIN_SPEED;
-        else
-            character_ref.angle += CHARACTER_SPIN_SPEED;
-    } else if (character_ref.life <= 0 && tails_defeated_sprite_id >= 0) {
-        tails_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(tails_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
-    } else if (character_ref.stun_timer > 0 && tails_damage_sprite_id >= 0) {
-        tails_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(tails_damage_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.punch || character_ref.punch2){
-        tails_reset_animation_lists_except(character_ref.punch_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.punch_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else if (character_ref.kick || character_ref.kick2 || tails_kick_rotation_active){
-        int kick_angle = 0;
-        tails_reset_animation_lists_except(-1);
-        if (tails_kick_duration > 0)
-            kick_angle = (tails_kick_total_degrees * tails_kick_timer) / tails_kick_duration;
-        if (character_ref.flip)
-            kick_angle = -kick_angle;
-        jo_sprite_draw3D_and_rotate2(tails_kick_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, kick_angle);
-    } else if (character_ref.jump){
-        tails_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(character_ref.jump_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-    } else {
-        if (character_ref.walk && character_ref.run == 0)
-        {
-            tails_reset_animation_lists_except(character_ref.walking_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.walking_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else if (character_ref.walk && character_ref.run == 1)
-        {
-            tails_reset_animation_lists_except(character_ref.running1_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running1_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else if (character_ref.walk && character_ref.run == 2)
-        {
-            tails_reset_animation_lists_except(character_ref.running2_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running2_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-        else
-        {
-            tails_reset_animation_lists_except(character_ref.stand_sprite_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.stand_sprite_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
-        }
-    }
+    // Use the generic draw path so it also works for P2 / bots if needed.
+    tails_draw_for_character(&character_ref);
 
     if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
@@ -441,31 +457,53 @@ void load_tails(void)
 {
     if (!tails_loaded)
     {
-        tails_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_WLK.TGA", JO_COLOR_Green, TailsWalkingTiles, JO_TILE_COUNT(TailsWalkingTiles));
-            tails_walking_anim_id = jo_create_sprite_anim(tails_walking_base_id, JO_TILE_COUNT(TailsWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        // Load the combined sheet into WRAM so we can copy frames on demand.
+        if (!tails_sheet_ready)
+            tails_sheet_ready = character_load_sheet(&tails_sheet, "TLS_FUL.TGA", SPRITE_DIR, JO_COLOR_Green);
 
-        tails_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_RUN1.TGA", JO_COLOR_Green, TailsRunning1Tiles, JO_TILE_COUNT(TailsRunning1Tiles));
-            tails_running1_anim_id = jo_create_sprite_anim(tails_running1_base_id, JO_TILE_COUNT(TailsRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        // Load defeated sprite sheet into WRAM so it can also be copied on demand.
+        if (!tails_defeated_sheet_ready)
+            tails_defeated_sheet_ready = character_load_sheet(&tails_defeated_sheet, "TLS_DFT.TGA", SPRITE_DIR, JO_COLOR_Green);
 
-        // We don't have TLS_RUN2.TGA, reuse TLS_RUN1.TGA for the second running level
-        tails_running2_base_id = tails_running1_base_id;
-            tails_running2_anim_id = jo_create_sprite_anim(tails_running2_base_id, JO_TILE_COUNT(TailsRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        // Load extra tail sprite sheet (8 frames 32x36), as pedido.
+        if (!tails_tail_sheet_ready)
+            tails_tail_sheet_ready = character_load_sheet(&tails_tail_sheet, "TLS_TLS.TGA", SPRITE_DIR, JO_COLOR_Green);
 
-        tails_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_STD.TGA", JO_COLOR_Green, TailsStandTiles, JO_TILE_COUNT(TailsStandTiles));
-            tails_stand_anim_id = jo_create_sprite_anim(tails_stand_base_id, JO_TILE_COUNT(TailsStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        runtime_log("tails_load: sheet=%d defeated=%d tail=%d wsprite=%d", (int)tails_sheet_ready, (int)tails_defeated_sheet_ready, (int)tails_tail_sheet_ready, tails_sprite_id);
 
-        tails_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_SPN.TGA", JO_COLOR_Green);
-        tails_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_JMP.TGA", JO_COLOR_Green);
-        tails_kick_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_KCK.TGA", JO_COLOR_Green);
-        tails_damage_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "TLS_DMG.TGA", JO_COLOR_Green);
+        // Create a single VRAM sprite that will be updated each frame.
+        if (tails_sprite_id < 0)
+            tails_sprite_id = character_create_blank_sprite();
+
+        // Create an optional WRAM sprite for large kick frames (64x36) in tails.
+        if (tails_kick_wram_sprite_id < 0)
+            tails_kick_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
+
+        // Create an optional WRAM sprite for run2 64x36.
+        if (tails_run2_wram_sprite_id < 0)
+            tails_run2_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
+
+        // Create an optional WRAM sprite for tail overlay (32x36).
+        if (tails_tail_wram_sprite_id < 0)
+            tails_tail_wram_sprite_id = character_create_blank_sprite();
+
+        /* Use the global sprite as the base WRAM sprite for this character; P2/bots
+         * will allocate their own WRAM sprite as needed. */
+        character_ref.wram_sprite_id = tails_sprite_id;
+
+        // Dummy animation objects (used only for timing / combo logic).
+        if (sprite_safe_can_create_anim())
+        {
+            tails_stand_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsStandTiles)), JO_TILE_COUNT(TailsStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_walking_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsWalkingTiles)), JO_TILE_COUNT(TailsWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_running1_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsRunning1Tiles)), JO_TILE_COUNT(TailsRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_running2_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsRunning2Tiles)), JO_TILE_COUNT(TailsRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_punch_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsPunchTiles)), JO_TILE_COUNT(TailsPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_kick_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsKickTiles)), JO_TILE_COUNT(TailsKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
+            tails_tail_anim_id = sprite_safe_create_anim(tails_create_blank_animation(JO_TILE_COUNT(TailsTailTiles)), JO_TILE_COUNT(TailsTailTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        }
+
         tails_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_DFT.TGA", JO_COLOR_Green, TailsDefeatedTile, JO_TILE_COUNT(TailsDefeatedTile));
-        tails_tail_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_TLS.TGA", JO_COLOR_Green, TailsTailTiles, JO_TILE_COUNT(TailsTailTiles));
-
-        tails_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_PNC.TGA", JO_COLOR_Green, TailsPunchTiles, JO_TILE_COUNT(TailsPunchTiles));
-            tails_punch_anim_id = jo_create_sprite_anim(tails_punch_base_id, JO_TILE_COUNT(TailsPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
-        tails_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "TLS_KCK.TGA", JO_COLOR_Green, TailsKickTiles, JO_TILE_COUNT(TailsKickTiles));
-            tails_kick_anim_id = jo_create_sprite_anim(tails_kick_base_id, JO_TILE_COUNT(TailsKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         tails_loaded = true;
     }
@@ -474,13 +512,16 @@ void load_tails(void)
     character_ref.running1_anim_id = tails_running1_anim_id;
     character_ref.running2_anim_id = tails_running2_anim_id;
     character_ref.stand_sprite_id = tails_stand_anim_id;
-    character_ref.spin_sprite_id = tails_spin_sprite_id;
-    character_ref.jump_sprite_id = tails_jump_sprite_id;
-    character_ref.damage_sprite_id = tails_damage_sprite_id;
+    character_ref.spin_sprite_id = tails_sprite_id;
+    character_ref.jump_sprite_id = tails_sprite_id;
+    character_ref.damage_sprite_id = tails_sprite_id;
     character_ref.defeated_sprite_id = tails_defeated_sprite_id;
     character_ref.punch_anim_id = tails_punch_anim_id;
     character_ref.kick_anim_id = tails_kick_anim_id;
-    character_registry_apply_combat_profile(&character_ref, UiCharacterTails);
+        character_ref.defeated_wram_sprite_id = -1;
+    // Always ensure this module has a valid physics context, even if it was
+    // cleared earlier during a character swap.
+    tails_physics = &physics;
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
@@ -491,9 +532,8 @@ void load_tails(void)
     character_ref.hit_done_kick1 = false;
     character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
-    tails_tail_frame = 0;
-    tails_tail_timer = 0;
 
+    // Inicializa vida
     character_ref.life = 50;
 }
 
@@ -509,35 +549,63 @@ void unload_tails(void)
     if (tails_punch_anim_id >= 0) jo_remove_sprite_anim(tails_punch_anim_id);
     if (tails_kick_anim_id >= 0) jo_remove_sprite_anim(tails_kick_anim_id);
 
-    tails_walking_base_id = -1;
-    tails_running1_base_id = -1;
-    tails_running2_base_id = -1;
-    tails_stand_base_id = -1;
-    tails_punch_base_id = -1;
-    tails_kick_base_id = -1;
+    if (tails_kick_wram_sprite_id >= 0)
+    {
+        jo_sprite_free_from(tails_kick_wram_sprite_id);
+        tails_kick_wram_sprite_id = -1;
+    }
+
+    if (tails_run2_wram_sprite_id >= 0)
+    {
+        jo_sprite_free_from(tails_run2_wram_sprite_id);
+        tails_run2_wram_sprite_id = -1;
+    }
+
+    if (tails_tail_wram_sprite_id >= 0)
+    {
+        jo_sprite_free_from(tails_tail_wram_sprite_id);
+        tails_tail_wram_sprite_id = -1;
+    }
+
+    if (character_ref.defeated_wram_sprite_id >= 0)
+    {
+        jo_sprite_free_from(character_ref.defeated_wram_sprite_id);
+        character_ref.defeated_wram_sprite_id = -1;
+    }
+
+    if (tails_tail_anim_id >= 0)
+    {
+        jo_remove_sprite_anim(tails_tail_anim_id);
+        tails_tail_anim_id = -1;
+    }
+
+    if (tails_sheet_ready)
+    {
+        character_unload_sheet(&tails_sheet);
+        tails_sheet_ready = false;
+    }
+
+    if (tails_defeated_sheet_ready)
+    {
+        character_unload_sheet(&tails_defeated_sheet);
+        tails_defeated_sheet_ready = false;
+    }
+
+    if (tails_tail_sheet_ready)
+    {
+        character_unload_sheet(&tails_tail_sheet);
+        tails_tail_sheet_ready = false;
+    }
+
+    tails_stand_anim_id = -1;
     tails_walking_anim_id = -1;
     tails_running1_anim_id = -1;
     tails_running2_anim_id = -1;
-    tails_stand_anim_id = -1;
     tails_punch_anim_id = -1;
     tails_kick_anim_id = -1;
-    tails_spin_sprite_id = -1;
-    tails_jump_sprite_id = -1;
-    tails_kick_sprite_id = -1;
-    tails_damage_sprite_id = -1;
     tails_defeated_sprite_id = -1;
-    tails_tail_base_id = -1;
-    tails_tail_frame = 0;
-    tails_tail_timer = 0;
+
+    tails_sprite_id = -1;
+    character_ref.wram_sprite_id = -1;
     tails_loaded = false;
-}
-
-int tails_get_tail_base_id(void)
-{
-    return tails_tail_base_id;
-}
-
-int tails_get_kick_sprite_id(void)
-{
-    return tails_kick_sprite_id;
 }
