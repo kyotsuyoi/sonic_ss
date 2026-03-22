@@ -110,6 +110,13 @@ typedef struct
     int knuckles_fall_time_ms;
     bool knuckles_land_pending;
 
+    /* Amy-specific flow state */
+    int amy_anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
+    int amy_anim_frame;
+    int amy_anim_ticks;
+    int amy_fall_time_ms;
+    bool amy_land_pending;
+
     int life;
     int group; /* 0 = no group, 1 = group1, 2 = group2 */
     int battle_damage_dealt; /* accumulated damage dealt in the current fight */

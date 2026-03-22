@@ -682,6 +682,10 @@ void character_get_frame_coords(character_t *chr,
                 {
                     chr->knuckles_anim_mode = CHARACTER_ANIM_IDLE;
                 }
+                else if (chr->character_id == CHARACTER_ID_AMY)
+                {
+                    chr->amy_anim_mode = CHARACTER_ANIM_IDLE;
+                }
             }
             break;
         case CHARACTER_ANIM_PUNCH:
@@ -736,6 +740,12 @@ void character_get_frame_coords(character_t *chr,
                     chr->knuckles_anim_mode = CHARACTER_ANIM_IDLE;
                     chr->knuckles_anim_frame = 0;
                     chr->knuckles_anim_ticks = 0;
+                }
+                else if (chr->character_id == CHARACTER_ID_AMY)
+                {
+                    chr->amy_anim_mode = CHARACTER_ANIM_IDLE;
+                    chr->amy_anim_frame = 0;
+                    chr->amy_anim_ticks = 0;
                 }
             }
             return;
