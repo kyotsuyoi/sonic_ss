@@ -80,8 +80,8 @@ Available characters (v0.2.X):
 
 - ⬜ New FULL sprite sheet.
 - - ⬜ (80%) Sonic.
-- - ⬜ (0%) Amy.
-- - ⬜ (0%) Tails.
+- - ⬜ (40%) Amy.
+- - ⬜ (40%) Tails.
 - - ⬜ (80%) Knuckles.
 - - ⬜ (0%) Shadow.
 - - ⬜ (0%) Cream.
@@ -92,6 +92,6 @@ Available characters (v0.2.X):
 - ⬜ (25%) Bot strategy.
 - ✅ Make the bots follow the same sprite control flow as the players.
 - ✅ Check why debug_battle_add_damage doesn’t get called for all IDs.
-- ⬜ Create spectator mode to watch bots fight.
+- ⬜ (0%) Create spectator mode to watch bots fight.
 
 - ✅ Problem with tiles that suddenly change; this started happening after implementing FREE CAM.

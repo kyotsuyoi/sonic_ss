@@ -147,7 +147,9 @@ static void tails_draw_tail_if_applicable(character_t *chr)
     if (!tails_sheet_ready)
         return;
 
-    if (chr->tails_anim_mode != CHARACTER_ANIM_IDLE && chr->tails_anim_mode != CHARACTER_ANIM_WALK)
+    if (chr->tails_anim_mode != CHARACTER_ANIM_IDLE &&
+        chr->tails_anim_mode != CHARACTER_ANIM_WALK &&
+        chr->tails_anim_mode != CHARACTER_ANIM_PUNCH)
         return;
 
     int tail_sprite_id = tails_ensure_tail_wram_sprite(chr);
@@ -156,7 +158,24 @@ static void tails_draw_tail_if_applicable(character_t *chr)
 
     tails_copy_tail_frame_to_sprite(tail_sprite_id, chr->tail_frame);
 
-    int tail_offset = (chr->tails_anim_mode == CHARACTER_ANIM_IDLE ? 16 : 20);
+    int tail_offset;
+    if (chr->tails_anim_mode == CHARACTER_ANIM_IDLE)
+    {
+        tail_offset = 16;
+    }
+    else if (chr->tails_anim_mode == CHARACTER_ANIM_WALK)
+    {
+        tail_offset = 20;
+    }
+    else /* CHARACTER_ANIM_PUNCH */
+    {
+        int punch_frame = chr->tails_anim_frame;
+        if (punch_frame == 2 || punch_frame == 3)
+            tail_offset = 14;
+        else
+            tail_offset = 18;
+    }
+
     int draw_x = chr->x + (chr->flip ? tail_offset : -tail_offset);
 
     jo_sprite_draw3D2(tail_sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
