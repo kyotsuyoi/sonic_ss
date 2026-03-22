@@ -27,6 +27,18 @@ character_handlers_t character_registry_get(ui_character_choice_t choice)
         handlers.update_animation = tails_running_animation_handling;
         handlers.display = display_tails;
         break;
+    case UiCharacterKnuckles:
+        handlers.load = load_knuckles;
+        handlers.unload = unload_knuckles;
+        handlers.update_animation = knuckles_running_animation_handling;
+        handlers.display = display_knuckles;
+        break;
+    case UiCharacterShadow:
+        handlers.load = load_shadow;
+        handlers.unload = unload_shadow;
+        handlers.update_animation = shadow_running_animation_handling;
+        handlers.display = display_shadow;
+        break;
     case UiCharacterSonic:
     default:
         handlers.load = load_sonic;
@@ -56,6 +68,13 @@ character_animation_profile_t character_registry_get_animation_profile(ui_charac
         profile.kick_count = 5; // Tails has 5 kick frames (0-4)
     }
     else if (choice == UiCharacterAmy)
+    {
+        profile.move_count = 8;
+        profile.stand_count = 4;
+        profile.punch_count = 8;
+        profile.kick_count = 8;
+    }
+    else if (choice == UiCharacterKnuckles)
     {
         profile.move_count = 8;
         profile.stand_count = 4;

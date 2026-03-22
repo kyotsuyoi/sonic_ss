@@ -301,7 +301,8 @@ void vram_cache_do_uploads(void)
             // plataforma. Aqui apenas logamos a operação. Substitua o
             // conteúdo abaixo por uma chamada à API de transferências da
             // sua versão do jo engine quando disponível.
-            if (runtime_log_get_mode() != RuntimeLogModeOff)
+            runtime_log_mode_t mode = runtime_log_get_mode();
+            if (mode == RuntimeLogModeSystem || mode == RuntimeLogModeSystemVerbose)
                 jo_printf(0, 23, "vram_cache: upload tile %d -> slot %d", tile_slots[i].tileId, i);
             runtime_log("vram_cache: upload tile %d -> slot %d", tile_slots[i].tileId, i);
             ++vc_total_tile_uploads;

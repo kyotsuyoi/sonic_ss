@@ -6,6 +6,7 @@
 #include "character_registry.h"
 #include "sprite_safe.h"
 #include "runtime_log.h"
+#include "ram_cart.h"
 
 extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
 
@@ -24,12 +25,11 @@ void tails_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
 }
 
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 48
-#define DEFEATED_SPRITE_HEIGHT 32
 
 static bool tails_loaded = false;
 static bool tails_sheet_ready = false;
-static jo_img tails_sheet = {0};
+static int tails_sheet_width = 0;
+static int tails_sheet_height = 0;
 static bool tails_tail_sheet_ready = false;
 static jo_img tails_tail_sheet = {0};
 static int tails_sprite_id = -1;
@@ -70,17 +70,17 @@ static const jo_tile TailsStandTiles[] =
     {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
-static const jo_tile TailsJumpTile[] =
+static const jo_tile TailsJumpTile[] __attribute__((unused)) =
 {
     {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
-static const jo_tile TailsDamageTile[] =
+static const jo_tile TailsDamageTile[] __attribute__((unused)) =
 {
     {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
 
-static const jo_tile TailsSpinTile[] =
+static const jo_tile TailsSpinTile[] __attribute__((unused)) =
 {
     {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
 };
@@ -156,19 +156,22 @@ static const jo_tile TailsDefeatedTile[] =
     {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
+static void tails_copy_defeated_sheet_frame_to_sprite(int sprite_id) __attribute__((unused));
 static void tails_copy_defeated_sheet_frame_to_sprite(int sprite_id)
 {
     character_copy_defeated_sheet_frame_to_sprite(sprite_id, &tails_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
+static int tails_ensure_defeated_wram_sprite(character_t *chr) __attribute__((unused));
 static int tails_ensure_defeated_wram_sprite(character_t *chr)
 {
     return character_ensure_defeated_wram_sprite(chr, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
 }
 
+static void tails_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y) __attribute__((unused));
 static void tails_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
 {
-    character_copy_sheet_frame_to_sprite(sprite_id, &tails_sheet, frame_x, frame_y);
+    character_copy_cart_sheet_frame_to_sprite(sprite_id, "TAILS_FUL", tails_sheet_width, tails_sheet_height, frame_x, frame_y, CHARACTER_WIDTH, CHARACTER_HEIGHT);
 }
 
 static int tails_create_blank_animation(int frame_count)
@@ -176,6 +179,7 @@ static int tails_create_blank_animation(int frame_count)
     return character_create_blank_animation(frame_count);
 }
 
+static int tails_create_blank_sprite(void) __attribute__((unused));
 static int tails_create_blank_sprite(void)
 {
     return character_create_blank_sprite();
@@ -331,29 +335,8 @@ static void tails_draw_for_character(character_t *chr)
         if (tails_kick_wram_sprite_id < 0)
             tails_kick_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
 
-        // Build a 64x36 temp frame so target width always matches.
-        jo_img temp = {0};
-        temp.width = CHARACTER_WIDTH * 2;
-        temp.height = CHARACTER_HEIGHT;
-        temp.data = (unsigned short *)jo_malloc((size_t)temp.width * (size_t)temp.height * sizeof(unsigned short));
-        if (temp.data == JO_NULL)
+        if (!character_copy_cart_sheet_frame_to_sprite(tails_kick_wram_sprite_id, "TLS_FUL", tails_sheet_width, tails_sheet_height, frame_x, CHARACTER_HEIGHT * 5, frame_width, CHARACTER_HEIGHT))
             return;
-        for (size_t i = 0; i < (size_t)temp.width * (size_t)temp.height; ++i)
-            ((unsigned short *)temp.data)[i] = JO_COLOR_Transparent;
-
-        unsigned short *src = (unsigned short *)tails_sheet.data;
-        unsigned short *dst = (unsigned short *)temp.data;
-        int sheet_width = tails_sheet.width;
-
-        for (int y = 0; y < CHARACTER_HEIGHT; ++y)
-        {
-            unsigned short *src_row = src + (CHARACTER_HEIGHT * 5 + y) * sheet_width + frame_x;
-            unsigned short *dst_row = dst + y * temp.width;
-            memcpy(dst_row, src_row, frame_width * sizeof(unsigned short));
-        }
-
-        jo_sprite_replace(&temp, tails_kick_wram_sprite_id);
-        jo_free_img(&temp);
 
         int draw_x = chr->x;
         if (kick_frame <= 1 && chr->flip)
@@ -386,13 +369,15 @@ static void tails_draw_for_character(character_t *chr)
         if (tails_run2_wram_sprite_id < 0)
             tails_run2_wram_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH * 2, CHARACTER_HEIGHT);
 
-        character_copy_sheet_frame_to_sprite_with_size(
-            tails_run2_wram_sprite_id,
-            &tails_sheet,
+        if (!character_copy_cart_sheet_frame_to_sprite(tails_run2_wram_sprite_id,
+            "TLS_FUL",
+            tails_sheet_width,
+            tails_sheet_height,
             frame_index * (CHARACTER_WIDTH * 2),
             CHARACTER_HEIGHT * 3,
             CHARACTER_WIDTH * 2,
-            CHARACTER_HEIGHT);
+            CHARACTER_HEIGHT))
+            return;
 
         int draw_x = chr->x - (CHARACTER_WIDTH / 2);
         jo_sprite_draw3D2(tails_run2_wram_sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
@@ -403,7 +388,7 @@ static void tails_draw_for_character(character_t *chr)
     if (sprite_id < 0)
         return;
 
-    if (character_draw_sheet_frame(chr, sprite_id, &tails_sheet))
+    if (character_draw_cart_frame(chr, sprite_id, "TAILS_FUL", tails_sheet_width, tails_sheet_height))
         return;
 
     if (chr->spin)
@@ -443,29 +428,36 @@ void display_tails(void)
     if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
 
-    int life_percent = (character_ref.life * 100) / 50;
-    int bar_max_width = 20;
-    int bar_width = (life_percent * bar_max_width) / 100;
-    char bar[bar_max_width + 1];
-    for (int i = 0; i < bar_max_width; ++i)
-        bar[i] = (i < bar_width) ? '#' : '-';
-    bar[bar_max_width] = '\0';
-    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar (temporário)
+    // debug life bar (mantendo compatibilidade):
+    // int life_percent = (character_ref.life * 100) / 50;
+    // int bar_max_width = 20;
+    // int bar_width = (life_percent * bar_max_width) / 100;
+    // char bar[bar_max_width + 1];
+    // for (int i = 0; i < bar_max_width; ++i)
+    //     bar[i] = (i < bar_width) ? '#' : '-';
+    // bar[bar_max_width] = '\0';
+    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar temporário
 }
 
 void load_tails(void)
 {
     if (!tails_loaded)
     {
-        // Load the combined sheet into WRAM so we can copy frames on demand.
         if (!tails_sheet_ready)
-            tails_sheet_ready = character_load_sheet(&tails_sheet, "TLS_FUL.TGA", SPRITE_DIR, JO_COLOR_Green);
+        {
+            jo_img sheet = {0};
+            if (character_load_sheet(&sheet, "TLS_FUL.TGA", SPRITE_DIR, JO_COLOR_Green))
+            {
+                if (ram_cart_store_sprite("TAILS_FUL", sheet.data, (size_t)sheet.width * (size_t)sheet.height * sizeof(unsigned short)))
+                {
+                    tails_sheet_width = sheet.width;
+                    tails_sheet_height = sheet.height;
+                    tails_sheet_ready = true;
+                }
+                character_unload_sheet(&sheet);
+            }
+        }
 
-        // Load defeated sprite sheet into WRAM so it can also be copied on demand.
-        if (!tails_defeated_sheet_ready)
-            tails_defeated_sheet_ready = character_load_sheet(&tails_defeated_sheet, "TLS_DFT.TGA", SPRITE_DIR, JO_COLOR_Green);
-
-        // Load extra tail sprite sheet (8 frames 32x36), as pedido.
         if (!tails_tail_sheet_ready)
             tails_tail_sheet_ready = character_load_sheet(&tails_tail_sheet, "TLS_TLS.TGA", SPRITE_DIR, JO_COLOR_Green);
 
@@ -581,13 +573,14 @@ void unload_tails(void)
 
     if (tails_sheet_ready)
     {
-        character_unload_sheet(&tails_sheet);
+        ram_cart_delete_sprite("TAILS_FUL");
         tails_sheet_ready = false;
+        tails_sheet_width = 0;
+        tails_sheet_height = 0;
     }
 
     if (tails_defeated_sheet_ready)
     {
-        character_unload_sheet(&tails_defeated_sheet);
         tails_defeated_sheet_ready = false;
     }
 

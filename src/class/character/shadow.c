@@ -4,6 +4,9 @@
 #include "player.h"
 #include "game_constants.h"
 #include "character_registry.h"
+#include "character_common.h"
+
+extern jo_sidescroller_physics_params physics;
 
 static character_t *shadow_ref = &player;
 static jo_sidescroller_physics_params *shadow_physics = &physics;
@@ -20,8 +23,6 @@ void shadow_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
 }
 
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 46
-#define DEFEATED_SPRITE_HEIGHT 32
 
 /*
 Speed -> Animation mapping:
@@ -110,97 +111,106 @@ static const jo_tile ShadowDefeatedTile[] =
 
 static void shadow_reset_animation_lists_except(int active_anim_id)
 {
-    if (player.walking_anim_id >= 0 && player.walking_anim_id != active_anim_id)
-        jo_reset_sprite_anim(player.walking_anim_id);
-    if (player.running1_anim_id >= 0 && player.running1_anim_id != active_anim_id)
-        jo_reset_sprite_anim(player.running1_anim_id);
-    if (player.running2_anim_id >= 0 && player.running2_anim_id != active_anim_id)
-        jo_reset_sprite_anim(player.running2_anim_id);
-    if (player.stand_sprite_id >= 0 && player.stand_sprite_id != active_anim_id)
-        jo_reset_sprite_anim(player.stand_sprite_id);
-    if (player.punch_anim_id >= 0 && player.punch_anim_id != active_anim_id)
-        jo_reset_sprite_anim(player.punch_anim_id);
-    if (player.kick_anim_id >= 0 && player.kick_anim_id != active_anim_id)
-        jo_reset_sprite_anim(player.kick_anim_id);
+    if (character_ref.walking_anim_id >= 0 && character_ref.walking_anim_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.walking_anim_id);
+    if (character_ref.running1_anim_id >= 0 && character_ref.running1_anim_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.running1_anim_id);
+    if (character_ref.running2_anim_id >= 0 && character_ref.running2_anim_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.running2_anim_id);
+    if (character_ref.stand_sprite_id >= 0 && character_ref.stand_sprite_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.stand_sprite_id);
+    if (character_ref.punch_anim_id >= 0 && character_ref.punch_anim_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.punch_anim_id);
+    if (character_ref.kick_anim_id >= 0 && character_ref.kick_anim_id != active_anim_id)
+        jo_reset_sprite_anim(character_ref.kick_anim_id);
 }
 
 void shadow_running_animation_handling(void)
 {
-    sonic_running_animation_handling();
+    character_running_animation_handling(&character_ref, &physics);
 }
 
 void display_shadow(void)
 {
     if (!physics.is_in_air)
     {
-        player.spin = false;
-        player.jump = false;
-        player.angle = 0;
+        character_ref.spin = false;
+        character_ref.jump = false;
+        character_ref.angle = 0;
     }
 
-    if (player.flip)
+    if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    if (player.spin)
+    if (character_ref.spin)
     {
         shadow_reset_animation_lists_except(-1);
-        jo_sprite_draw3D_and_rotate2(shadow_spin_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z, player.angle);
-        if (player.flip)
-            player.angle -= CHARACTER_SPIN_SPEED;
+        jo_sprite_draw3D_and_rotate2(shadow_spin_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z, character_ref.angle);
+        if (character_ref.flip)
+            character_ref.angle -= CHARACTER_SPIN_SPEED;
         else
-            player.angle += CHARACTER_SPIN_SPEED;
+            character_ref.angle += CHARACTER_SPIN_SPEED;
     }
-    else if (player.life <= 0 && shadow_defeated_sprite_id >= 0)
+    else if (character_ref.life <= 0 && shadow_defeated_sprite_id >= 0)
     {
         shadow_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(shadow_defeated_sprite_id, player.x, player.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
+        jo_sprite_draw3D2(shadow_defeated_sprite_id, character_ref.x, character_ref.y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
     }
-    else if (player.stun_timer > 0 && shadow_damage_sprite_id >= 0)
+    else if (character_ref.stun_timer > 0 && shadow_damage_sprite_id >= 0)
     {
         shadow_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(shadow_damage_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z);
+        jo_sprite_draw3D2(shadow_damage_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
     }
-    else if (player.punch || player.punch2)
+    else if (character_ref.punch || character_ref.punch2)
     {
-        shadow_reset_animation_lists_except(player.punch_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(player.punch_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        shadow_reset_animation_lists_except(character_ref.punch_anim_id);
+        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.punch_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
     }
-    else if (player.kick || player.kick2)
+    else if (character_ref.kick || character_ref.kick2)
     {
-        shadow_reset_animation_lists_except(player.kick_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(player.kick_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+        shadow_reset_animation_lists_except(character_ref.kick_anim_id);
+        jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.kick_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
     }
-    else if (player.jump)
+    else if (character_ref.jump)
     {
         shadow_reset_animation_lists_except(-1);
-        jo_sprite_draw3D2(player.jump_sprite_id, player.x, player.y, CHARACTER_SPRITE_Z);
+        jo_sprite_draw3D2(character_ref.jump_sprite_id, character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
     }
     else
     {
-        if (player.walk && player.run == 0)
+        if (character_ref.walk && character_ref.run == 0)
         {
-            shadow_reset_animation_lists_except(player.walking_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(player.walking_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+            shadow_reset_animation_lists_except(character_ref.walking_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.walking_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
         }
-        else if (player.walk && player.run == 1)
+        else if (character_ref.walk && character_ref.run == 1)
         {
-            shadow_reset_animation_lists_except(player.running1_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(player.running1_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+            shadow_reset_animation_lists_except(character_ref.running1_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running1_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
         }
-        else if (player.walk && player.run == 2)
+        else if (character_ref.walk && character_ref.run == 2)
         {
-            shadow_reset_animation_lists_except(player.running2_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(player.running2_anim_id), player.x, player.y, CHARACTER_SPRITE_Z);
+            shadow_reset_animation_lists_except(character_ref.running2_anim_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.running2_anim_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
         }
         else
         {
-            shadow_reset_animation_lists_except(player.stand_sprite_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(player.stand_sprite_id), player.x, player.y, CHARACTER_SPRITE_Z);
+            shadow_reset_animation_lists_except(character_ref.stand_sprite_id);
+            jo_sprite_draw3D2(jo_get_anim_sprite(character_ref.stand_sprite_id), character_ref.x, character_ref.y, CHARACTER_SPRITE_Z);
         }
     }
 
-    if (player.flip)
+    if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
+}
+
+void shadow_draw(character_t *chr)
+{
+    if (chr == JO_NULL)
+        return;
+
+    shadow_set_current(chr, NULL);
+    display_shadow();
 }
 
 void load_shadow(void)

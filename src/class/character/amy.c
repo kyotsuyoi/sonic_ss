@@ -6,6 +6,7 @@
 #include "character_registry.h"
 #include "sprite_safe.h"
 #include "runtime_log.h"
+#include "ram_cart.h"
 
 extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
 
@@ -24,12 +25,11 @@ void amy_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
 }
 
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 48
-#define DEFEATED_SPRITE_HEIGHT 32
 
 static bool amy_loaded = false;
 static bool amy_sheet_ready = false;
-static jo_img amy_sheet = {0};
+static int amy_sheet_width = 0;
+static int amy_sheet_height = 0;
 static int amy_sprite_id = -1;
 
 static bool amy_defeated_sheet_ready = false;
@@ -156,7 +156,7 @@ static int amy_ensure_defeated_wram_sprite(character_t *chr)
 
 static void amy_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
 {
-    character_copy_sheet_frame_to_sprite(sprite_id, &amy_sheet, frame_x, frame_y);
+    character_copy_cart_sheet_frame_to_sprite(sprite_id, "AMY_FUL", amy_sheet_width, amy_sheet_height, frame_x, frame_y, CHARACTER_WIDTH, CHARACTER_HEIGHT);
 }
 
 static int amy_create_blank_animation(int frame_count)
@@ -279,7 +279,7 @@ static void amy_draw_for_character(character_t *chr)
     if (sprite_id < 0)
         return;
 
-    if (character_draw_sheet_frame(chr, sprite_id, &amy_sheet))
+    if (character_draw_cart_frame(chr, sprite_id, "AMY_FUL", amy_sheet_width, amy_sheet_height))
         return;
 
     if (chr->spin)
@@ -333,15 +333,21 @@ void load_amy(void)
 {
     if (!amy_loaded)
     {
-        // Load the combined sheet into WRAM so we can copy frames on demand.
         if (!amy_sheet_ready)
-            amy_sheet_ready = character_load_sheet(&amy_sheet, "AMY_FUL.TGA", SPRITE_DIR, JO_COLOR_Green);
+        {
+            jo_img sheet = {0};
+            if (character_load_sheet(&sheet, "AMY_FUL.TGA", SPRITE_DIR, JO_COLOR_Green))
+            {
+                if (ram_cart_store_sprite("AMY_FUL", sheet.data, (size_t)sheet.width * (size_t)sheet.height * sizeof(unsigned short)))
+                {
+                    amy_sheet_width = sheet.width;
+                    amy_sheet_height = sheet.height;
+                    amy_sheet_ready = true;
+                }
+                character_unload_sheet(&sheet);
+            }
+        }
 
-        // Load defeated sprite sheet into WRAM so it can also be copied on demand.
-        if (!amy_defeated_sheet_ready)
-            amy_defeated_sheet_ready = character_load_sheet(&amy_defeated_sheet, "AMY_DFT.TGA", SPRITE_DIR, JO_COLOR_Green);
-
-        // Create a single VRAM sprite that will be updated each frame.
         if (amy_sprite_id < 0)
             amy_sprite_id = character_create_blank_sprite();
 
@@ -410,8 +416,10 @@ void unload_amy(void)
 
     if (amy_sheet_ready)
     {
-        character_unload_sheet(&amy_sheet);
+        ram_cart_delete_sprite("AMY_FUL");
         amy_sheet_ready = false;
+        amy_sheet_width = 0;
+        amy_sheet_height = 0;
     }
 
     if (amy_defeated_sheet_ready)

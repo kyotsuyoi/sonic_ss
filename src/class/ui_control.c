@@ -540,7 +540,7 @@ void ui_control_draw_pause_menu(const ui_control_state_t *state)
     ui_control_clear_text_layer();
 
     static const char *debug_mode_label[UiDebugModeCount] = {"OFF", "HARDWARE", "PLAYER", "CAMERA", "ATK SPRITE", "MEM", "SPAWN"};
-    static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "VERBOSE", "SPRITE"};
+    static const char *log_mode_label[RuntimeLogModeCount] = {"OFF", "SYSTEM", "VERBOSE", "CART RAM", "SPRITE"};
     int sprite_log_page = runtime_log_get_sprite_page() + 1;
     int sprite_log_page_count = runtime_log_get_sprite_page_count();
 

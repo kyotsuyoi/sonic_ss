@@ -2,6 +2,7 @@
 #define CHARACTER_COMMON_H
 
 #include <jo/jo.h>
+#include "game_constants.h"
 #include "character.h"
 
 /**
@@ -21,6 +22,9 @@ int character_ensure_defeated_wram_sprite(character_t *chr, int defeated_width, 
 void character_copy_sheet_frame_to_sprite(int sprite_id, const jo_img *sheet, int frame_x, int frame_y);
 void character_copy_sheet_frame_to_sprite_with_size(int sprite_id, const jo_img *sheet, int frame_x, int frame_y, int width, int height);
 void character_copy_defeated_sheet_frame_to_sprite(int sprite_id, const jo_img *sheet, int defeated_width, int defeated_height);
+
+bool character_copy_cart_sheet_frame_to_sprite(int sprite_id, const char *cart_name, int sheet_width, int sheet_height, int frame_x, int frame_y, int width, int height);
+bool character_draw_cart_frame(character_t *chr, int sprite_id, const char *cart_name, int sheet_width, int sheet_height);
 
 bool character_load_sheet(jo_img *sheet, const char *filename, const char *dir, jo_color transparent);
 void character_unload_sheet(jo_img *sheet);

@@ -8,18 +8,21 @@ typedef enum
 	RuntimeLogModeOff = 0,
 	RuntimeLogModeSystem,
 	RuntimeLogModeSystemVerbose,
+	RuntimeLogModeCartRam,
 	RuntimeLogModeSprite,
 	RuntimeLogModeCount
 } runtime_log_mode_t;
 
 // Logs that are considered "verbose" (high frequency, can be toggled separately).
 void runtime_log_verbose(const char *fmt, ...);
+void cart_ram_log(const char *fmt, ...);
 
 // Runtime logger backed by an in-memory ring buffer rendered on-screen.
 void runtime_log_init(void);
 void runtime_log(const char *fmt, ...);
 void runtime_log_draw(int x, int y);
 void runtime_log_clear(void);
+void cart_ram_log_clear(void);
 void runtime_log_close(void);
 // Enable or disable on-screen runtime logging
 void runtime_log_enable(bool enabled);

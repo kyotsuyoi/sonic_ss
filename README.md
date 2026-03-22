@@ -7,6 +7,7 @@ Compatible with:
 - Emulators (tested on Ymir, Yabause and YabaSanshiro).
 - CD-R via a disc drive.
 - SAROO.
+- Needs 4MB Cart RAM.
 
 Available features:
 
@@ -15,8 +16,9 @@ Available features:
 - Audio test menu
 - Joystick mapping menu
 - 5 char
+- Map select
 
-Available characters:
+Available characters (v0.1.X):
 
 - Sonic — OK
 - Amy — OK
@@ -37,6 +39,21 @@ Available characters:
 ![Battlefield](readme_src/btl_fld02.gif)
 
 ## v0.2.X
+
+Available features:
+
+- 7 char
+
+Available characters (v0.1.X):
+
+- Sonic — NOK
+- Amy — NOK
+- Tails — NOK
+- Knuckles — NOK
+- Shadow — NOK
+- Cream — NOK
+- Rouge — NOK
+
 ### Checklist (Road to v0.2) (60%)
 
 - ✅ Knuckles bot misses the range of the aerial attack and the super punch.
@@ -52,25 +69,28 @@ Available characters:
 - - ✅ The method jo_clear_background is called in a loop and wipes the entire VRAM.
 
 - ✅ Camera control.
-- ⬜ Auto camera that stays at a midpoint between the players.
+- ⬜ (0%) Auto camera that stays at a midpoint between the players.
 - ✅ Allow the camera to follow player 1 or player 2.
 
 - ✅ Debug menu to adjust stun, knockback, pulse, and damage in-game.
 - - ✅ Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
 
-- ⬜ Sprite DMA: “DMA transfer” (fast way to copy from ROM → WRAM or WRAM → VRAM).
-- - ⬜ Sprite packing: grouping multiple sprites into the same block to reduce overhead.
-- - ✅ Sonic sprites -> Players (100%) - Bots (100%).
-- - ✅ Amy sprites -> Players (100%) - Bots (100%).
-- - ⬜ Tails sprites -> Players (100%) - Bots (50%).
-- - ⬜ Knuckles sprites.
-- - ⬜ Shadow sprites.
-- - ⬜ All - Use vram_cache + rotating_sprite_pool to avoid excessive CPU usage during (WRAM → VRAM).
+- ⬜ (90%) Tiles DMA on Work RAM: “Direct Memory Access transfer” (copy from ROM → WRAM or WRAM → VRAM).
+- ⬜ (90%) Tiles packing: grouping multiple sprites into the same block to reduce overhead.
 
-- ⬜ Bot strategy (25%).
+- ⬜ New FULL sprite sheet.
+- - ⬜ (80%) Sonic.
+- - ⬜ (0%) Amy.
+- - ⬜ (0%) Tails.
+- - ⬜ (80%) Knuckles.
+- - ⬜ (0%) Shadow.
+- - ⬜ (0%) Cream.
+- - ⬜ (0%) Rouge.
+- - ⬜ (50%) Sprites DMA on Cart RAM: copy from Cart → VRAM.
+- - ✅ Tiles packing: grouping multiple sprites into the same block to reduce overhead.
+
+- ⬜ (25%) Bot strategy.
 - ✅ Make the bots follow the same sprite control flow as the players.
-- ⬜ Knuckles’ charged attack should allow up to 3 hits before being canceled.
-- ⬜ Sonic, Amy, Tails and Shadow need a unique ability like Knuckles’ charged attack.
 - ✅ Check why debug_battle_add_damage doesn’t get called for all IDs.
 - ⬜ Create spectator mode to watch bots fight.
 

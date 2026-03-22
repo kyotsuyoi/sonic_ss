@@ -202,6 +202,10 @@ static void setup_player2_character(ui_character_choice_t selected_character)
         amy_set_current(&player2, NULL);
     else if (selected_character == UiCharacterTails)
         tails_set_current(&player2, NULL);
+    else if (selected_character == UiCharacterKnuckles)
+        knuckles_set_current(&player2, NULL);
+    else if (selected_character == UiCharacterShadow)
+        shadow_set_current(&player2, NULL);
 
     player2_handlers.load();
 
@@ -310,6 +314,10 @@ static void ensure_active_character_loaded(ui_character_choice_t selected_charac
         amy_set_current(&player, NULL);
     else if (selected_character == UiCharacterTails)
         tails_set_current(&player, NULL);
+    else if (selected_character == UiCharacterKnuckles)
+        knuckles_set_current(&player, NULL);
+    else if (selected_character == UiCharacterShadow)
+        shadow_set_current(&player, NULL);
 
     // Ensure animation creation state is reset so first-time load works correctly.
     sprite_safe_reset();
@@ -870,19 +878,15 @@ void game_flow_debug_force_cdda_stop(void)
 
 void game_flow_update_animation(void)
 {
-    player_instance_t *p1 = player_get_default_player();
-
-    if (p1 != JO_NULL)
-    {
-        if (active_character == UiCharacterSonic)
-            sonic_set_current(&player, &p1->physics);
-        else if (active_character == UiCharacterAmy)
-            amy_set_current(&player, &p1->physics);
-        else if (active_character == UiCharacterTails)
-            tails_set_current(&player, &p1->physics);
-    }
-
-    active_handlers.update_animation();
+    /*
+       Animation is already updated for both players via player_runtime_update() /
+       player2_update_runtime() in the main loop.
+       Calling active_handlers.update_animation() here produces a duplicate update
+       for Player1, which caused the Tails P1 kick frame state to become inconsistent
+       compared to Player2.
+    */
+    (void)player_get_default_player();
+    (void)active_character;
 }
 
 void game_flow_display_character(void)
@@ -897,6 +901,10 @@ void game_flow_display_character(void)
             amy_set_current(&player, &p1->physics);
         else if (active_character == UiCharacterTails)
             tails_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterKnuckles)
+            knuckles_set_current(&player, &p1->physics);
+        else if (active_character == UiCharacterShadow)
+            shadow_set_current(&player, &p1->physics);
     }
 
     active_handlers.display();

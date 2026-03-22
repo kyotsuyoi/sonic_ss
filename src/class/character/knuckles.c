@@ -1,7 +1,15 @@
 #include <jo/jo.h>
-#include "sonic.h"
+#include <string.h>
 #include "knuckles.h"
+#include "player.h"
+#include "character_common.h"
 #include "character_registry.h"
+#include "input_mapping.h"
+#include "sprite_safe.h"
+#include "runtime_log.h"
+#include "ram_cart.h"
+
+extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
 
 static character_t *knuckles_ref = &player;
 static jo_sidescroller_physics_params *knuckles_physics = &physics;
@@ -9,356 +17,556 @@ static jo_sidescroller_physics_params *knuckles_physics = &physics;
 #define character_ref (*knuckles_ref)
 #define physics (*knuckles_physics)
 
-void knuckles_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
-{
-    if (chr != NULL)
-        knuckles_ref = chr;
-    if (phy != NULL)
-        knuckles_physics = phy;
-}
-
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 46
-#define DEFEATED_SPRITE_HEIGHT 32
-#define KNUCKLES_FRAME_COUNT 4
-#define KNUCKLES_COMBO2_START_FRAME 2
-#define KNUCKLES_CHARGED_KICK_PHASE1_FRAMES 6
-#define KNUCKLES_CHARGED_KICK_PHASE2_FRAMES 10
-#define KNUCKLES_KICK_PART3_INDEX 3
-#define KNUCKLES_KICK_PART4_INDEX 2
-#define KNUCKLES_KICK_PART3_WIDTH_PIXELS CHARACTER_WIDTH
 
 static bool knuckles_loaded = false;
-static int knuckles_walking_base_id;
-static int knuckles_running1_base_id;
-static int knuckles_running2_base_id;
-static int knuckles_stand_base_id;
-static int knuckles_punch_base_id;
-static int knuckles_kick_base_id;
-static int knuckles_walking_anim_id;
-static int knuckles_running1_anim_id;
-static int knuckles_running2_anim_id;
-static int knuckles_stand_anim_id;
-static int knuckles_punch_anim_id;
-static int knuckles_kick_anim_id;
-static int knuckles_spin_sprite_id;
-static int knuckles_jump_sprite_id;
-static int knuckles_damage_sprite_id;
-static int knuckles_defeated_sprite_id;
+static bool knuckles_sheet_ready = false;
+static bool knuckles_use_cart_ram = false;
+static jo_img knuckles_sheet_img = {0};
+static int knuckles_sheet_width = 0;
+static int knuckles_sheet_height = 0;
+static int knuckles_sprite_id = -1;
+static int knuckles_punch_sprite_id = -1;
+static int knuckles_damaged_sprite_id = -1;
+static int knuckles_defeated_sprite_id = -1;
 
-static const jo_tile KnucklesWalkingTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
+#define KNUCKLES_IDLE_FRAMES 8
+#define KNUCKLES_WALK_FRAMES 8
+#define KNUCKLES_RUN_FRAMES 6
+#define KNUCKLES_JUMP_FRAMES 5
+#define KNUCKLES_FALL_FRAMES 4
+#define KNUCKLES_LAND_FRAMES 3
+#define KNUCKLES_PUNCH_FRAMES 6
+#define KNUCKLES_DAMAGED_FRAMES 3
 
-static const jo_tile KnucklesRunning1Tiles[] =
+typedef enum
 {
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KnucklesRunning2Tiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KnucklesStandTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KnucklesPunchTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
-
-static const jo_tile KnucklesKickTiles[] =
-{
-    {CHARACTER_WIDTH * 0, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, 0, CHARACTER_WIDTH, CHARACTER_HEIGHT}
-};
+    KnucklesAnimIdle = 0,
+    KnucklesAnimWalk,
+    KnucklesAnimRun,
+    KnucklesAnimJump,
+    KnucklesAnimFall,
+    KnucklesAnimLand,
+    KnucklesAnimPunch,
+    KnucklesAnimDamaged
+} anim_mode_t;
 
 static const jo_tile KnucklesDefeatedTile[] =
 {
     {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
-static void knuckles_reset_animation_lists_except(character_t *chr, int active_anim_id)
+static bool character_has_movement_input_for_character(const character_t *chr)
+{
+    if (chr == JO_NULL)
+        return false;
+
+    return chr->walk || chr->spin || chr->punch || chr->punch2 || chr->kick || chr->kick2;
+}
+
+static void knuckles_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y, int frame_width, int target_width)
+{
+    // NOTE: temporary path supports both Cart RAM and WRAM sprite source.
+    // This should be migrated to Cart RAM only in the future so we can support
+    // larger character sprite sets and reduce WRAM usage for additional characters.
+    if (target_width == frame_width)
+    {
+        if (knuckles_use_cart_ram)
+        {
+            character_copy_cart_sheet_frame_to_sprite(sprite_id, "KNK_FUL", knuckles_sheet_width, knuckles_sheet_height, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+            return;
+        }
+
+        if (knuckles_sheet_img.data != JO_NULL)
+        {
+            character_copy_sheet_frame_to_sprite_with_size(sprite_id, &knuckles_sheet_img, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+            return;
+        }
+    }
+
+    // For punch frames that use a target width larger than frame_width (e.g. 48), use padding.
+    if (knuckles_sheet_img.data != JO_NULL)
+    {
+        jo_img tmp = {0};
+        tmp.width = target_width;
+        tmp.height = CHARACTER_HEIGHT;
+        tmp.data = jo_malloc((size_t)target_width * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+        if (tmp.data != JO_NULL)
+        {
+            unsigned short *dst = (unsigned short *)tmp.data;
+            unsigned short *src = (unsigned short *)knuckles_sheet_img.data;
+            size_t pixel_count = (size_t)target_width * (size_t)CHARACTER_HEIGHT;
+
+            for (size_t i = 0; i < pixel_count; ++i)
+                dst[i] = JO_COLOR_Transparent;
+
+            for (int y = 0; y < CHARACTER_HEIGHT; ++y)
+            {
+                unsigned short *src_row = src + (frame_y + y) * knuckles_sheet_img.width + frame_x;
+                unsigned short *dst_row = dst + (size_t)y * target_width;
+                memcpy(dst_row, src_row, (size_t)frame_width * sizeof(unsigned short));
+            }
+
+            jo_sprite_replace(&tmp, sprite_id);
+            jo_free_img(&tmp);
+        }
+        return;
+    }
+
+    // Fallback to cart path for exact width.
+    if (knuckles_use_cart_ram)
+    {
+        character_copy_cart_sheet_frame_to_sprite(sprite_id, "KNK_FUL", knuckles_sheet_width, knuckles_sheet_height, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+    }
+}
+
+static void knuckles_update_animation_frame(character_t *chr, int frame_count, bool hold_last)
 {
     if (chr == JO_NULL)
         return;
 
-    if (chr->walking_anim_id >= 0 && chr->walking_anim_id != active_anim_id)
-        jo_reset_sprite_anim(chr->walking_anim_id);
-    if (chr->running1_anim_id >= 0 && chr->running1_anim_id != active_anim_id)
-        jo_reset_sprite_anim(chr->running1_anim_id);
-    if (chr->running2_anim_id >= 0 && chr->running2_anim_id != active_anim_id)
-        jo_reset_sprite_anim(chr->running2_anim_id);
-    if (chr->stand_sprite_id >= 0 && chr->stand_sprite_id != active_anim_id)
-        jo_reset_sprite_anim(chr->stand_sprite_id);
-    if (chr->punch_anim_id >= 0 && chr->punch_anim_id != active_anim_id)
-        jo_reset_sprite_anim(chr->punch_anim_id);
-    if (chr->kick_anim_id >= 0 && chr->kick_anim_id != active_anim_id)
-        jo_reset_sprite_anim(chr->kick_anim_id);
-}
+    if (chr->knuckles_anim_frame >= frame_count)
+        chr->knuckles_anim_frame = frame_count - 1;
 
-static void knuckles_update_for(character_t *chr, jo_sidescroller_physics_params *phy)
-{
-    int speed_step;
-
-    if (chr == JO_NULL || phy == JO_NULL)
+    chr->knuckles_anim_ticks++;
+    if (chr->knuckles_anim_ticks < DEFAULT_SPRITE_FRAME_DURATION)
         return;
 
-    if (jo_physics_is_standing(phy))
-    {
-        jo_reset_sprite_anim(chr->running1_anim_id);
-        jo_reset_sprite_anim(chr->running2_anim_id);
+    chr->knuckles_anim_ticks = 0;
 
-        if (!jo_is_sprite_anim_stopped(chr->walking_anim_id))
+    if (hold_last && chr->knuckles_anim_frame >= frame_count - 1)
+        return;
+
+    chr->knuckles_anim_frame++;
+
+    if (chr->knuckles_anim_frame >= frame_count)
+        chr->knuckles_anim_frame = 0;
+}
+
+static int knuckles_calc_frame(character_t *chr, int mode)
+{
+    int frame_count;
+    bool hold_last = false;
+
+    switch (mode)
+    {
+        case KnucklesAnimIdle:
+            frame_count = KNUCKLES_IDLE_FRAMES;
+            break;
+        case KnucklesAnimWalk:
+            frame_count = KNUCKLES_WALK_FRAMES;
+            break;
+        case KnucklesAnimRun:
+            frame_count = KNUCKLES_RUN_FRAMES;
+            break;
+        case KnucklesAnimJump:
+            frame_count = KNUCKLES_JUMP_FRAMES;
+            hold_last = true;
+            break;
+        case KnucklesAnimFall:
+            frame_count = KNUCKLES_FALL_FRAMES;
+            hold_last = true;
+            break;
+        case KnucklesAnimLand:
+            frame_count = KNUCKLES_LAND_FRAMES;
+            hold_last = true;
+            break;
+        case KnucklesAnimPunch:
+            frame_count = KNUCKLES_PUNCH_FRAMES;
+            hold_last = true; // stop on last frame until punch state clears
+            break;
+        case KnucklesAnimDamaged:
+            frame_count = KNUCKLES_DAMAGED_FRAMES;
+            break;
+        default:
+            frame_count = KNUCKLES_IDLE_FRAMES;
+            break;
+    }
+
+    if (chr->anim_mode != mode)
+    {
+        chr->anim_mode = mode;
+        chr->knuckles_anim_frame = 0;
+        chr->knuckles_anim_ticks = 0;
+    }
+
+    knuckles_update_animation_frame(chr, frame_count, hold_last);
+    return chr->knuckles_anim_frame;
+}
+
+static bool knuckles_has_movement_input(const character_t *chr)
+{
+    if (chr == JO_NULL)
+        return false;
+
+    return chr->walk || chr->spin || chr->punch || chr->punch2 || chr->kick || chr->kick2;
+}
+
+static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
+{
+    if (!knuckles_sheet_ready || sprite_id < 0)
+        return;
+
+    if (chr->life <= 0)
+        return;
+
+    int mode = chr->anim_mode;
+    if (mode < KnucklesAnimIdle || mode > KnucklesAnimDamaged)
+        mode = KnucklesAnimIdle;
+
+    int frame = knuckles_calc_frame(chr, mode);
+    int frame_x = 0;
+    int frame_y = 0;
+
+    int frame_width = CHARACTER_WIDTH;
+
+    switch (mode)
+    {
+        case KnucklesAnimIdle:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = 0;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case KnucklesAnimWalk:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case KnucklesAnimRun:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 2;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case KnucklesAnimJump:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 3;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case KnucklesAnimFall:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 4;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case KnucklesAnimLand:
+            frame_x = (4 + frame) * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 4;
+            frame_width = CHARACTER_WIDTH;
+            if (chr->landed && knuckles_has_movement_input(chr))
+            {
+                chr->landed = false;
+                chr->anim_mode = KnucklesAnimIdle;
+            }
+            break;
+        case KnucklesAnimPunch:
+            frame_y = CHARACTER_HEIGHT * 6;
+            switch (frame)
+            {
+                case 0:
+                    frame_x = 0;
+                    frame_width = 32;
+                    break;
+                case 1:
+                    frame_x = 32;
+                    frame_width = 32;
+                    break;
+                case 2:
+                    frame_x = 64;
+                    frame_width = 48;
+                    break;
+                case 3:
+                    frame_x = 112;
+                    frame_width = 48;
+                    break;
+                case 4:
+                    frame_x = 160;
+                    frame_width = 32;
+                    break;
+                case 5:
+                default:
+                    frame_x = 192;
+                    frame_width = 32;
+                    break;
+            }
+            break;
+        case KnucklesAnimDamaged:
+            frame_y = CHARACTER_HEIGHT * 5;
+            frame_x = (3 + frame) * CHARACTER_WIDTH;
+            frame_width = CHARACTER_WIDTH;
+            if (chr->stun_timer <= 0)
+            {
+                chr->anim_mode = KnucklesAnimIdle;
+                chr->knuckles_anim_frame = 0;
+                chr->knuckles_anim_ticks = 0;
+            }
+            break;
+        default:
+            frame_x = 0;
+            frame_y = 0;
+            frame_width = CHARACTER_WIDTH;
+            break;
+    }
+
+    int target_width = (mode == KnucklesAnimPunch || mode == KnucklesAnimDamaged) ? 48 : CHARACTER_WIDTH;
+    knuckles_copy_sheet_frame_to_sprite(sprite_id, frame_x, frame_y, frame_width, target_width);
+}
+
+static int knuckles_ensure_wram_sprite(character_t *chr)
+{
+    return character_ensure_wram_sprite(chr, &knuckles_sprite_id);
+}
+
+static int knuckles_ensure_punch_wram_sprite(character_t *chr)
+{
+    if (knuckles_punch_sprite_id < 0)
+        knuckles_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+    return knuckles_punch_sprite_id;
+}
+
+static int knuckles_ensure_damaged_wram_sprite(character_t *chr)
+{
+    if (knuckles_damaged_sprite_id < 0)
+        knuckles_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+    return knuckles_damaged_sprite_id;
+}
+
+#define KNUCKLES_LONG_FALL_MS 1000
+
+void knuckles_running_animation_handling(void)
+{
+    character_t *chr = &character_ref;
+
+    if (chr->life <= 0)
+        return;
+
+    if (chr->stun_timer > 0)
+    {
+        if (chr->anim_mode != KnucklesAnimDamaged)
         {
-            jo_reset_sprite_anim(chr->walking_anim_id);
-            jo_reset_sprite_anim(chr->stand_sprite_id);
+            chr->anim_mode = KnucklesAnimDamaged;
+            chr->knuckles_anim_frame = 0;
+            chr->knuckles_anim_ticks = 0;
+        }
+        return;
+    }
+
+    if (chr->punch || chr->punch2)
+    {
+        if (chr->anim_mode != KnucklesAnimPunch)
+        {
+            chr->anim_mode = KnucklesAnimPunch;
+            chr->knuckles_anim_frame = 0;
+            chr->knuckles_anim_ticks = 0;
+        }
+
+        if (chr->knuckles_anim_frame >= KNUCKLES_PUNCH_FRAMES - 1)
+        {
+            chr->punch = false;
+            chr->punch2 = false;
+            chr->punch2_requested = false;
+            chr->perform_kick2 = false;
+            chr->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+            chr->anim_mode = KnucklesAnimIdle;
+            chr->knuckles_anim_frame = 0;
+            chr->knuckles_anim_ticks = 0;
+        }
+        return;
+    }
+
+    if (physics.is_in_air)
+    {
+        chr->knuckles_land_pending = false;
+
+        if (physics.speed_y < 0.0f)
+        {
+            if (chr->anim_mode != KnucklesAnimJump)
+            {
+                chr->anim_mode = KnucklesAnimJump;
+                chr->knuckles_anim_frame = 0;
+                chr->knuckles_anim_ticks = 0;
+            }
+            chr->knuckles_fall_time_ms = 0;
+            return;
+        }
+
+        // Furthest downward state: Fall.
+        if (chr->anim_mode != KnucklesAnimFall)
+        {
+            chr->anim_mode = KnucklesAnimFall;
+            chr->knuckles_anim_frame = 0;
+            chr->knuckles_anim_ticks = 0;
+        }
+
+        chr->knuckles_fall_time_ms += GAME_FRAME_MS;
+        return;
+    }
+
+    if (chr->knuckles_land_pending)
+    {
+        if (character_has_movement_input_for_character(chr))
+        {
+            chr->knuckles_land_pending = false;
         }
         else
         {
-            if (jo_is_sprite_anim_stopped(chr->stand_sprite_id))
-                jo_start_sprite_anim_loop(chr->stand_sprite_id);
-
-            if (jo_get_sprite_anim_frame(chr->stand_sprite_id) == 0)
-                jo_set_sprite_anim_frame_rate(chr->stand_sprite_id, 70);
-            else
-                jo_set_sprite_anim_frame_rate(chr->stand_sprite_id, 2);
+            if (chr->anim_mode != KnucklesAnimLand)
+            {
+                chr->anim_mode = KnucklesAnimLand;
+                chr->knuckles_anim_frame = 0;
+                chr->knuckles_anim_ticks = 0;
+            }
+            return;
         }
     }
+
+    if (chr->knuckles_fall_time_ms >= KNUCKLES_LONG_FALL_MS)
+    {
+        chr->knuckles_land_pending = true;
+        chr->knuckles_fall_time_ms = 0;
+        chr->anim_mode = KnucklesAnimLand;
+        chr->knuckles_anim_frame = 0;
+        chr->knuckles_anim_ticks = 0;
+        return;
+    }
+
+    chr->knuckles_fall_time_ms = 0;
+
+    if (chr->walk && chr->run == 2)
+        chr->anim_mode = KnucklesAnimRun;
+    else if (chr->walk)
+        chr->anim_mode = KnucklesAnimWalk;
     else
+        chr->anim_mode = KnucklesAnimIdle;
+}
+
+static void knuckles_draw_for_character(character_t *chr)
+{
+    if (!knuckles_sheet_ready)
     {
-        if (chr->run == 0)
+        // fallback to legacy non-wram draw might be not implemented yet.
+        if (chr->defeated_sprite_id >= 0 && chr->life <= 0)
         {
-            jo_reset_sprite_anim(chr->running1_anim_id);
-            jo_reset_sprite_anim(chr->running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(chr->walking_anim_id))
-                jo_start_sprite_anim_loop(chr->walking_anim_id);
+            jo_sprite_draw3D2(chr->defeated_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
         }
-        else if (chr->run == 1)
-        {
-            jo_reset_sprite_anim(chr->walking_anim_id);
-            jo_reset_sprite_anim(chr->running2_anim_id);
-
-            if (jo_is_sprite_anim_stopped(chr->running1_anim_id))
-                jo_start_sprite_anim_loop(chr->running1_anim_id);
-        }
-        else if (chr->run == 2)
-        {
-            jo_reset_sprite_anim(chr->walking_anim_id);
-            jo_reset_sprite_anim(chr->running1_anim_id);
-
-            if (jo_is_sprite_anim_stopped(chr->running2_anim_id))
-                jo_start_sprite_anim_loop(chr->running2_anim_id);
-        }
-
-        speed_step = (int)JO_ABS(phy->speed);
-
-        if (speed_step >= 6)
-        {
-            jo_set_sprite_anim_frame_rate(chr->running2_anim_id, 3);
-            chr->run = 2;
-        }
-        else if (speed_step >= 5)
-        {
-            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 4);
-            chr->run = 1;
-        }
-        else if (speed_step >= 4)
-        {
-            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 5);
-            chr->run = 1;
-        }
-        else if (speed_step >= 3)
-        {
-            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 6);
-            chr->run = 1;
-        }
-        else if (speed_step >= 2)
-        {
-            jo_set_sprite_anim_frame_rate(chr->running1_anim_id, 7);
-            chr->run = 1;
-        }
-        else if (speed_step >= 1)
-        {
-            jo_set_sprite_anim_frame_rate(chr->walking_anim_id, 8);
-            chr->run = 0;
-        }
-        else
-        {
-            jo_set_sprite_anim_frame_rate(chr->walking_anim_id, 9);
-            chr->run = 0;
-        }
+        return;
     }
 
-    player_update_punch_state_for_character(chr);
-    player_update_kick_state_for_character(chr);
-}
+    if (chr->life <= 0)
+    {
+        if (chr->defeated_wram_sprite_id >= 0)
+            jo_sprite_draw3D2(chr->defeated_wram_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
+        return;
+    }
 
-void knuckles_update_animation_for(character_t *character, jo_sidescroller_physics_params *physics)
-{
-    knuckles_update_for(character, physics);
-}
+    int sprite_id;
+    if (chr->anim_mode == KnucklesAnimPunch)
+        sprite_id = knuckles_ensure_punch_wram_sprite(chr);
+    else if (chr->anim_mode == KnucklesAnimDamaged)
+        sprite_id = knuckles_ensure_damaged_wram_sprite(chr);
+    else
+        sprite_id = knuckles_ensure_wram_sprite(chr);
 
-inline void knuckles_running_animation_handling(void)
-{
-    knuckles_update_for(&player, &physics);
-}
-
-void knuckles_display_for(character_t *chr, jo_sidescroller_physics_params *phy)
-{
-    if (chr == JO_NULL || phy == JO_NULL)
+    if (sprite_id < 0)
         return;
 
-    if (!phy->is_in_air)
+    knuckles_render_current_frame_for(chr, sprite_id);
+
+    int draw_x = chr->x;
+    if (chr->flip && chr->anim_mode == KnucklesAnimPunch &&
+        (chr->knuckles_anim_frame >= 0 || chr->knuckles_anim_frame < 6))
     {
-        chr->spin = false;
-        chr->jump = false;
-        chr->angle = 0;
+        draw_x -= 16;
+    }else{
+        draw_x = chr->x;
     }
 
-    if (chr->flip)
+    jo_sprite_draw3D2(sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
+}
+
+void knuckles_draw(character_t *chr)
+{
+    knuckles_draw_for_character(chr);
+}
+
+void display_knuckles(void)
+{
+    if (!physics.is_in_air)
+    {
+        character_ref.spin = false;
+        character_ref.jump = false;
+        character_ref.angle = 0;
+    }
+
+    if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    if (chr->spin)
-    {
-        knuckles_reset_animation_lists_except(chr, -1);
-        jo_sprite_draw3D_and_rotate2(chr->spin_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
-        if (chr->flip)
-            chr->angle -= CHARACTER_SPIN_SPEED;
-        else
-            chr->angle += CHARACTER_SPIN_SPEED;
-    } else if (chr->life <= 0 && knuckles_defeated_sprite_id >= 0) {
-        knuckles_reset_animation_lists_except(chr, -1);
-        jo_sprite_draw3D2(knuckles_defeated_sprite_id, chr->x, chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT), CHARACTER_SPRITE_Z);
-    } else if (chr->stun_timer > 0 && knuckles_damage_sprite_id >= 0) {
-        knuckles_reset_animation_lists_except(chr, -1);
-        jo_sprite_draw3D2(knuckles_damage_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-    } else if (chr->punch || chr->punch2){
-        knuckles_reset_animation_lists_except(chr, chr->punch_anim_id);
-        jo_sprite_draw3D2(jo_get_anim_sprite(chr->punch_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-    } else if (chr->kick || chr->kick2){
-        knuckles_reset_animation_lists_except(chr, chr->kick_anim_id);
-        if (chr->charged_kick_enabled && chr->kick && !chr->kick2)
-        {
-            jo_sprite_draw3D2(knuckles_kick_base_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-        else if (chr->charged_kick_enabled && chr->kick2)
-        {
-            int front_offset = chr->flip ? -KNUCKLES_KICK_PART3_WIDTH_PIXELS : KNUCKLES_KICK_PART3_WIDTH_PIXELS;
+    knuckles_draw_for_character(&character_ref);
 
-            if (chr->charged_kick_active && chr->charged_kick_phase <= 1)
-                jo_sprite_draw3D2(knuckles_kick_base_id + 1, chr->x, chr->y, CHARACTER_SPRITE_Z);
-            else
-            {
-                jo_sprite_draw3D2(knuckles_kick_base_id + KNUCKLES_KICK_PART4_INDEX, chr->x, chr->y, CHARACTER_SPRITE_Z);
-                jo_sprite_draw3D2(knuckles_kick_base_id + KNUCKLES_KICK_PART3_INDEX,
-                                  chr->x + front_offset,
-                                  chr->y,
-                                  CHARACTER_SPRITE_Z);
-            }
-        }
-        else
-        {
-            jo_sprite_draw3D2(jo_get_anim_sprite(chr->kick_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-    } else if (chr->jump){
-        knuckles_reset_animation_lists_except(chr, -1);
-        jo_sprite_draw3D2(chr->jump_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-    } else {
-        if (chr->walk && chr->run == 0)
-        {
-            knuckles_reset_animation_lists_except(chr, chr->walking_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(chr->walking_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-        else if (chr->walk && chr->run == 1)
-        {
-            knuckles_reset_animation_lists_except(chr, chr->running1_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(chr->running1_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-        else if (chr->walk && chr->run == 2)
-        {
-            knuckles_reset_animation_lists_except(chr, chr->running2_anim_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(chr->running2_anim_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-        else
-        {
-            knuckles_reset_animation_lists_except(chr, chr->stand_sprite_id);
-            jo_sprite_draw3D2(jo_get_anim_sprite(chr->stand_sprite_id), chr->x, chr->y, CHARACTER_SPRITE_Z);
-        }
-    }
-
-    if (chr->flip)
+    if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
 }
 
-inline void display_knuckles(void)
+void knuckles_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
 {
-    knuckles_display_for(&player, &physics);
+    if (chr != JO_NULL)
+        knuckles_ref = chr;
+    if (phy != JO_NULL)
+        knuckles_physics = phy;
 }
 
 void load_knuckles(void)
 {
     if (!knuckles_loaded)
     {
-        knuckles_walking_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_WLK.TGA", JO_COLOR_Green, KnucklesWalkingTiles, JO_TILE_COUNT(KnucklesWalkingTiles));
-            knuckles_walking_anim_id = jo_create_sprite_anim(knuckles_walking_base_id, JO_TILE_COUNT(KnucklesWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        if (!knuckles_sheet_ready)
+        {
+            jo_img sheet = {0};
+            if (character_load_sheet(&sheet, "KNK_FUL.TGA", SPRITE_DIR, JO_COLOR_Green))
+            {
+                knuckles_sheet_width = sheet.width;
+                knuckles_sheet_height = sheet.height;
+                if (ram_cart_store_sprite("KNK_FUL", sheet.data, (size_t)sheet.width * (size_t)sheet.height * sizeof(unsigned short)))
+                {
+                    knuckles_sheet_ready = true;
+                    knuckles_use_cart_ram = true;
+                    knuckles_sheet_img = sheet; // keep sheet loaded for frame padding operations
+                }
+                else
+                {
+                    knuckles_sheet_ready = true;
+                    knuckles_use_cart_ram = false;
+                    knuckles_sheet_img = sheet;
+                }
+            }
+        }
 
-        knuckles_running1_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_RUN1.TGA", JO_COLOR_Green, KnucklesRunning1Tiles, JO_TILE_COUNT(KnucklesRunning1Tiles));
-            knuckles_running1_anim_id = jo_create_sprite_anim(knuckles_running1_base_id, JO_TILE_COUNT(KnucklesRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        if (knuckles_sprite_id < 0)
+            knuckles_sprite_id = character_create_blank_sprite();
 
-        knuckles_running2_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_RUN1.TGA", JO_COLOR_Green, KnucklesRunning2Tiles, JO_TILE_COUNT(KnucklesRunning2Tiles));
-            knuckles_running2_anim_id = jo_create_sprite_anim(knuckles_running2_base_id, JO_TILE_COUNT(KnucklesRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
+        if (knuckles_punch_sprite_id < 0)
+            knuckles_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
-        knuckles_stand_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_STD.TGA", JO_COLOR_Green, KnucklesStandTiles, JO_TILE_COUNT(KnucklesStandTiles));
-            knuckles_stand_anim_id = jo_create_sprite_anim(knuckles_stand_base_id, JO_TILE_COUNT(KnucklesStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
+        if (knuckles_damaged_sprite_id < 0)
+            knuckles_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
-        knuckles_spin_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "KNK_SPN.TGA", JO_COLOR_Green);
-        knuckles_jump_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "KNK_JMP.TGA", JO_COLOR_Green);
-        knuckles_damage_sprite_id = jo_sprite_add_tga(SPRITE_DIR, "KNK_DMG.TGA", JO_COLOR_Green);
         knuckles_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_DFT.TGA", JO_COLOR_Green, KnucklesDefeatedTile, JO_TILE_COUNT(KnucklesDefeatedTile));
-
-        knuckles_punch_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_PNC.TGA", JO_COLOR_Green, KnucklesPunchTiles, JO_TILE_COUNT(KnucklesPunchTiles));
-            knuckles_punch_anim_id = jo_create_sprite_anim(knuckles_punch_base_id, JO_TILE_COUNT(KnucklesPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-
-        knuckles_kick_base_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_KCK.TGA", JO_COLOR_Green, KnucklesKickTiles, JO_TILE_COUNT(KnucklesKickTiles));
-            knuckles_kick_anim_id = jo_create_sprite_anim(knuckles_kick_base_id, JO_TILE_COUNT(KnucklesKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
 
         knuckles_loaded = true;
     }
 
-    character_ref.walking_anim_id = knuckles_walking_anim_id;
-    character_ref.running1_anim_id = knuckles_running1_anim_id;
-    character_ref.running2_anim_id = knuckles_running2_anim_id;
-    character_ref.stand_sprite_id = knuckles_stand_anim_id;
-    character_ref.spin_sprite_id = knuckles_spin_sprite_id;
-    character_ref.jump_sprite_id = knuckles_jump_sprite_id;
-    character_ref.damage_sprite_id = knuckles_damage_sprite_id;
+    character_ref.wram_sprite_id = knuckles_sprite_id;
+    character_ref.damage_sprite_id = knuckles_damaged_sprite_id;
     character_ref.defeated_sprite_id = knuckles_defeated_sprite_id;
-    character_ref.punch_anim_id = knuckles_punch_anim_id;
-    character_ref.kick_anim_id = knuckles_kick_anim_id;
+    character_ref.defeated_wram_sprite_id = -1;
+
     character_registry_apply_combat_profile(&character_ref, UiCharacterKnuckles);
+
+    knuckles_physics = &physics;
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
     character_ref.charged_kick_active = false;
@@ -369,8 +577,11 @@ void load_knuckles(void)
     character_ref.hit_done_kick1 = false;
     character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
-
-    // Inicializa vida
+    character_ref.anim_mode = KnucklesAnimIdle;
+    character_ref.knuckles_anim_frame = 0;
+    character_ref.knuckles_anim_ticks = 0;
+    character_ref.knuckles_fall_time_ms = 0;
+    character_ref.knuckles_land_pending = false;
     character_ref.life = 50;
 }
 
@@ -379,28 +590,26 @@ void unload_knuckles(void)
     if (!knuckles_loaded)
         return;
 
-    if (knuckles_walking_anim_id >= 0) jo_remove_sprite_anim(knuckles_walking_anim_id);
-    if (knuckles_running1_anim_id >= 0) jo_remove_sprite_anim(knuckles_running1_anim_id);
-    if (knuckles_running2_anim_id >= 0) jo_remove_sprite_anim(knuckles_running2_anim_id);
-    if (knuckles_stand_anim_id >= 0) jo_remove_sprite_anim(knuckles_stand_anim_id);
-    if (knuckles_punch_anim_id >= 0) jo_remove_sprite_anim(knuckles_punch_anim_id);
-    if (knuckles_kick_anim_id >= 0) jo_remove_sprite_anim(knuckles_kick_anim_id);
+    if (knuckles_sheet_ready)
+    {
+        if (knuckles_use_cart_ram)
+        {
+            ram_cart_delete_sprite("KNK_FUL");
+        }
+        else if (knuckles_sheet_img.data != JO_NULL)
+        {
+            jo_free_img(&knuckles_sheet_img);
+        }
 
-    knuckles_walking_base_id = -1;
-    knuckles_running1_base_id = -1;
-    knuckles_running2_base_id = -1;
-    knuckles_stand_base_id = -1;
-    knuckles_punch_base_id = -1;
-    knuckles_kick_base_id = -1;
-    knuckles_walking_anim_id = -1;
-    knuckles_running1_anim_id = -1;
-    knuckles_running2_anim_id = -1;
-    knuckles_stand_anim_id = -1;
-    knuckles_punch_anim_id = -1;
-    knuckles_kick_anim_id = -1;
-    knuckles_spin_sprite_id = -1;
-    knuckles_jump_sprite_id = -1;
-    knuckles_damage_sprite_id = -1;
+        knuckles_sheet_ready = false;
+        knuckles_use_cart_ram = false;
+        knuckles_sheet_width = 0;
+        knuckles_sheet_height = 0;
+    }
+
     knuckles_defeated_sprite_id = -1;
+    knuckles_damaged_sprite_id = -1;
+    knuckles_sprite_id = -1;
+    character_ref.wram_sprite_id = -1;
     knuckles_loaded = false;
 }

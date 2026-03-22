@@ -4,8 +4,10 @@
 #include "player.h"
 #include "character_common.h"
 #include "character_registry.h"
+#include "input_mapping.h"
 #include "sprite_safe.h"
 #include "runtime_log.h"
+#include "ram_cart.h"
 
 extern jo_sidescroller_physics_params physics; // global physics state (from main.c)
 
@@ -15,352 +17,472 @@ static jo_sidescroller_physics_params *sonic_physics = &physics;
 #define character_ref (*sonic_ref)
 #define physics (*sonic_physics)
 
-void sonic_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
-{
-    if (chr != NULL)
-        sonic_ref = chr;
-    if (phy != NULL)
-        sonic_physics = phy;
-}
-
 #define SPRITE_DIR "SPT"
-#define DEFEATED_SPRITE_WIDTH 48
-#define DEFEATED_SPRITE_HEIGHT 32
 
 static bool sonic_loaded = false;
 static bool sonic_sheet_ready = false;
-static jo_img sonic_sheet = {0};
+static bool sonic_use_cart_ram = false;
+static jo_img sonic_sheet_img = {0};
+static int sonic_sheet_width = 0;
+static int sonic_sheet_height = 0;
 static int sonic_sprite_id = -1;
+static int sonic_punch_sprite_id = -1;
+static int sonic_damaged_sprite_id = -1;
+static int sonic_defeated_sprite_id = -1;
 
-static bool sonic_defeated_sheet_ready = false;
-static jo_img sonic_defeated_sheet = {0};
-
-// NOTE: per-character animation state is stored directly on the character so
-// multiple instances (Player 1 / Player 2 / bots) do not interfere with each other.
-// This avoids the case where P2 overwrites P1's current animation/frame.
-
-// Dummy anims used for internal timing / combo logic (punch/kick/speed).
-static int sonic_stand_anim_id = -1;
-static int sonic_walking_anim_id = -1;
-static int sonic_running1_anim_id = -1;
-static int sonic_running2_anim_id = -1;
-static int sonic_punch_anim_id = -1;
-static int sonic_kick_anim_id = -1;
-
-static int sonic_defeated_sprite_id;
-
-// SNC_FUL.TGA layout (8x6):
-// Row 0: 0-3 = stand, 4 = jump, 5 = damage, 6 = spin, 7 = unused
-// Row 1: walk (8 frames)
-// Row 2: run1 (8 frames)
-// Row 3: run2 (8 frames)
-// Row 4: punch (4 punch1 + 4 punch2)
-// Row 5: kick  (4 kick1 + 4 kick2)
-static const jo_tile SonicStandTiles[] =
+#define SONIC_IDLE_FRAMES 6
+#define SONIC_WALK_FRAMES 8
+#define SONIC_RUN_FRAMES 6
+#define SONIC_JUMP_FRAMES 5
+#define SONIC_FALL_FRAMES 4
+#define SONIC_LAND_FRAMES 3
+#define SONIC_PUNCH_FRAMES 6
+#define SONIC_DAMAGED_FRAMES 3
+typedef enum
 {
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicJumpTile[] =
-{
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicDamageTile[] =
-{
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicSpinTile[] =
-{
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 0, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicWalkingTiles[] =
-{
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 1, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicRunning1Tiles[] =
-{
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 2, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicRunning2Tiles[] =
-{
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 3, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicPunchTiles[] =
-{
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 4, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
-
-static const jo_tile SonicKickTiles[] =
-{
-    {CHARACTER_WIDTH * 0, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 1, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 2, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 3, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 4, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 5, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 6, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-    {CHARACTER_WIDTH * 7, CHARACTER_HEIGHT * 5, CHARACTER_WIDTH, CHARACTER_HEIGHT},
-};
+    SonicAnimIdle = 0,
+    SonicAnimWalk,
+    SonicAnimRun,
+    SonicAnimJump,
+    SonicAnimFall,
+    SonicAnimLand,
+    SonicAnimPunch,
+    SonicAnimDamaged
+} anim_mode_t;
 
 static const jo_tile SonicDefeatedTile[] =
 {
     {0, 0, DEFEATED_SPRITE_TILE_WIDTH, DEFEATED_SPRITE_HEIGHT},
 };
 
-static void sonic_copy_defeated_sheet_frame_to_sprite(int sprite_id)
+static bool character_has_movement_input_for_character(const character_t *chr)
 {
-    character_copy_defeated_sheet_frame_to_sprite(sprite_id, &sonic_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
+    if (chr == JO_NULL)
+        return false;
+
+    return chr->walk || chr->spin || chr->punch || chr->punch2 || chr->kick || chr->kick2;
 }
 
-static int sonic_ensure_defeated_wram_sprite(character_t *chr)
+static void sonic_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y, int frame_width, int target_width)
 {
-    return character_ensure_defeated_wram_sprite(chr, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT);
-}
+    // NOTE: temporary path supports both Cart RAM and WRAM sprite source.
+    // This should be migrated to Cart RAM only in the future so we can support
+    // larger character sprite sets and reduce WRAM usage for additional characters.
+    if (target_width == frame_width)
+    {
+        if (sonic_use_cart_ram)
+        {
+            character_copy_cart_sheet_frame_to_sprite(sprite_id, "SNC_FUL", sonic_sheet_width, sonic_sheet_height, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+            return;
+        }
 
-static void sonic_copy_sheet_frame_to_sprite(int sprite_id, int frame_x, int frame_y)
-{
-    character_copy_sheet_frame_to_sprite(sprite_id, &sonic_sheet, frame_x, frame_y);
-}
+        if (sonic_sheet_img.data != JO_NULL)
+        {
+            character_copy_sheet_frame_to_sprite_with_size(sprite_id, &sonic_sheet_img, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+            return;
+        }
+    }
 
-static int sonic_create_blank_animation(int frame_count)
-{
-    return character_create_blank_animation(frame_count);
-}
+    // For punch frames that use a target width larger than frame_width (e.g. 48), use padding.
+    if (sonic_sheet_img.data != JO_NULL)
+    {
+        jo_img tmp = {0};
+        tmp.width = target_width;
+        tmp.height = CHARACTER_HEIGHT;
+        tmp.data = jo_malloc((size_t)target_width * (size_t)CHARACTER_HEIGHT * sizeof(unsigned short));
+        if (tmp.data != JO_NULL)
+        {
+            unsigned short *dst = (unsigned short *)tmp.data;
+            unsigned short *src = (unsigned short *)sonic_sheet_img.data;
+            size_t pixel_count = (size_t)target_width * (size_t)CHARACTER_HEIGHT;
 
-static int sonic_create_blank_sprite(void)
-{
-    return character_create_blank_sprite();
-}
+            for (size_t i = 0; i < pixel_count; ++i)
+                dst[i] = JO_COLOR_Transparent;
 
-static void sonic_render_current_frame_for(const character_t *chr, int sprite_id)
-{
-    if (!sonic_sheet_ready || sprite_id < 0)
+            for (int y = 0; y < CHARACTER_HEIGHT; ++y)
+            {
+                unsigned short *src_row = src + (frame_y + y) * sonic_sheet_img.width + frame_x;
+                unsigned short *dst_row = dst + (size_t)y * target_width;
+                memcpy(dst_row, src_row, (size_t)frame_width * sizeof(unsigned short));
+            }
+
+            jo_sprite_replace(&tmp, sprite_id);
+            jo_free_img(&tmp);
+        }
         return;
-
-    int row = 0;
-    int col = 0;
-
-    if (chr->spin)
-    {
-        row = 0;
-        col = 6;
-    }
-    else if (chr->life <= 0)
-    {
-        int defeated_sprite_id = sonic_ensure_defeated_wram_sprite((character_t *)chr);
-        if (defeated_sprite_id >= 0)
-            sonic_copy_defeated_sheet_frame_to_sprite(defeated_sprite_id);
-        return;
-    }
-    else if (chr->stun_timer > 0)
-    {
-        row = 0;
-        col = 5;
-    }
-    else if (chr->punch || chr->punch2)
-    {
-        row = 4;
-        col = (chr->punch_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->punch_anim_id) : 0;
-    }
-    else if (chr->kick || chr->kick2)
-    {
-        row = 5;
-        col = (chr->kick_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->kick_anim_id) : 0;
-    }
-    else if (chr->jump)
-    {
-        row = 0;
-        col = 4;
-    }
-    else
-    {
-        if (chr->walk && chr->run == 0)
-        {
-            row = 1;
-            col = (chr->walking_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->walking_anim_id) : 0;
-        }
-        else if (chr->walk && chr->run == 1)
-        {
-            row = 2;
-            col = (chr->running1_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->running1_anim_id) : 0;
-        }
-        else if (chr->walk && chr->run == 2)
-        {
-            row = 3;
-            col = (chr->running2_anim_id >= 0) ? jo_get_sprite_anim_frame(chr->running2_anim_id) : 0;
-        }
-        else
-        {
-            row = 0;
-            col = (chr->stand_sprite_id >= 0) ? jo_get_sprite_anim_frame(chr->stand_sprite_id) : 0;
-        }
     }
 
-    sonic_copy_sheet_frame_to_sprite(sprite_id, col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT);
+    // Fallback to cart path for exact width.
+    if (sonic_use_cart_ram)
+    {
+        character_copy_cart_sheet_frame_to_sprite(sprite_id, "SNC_FUL", sonic_sheet_width, sonic_sheet_height, frame_x, frame_y, frame_width, CHARACTER_HEIGHT);
+    }
 }
 
-// The full WRAM-per-character sprite approach avoids P1/P2 sharing the same
-// backing sprite, which would cause one entity to overwrite the other's frame
-// each update.
 static int sonic_ensure_wram_sprite(character_t *chr)
 {
     return character_ensure_wram_sprite(chr, &sonic_sprite_id);
 }
 
-/*
-Speed -> Animation mapping:
-- `speed_step = (int)JO_ABS(physics.speed)` converts the physics speed to a discrete level.
-- The code maps speed ranges to an animation variant and a sprite frame rate:
-    * `speed_step >= 6`: use `running2` with `frame_rate = 3` (fast)
-    * `speed_step >= 5`: use `running1` with `frame_rate = 4`
-    * `speed_step >= 4`: use `running1` with `frame_rate = 5`
-    * `speed_step >= 3`: use `running1` with `frame_rate = DEFAULT_SPRITE_FRAME_DURATION` (medium)
-    * `speed_step >= 2`: use `running1` with `frame_rate = 7`
-    * `speed_step >= 1`: use `walking` with `frame_rate = 8`
-    * `else`: use `walking` with `frame_rate = 9`
-- Lower `frame_rate` values advance animation frames faster (so `3` animates quicker than `9`).
-- `run` selects which animation variant is drawn (0 = walking, 1 = running1, 2 = running2).
-This mapping keeps the visual animation speed consistent with the character's physical speed.
-*/
-/*
-Per-character WRAM animation timing is now driven by the dummy sprite animations
-(the ones created via `sprite_safe_create_anim`) rather than manually ticking a
-frame counter.
+static int sonic_ensure_punch_wram_sprite(character_t *chr)
+{
+    if (sonic_punch_sprite_id < 0)
+        sonic_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+    return sonic_punch_sprite_id;
+}
 
-This matches Amy's behavior and ensures stand/walk/run timing is consistent.
-*/
+static int sonic_ensure_damaged_wram_sprite(character_t *chr)
+{
+    if (sonic_damaged_sprite_id < 0)
+        sonic_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+    return sonic_damaged_sprite_id;
+}
+
+static void sonic_update_animation_frame(character_t *chr, int frame_count, bool hold_last)
+{
+    if (chr == JO_NULL)
+        return;
+
+    if (chr->sonic_anim_frame >= frame_count)
+        chr->sonic_anim_frame = frame_count - 1;
+
+    chr->sonic_anim_ticks++;
+    if (chr->sonic_anim_ticks < DEFAULT_SPRITE_FRAME_DURATION)
+        return;
+
+    chr->sonic_anim_ticks = 0;
+
+    if (hold_last && chr->sonic_anim_frame >= frame_count - 1)
+        return;
+
+    chr->sonic_anim_frame++;
+
+    if (chr->sonic_anim_frame >= frame_count)
+        chr->sonic_anim_frame = 0;
+}
+
+static int sonic_calc_frame(character_t *chr, int mode)
+{
+    int frame_count;
+    bool hold_last = false;
+
+    switch (mode)
+    {
+        case SonicAnimIdle:
+            frame_count = SONIC_IDLE_FRAMES;
+            break;
+        case SonicAnimWalk:
+            frame_count = SONIC_WALK_FRAMES;
+            break;
+        case SonicAnimRun:
+            frame_count = SONIC_RUN_FRAMES;
+            break;
+        case SonicAnimJump:
+            frame_count = SONIC_JUMP_FRAMES;
+            hold_last = true;
+            break;
+        case SonicAnimFall:
+            frame_count = SONIC_FALL_FRAMES;
+            hold_last = true;
+            break;
+        case SonicAnimLand:
+            frame_count = SONIC_LAND_FRAMES;
+            hold_last = true;
+            break;
+        case SonicAnimPunch:
+            frame_count = SONIC_PUNCH_FRAMES;
+            hold_last = true; // stop on last frame until punch flag is cleared
+            break;
+        case SonicAnimDamaged:
+            frame_count = SONIC_DAMAGED_FRAMES;
+            break;
+        default:
+            frame_count = SONIC_IDLE_FRAMES;
+            break;
+    }
+
+    if (chr->anim_mode != mode)
+    {
+        chr->anim_mode = mode;
+        chr->sonic_anim_frame = 0;
+        chr->sonic_anim_ticks = 0;
+    }
+
+    sonic_update_animation_frame(chr, frame_count, hold_last);
+    return chr->sonic_anim_frame;
+}
+
+static bool sonic_has_movement_input(const character_t *chr)
+{
+    if (chr == JO_NULL)
+        return false;
+
+    return chr->walk || chr->spin || chr->punch || chr->punch2 || chr->kick || chr->kick2;
+}
+
+static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
+{
+    if (!sonic_sheet_ready || sprite_id < 0)
+        return;
+
+    if (chr->life <= 0)
+        return;
+
+    int mode = chr->anim_mode;
+    if (mode < SonicAnimIdle || mode > SonicAnimDamaged)
+        mode = SonicAnimIdle;
+
+    int frame = sonic_calc_frame(chr, mode);
+    int frame_x = 0;
+    int frame_y = 0;
+
+    int frame_width = CHARACTER_WIDTH;
+
+    switch (mode)
+    {
+        case SonicAnimIdle:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = 0;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case SonicAnimWalk:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case SonicAnimRun:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 2;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case SonicAnimJump:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 3;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case SonicAnimFall:
+            frame_x = frame * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 4;
+            frame_width = CHARACTER_WIDTH;
+            break;
+        case SonicAnimLand:
+            frame_x = (4 + frame) * CHARACTER_WIDTH;
+            frame_y = CHARACTER_HEIGHT * 4;
+            frame_width = CHARACTER_WIDTH;
+            if (chr->landed && sonic_has_movement_input(chr))
+            {
+                chr->landed = false;
+                chr->anim_mode = SonicAnimIdle;
+            }
+            break;
+        case SonicAnimPunch:
+            frame_y = CHARACTER_HEIGHT * 6;
+            switch (frame)
+            {
+                case 0:
+                    frame_x = 0;
+                    frame_width = 32;
+                    break;
+                case 1:
+                    frame_x = 32;
+                    frame_width = 32;
+                    break;
+                case 2:
+                    frame_x = 64;
+                    frame_width = 48;
+                    break;
+                case 3:
+                    frame_x = 112;
+                    frame_width = 48;
+                    break;
+                case 4:
+                    frame_x = 160;
+                    frame_width = 32;
+                    break;
+                case 5:
+                default:
+                    frame_x = 192;
+                    frame_width = 32;
+                    break;
+            }
+            break;
+        case SonicAnimDamaged:
+            frame_y = CHARACTER_HEIGHT * 5;
+            frame_x = (3 + frame) * CHARACTER_WIDTH; // 3,4,5 columns
+            frame_width = CHARACTER_WIDTH;
+            if (chr->stun_timer <= 0)
+            {
+                chr->anim_mode = SonicAnimIdle;
+                chr->sonic_anim_frame = 0;
+                chr->sonic_anim_ticks = 0;
+            }
+            break;
+        default:
+            frame_x = 0;
+            frame_y = 0;
+            frame_width = CHARACTER_WIDTH;
+            break;
+    }
+
+    int target_width = (mode == SonicAnimPunch || mode == SonicAnimDamaged) ? 48 : CHARACTER_WIDTH;
+    sonic_copy_sheet_frame_to_sprite(sprite_id, frame_x, frame_y, frame_width, target_width);
+}
+
+#define SONIC_LONG_FALL_MS 1000
 
 void sonic_running_animation_handling(void)
 {
-    character_running_animation_handling(&character_ref, &physics);
+    character_t *chr = &character_ref;
+
+    if (chr->life <= 0)
+        return;
+
+    if (chr->stun_timer > 0)
+    {
+        if (chr->anim_mode != SonicAnimDamaged)
+        {
+            chr->anim_mode = SonicAnimDamaged;
+            chr->sonic_anim_frame = 0;
+            chr->sonic_anim_ticks = 0;
+        }
+        return;
+    }
+
+    if (chr->punch || chr->punch2)
+    {
+        if (chr->anim_mode != SonicAnimPunch)
+        {
+            chr->anim_mode = SonicAnimPunch;
+            chr->sonic_anim_frame = 0;
+            chr->sonic_anim_ticks = 0;
+        }
+
+        if (chr->sonic_anim_frame >= SONIC_PUNCH_FRAMES - 1)
+        {
+            chr->punch = false;
+            chr->punch2 = false;
+            chr->punch2_requested = false;
+            chr->perform_punch2 = false;
+            chr->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+            chr->anim_mode = SonicAnimIdle;
+            chr->sonic_anim_frame = 0;
+            chr->sonic_anim_ticks = 0;
+        }
+        return;
+    }
+
+    if (physics.is_in_air)
+    {
+        chr->sonic_land_pending = false;
+
+        if (physics.speed_y < 0.0f)
+        {
+            if (chr->anim_mode != SonicAnimJump)
+            {
+                chr->anim_mode = SonicAnimJump;
+                chr->sonic_anim_frame = 0;
+                chr->sonic_anim_ticks = 0;
+            }
+            chr->sonic_fall_time_ms = 0;
+            return;
+        }
+
+        if (chr->anim_mode != SonicAnimFall)
+        {
+            chr->anim_mode = SonicAnimFall;
+            chr->sonic_anim_frame = 0;
+            chr->sonic_anim_ticks = 0;
+        }
+
+        chr->sonic_fall_time_ms += GAME_FRAME_MS;
+        return;
+    }
+
+    if (chr->sonic_land_pending)
+    {
+        if (character_has_movement_input_for_character(chr))
+        {
+            chr->sonic_land_pending = false;
+        }
+        else
+        {
+            if (chr->anim_mode != SonicAnimLand)
+            {
+                chr->anim_mode = SonicAnimLand;
+                chr->sonic_anim_frame = 0;
+                chr->sonic_anim_ticks = 0;
+            }
+            return;
+        }
+    }
+
+    if (chr->sonic_fall_time_ms >= SONIC_LONG_FALL_MS)
+    {
+        chr->sonic_land_pending = true;
+        chr->sonic_fall_time_ms = 0;
+        chr->anim_mode = SonicAnimLand;
+        chr->sonic_anim_frame = 0;
+        chr->sonic_anim_ticks = 0;
+        return;
+    }
+
+    chr->sonic_fall_time_ms = 0;
+
+    if (chr->walk && chr->run == 2)
+        chr->anim_mode = SonicAnimRun;
+    else if (chr->walk)
+        chr->anim_mode = SonicAnimWalk;
+    else
+        chr->anim_mode = SonicAnimIdle;
 }
 
 static void sonic_draw_for_character(character_t *chr)
 {
     if (!sonic_sheet_ready)
     {
-        // Legacy per-frame animation path.
-        if (chr->spin)
-        {
-            jo_sprite_draw3D_and_rotate2(chr->spin_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
-            if (chr->flip)
-                chr->angle -= CHARACTER_SPIN_SPEED;
-            else
-                chr->angle += CHARACTER_SPIN_SPEED;
-            return;
-        }
-
-        if (chr->life <= 0 && chr->defeated_sprite_id >= 0)
+        if (chr->defeated_sprite_id >= 0 && chr->life <= 0)
         {
             jo_sprite_draw3D2(chr->defeated_sprite_id,
                               chr->x,
                               chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
                               CHARACTER_SPRITE_Z);
-            return;
         }
-
-        if (chr->stun_timer > 0 && chr->damage_sprite_id >= 0)
-        {
-            jo_sprite_draw3D2(chr->damage_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-            return;
-        }
-
-        if (chr->punch || chr->punch2)
-        {
-            int anim_sprite_id = (chr->punch_anim_id >= 0) ? jo_get_anim_sprite(chr->punch_anim_id) : -1;
-            if (anim_sprite_id >= 0)
-                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-            return;
-        }
-
-        if (chr->kick || chr->kick2)
-        {
-            int anim_sprite_id = (chr->kick_anim_id >= 0) ? jo_get_anim_sprite(chr->kick_anim_id) : -1;
-            if (anim_sprite_id >= 0)
-                jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-            return;
-        }
-
-        if (chr->jump)
-        {
-            jo_sprite_draw3D2(chr->jump_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-            return;
-        }
-
-        int anim_sprite_id;
-        if (chr->walk && chr->run == 0)
-            anim_sprite_id = (chr->walking_anim_id >= 0) ? jo_get_anim_sprite(chr->walking_anim_id) : -1;
-        else if (chr->walk && chr->run == 1)
-            anim_sprite_id = (chr->running1_anim_id >= 0) ? jo_get_anim_sprite(chr->running1_anim_id) : -1;
-        else if (chr->walk && chr->run == 2)
-            anim_sprite_id = (chr->running2_anim_id >= 0) ? jo_get_anim_sprite(chr->running2_anim_id) : -1;
-        else
-            anim_sprite_id = (chr->stand_sprite_id >= 0) ? jo_get_anim_sprite(chr->stand_sprite_id) : -1;
-
-        if (anim_sprite_id >= 0)
-            jo_sprite_draw3D2(anim_sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
         return;
     }
 
-    if (character_draw_defeated(chr, sonic_ensure_defeated_wram_sprite(chr), &sonic_defeated_sheet, DEFEATED_SPRITE_WIDTH, DEFEATED_SPRITE_HEIGHT))
+    if (chr->life <= 0)
+    {
+        if (chr->defeated_wram_sprite_id >= 0)
+            jo_sprite_draw3D2(chr->defeated_wram_sprite_id,
+                              chr->x,
+                              chr->y + (CHARACTER_HEIGHT - DEFEATED_SPRITE_HEIGHT),
+                              CHARACTER_SPRITE_Z);
         return;
+    }
 
-    int sprite_id = sonic_ensure_wram_sprite(chr);
+    int sprite_id;
+    if (chr->anim_mode == SonicAnimPunch)
+        sprite_id = sonic_ensure_punch_wram_sprite(chr);
+    else if (chr->anim_mode == SonicAnimDamaged)
+        sprite_id = sonic_ensure_damaged_wram_sprite(chr);
+    else
+        sprite_id = sonic_ensure_wram_sprite(chr);
+
     if (sprite_id < 0)
         return;
 
-    if (character_draw_sheet_frame(chr, sprite_id, &sonic_sheet))
-        return;
+    sonic_render_current_frame_for(chr, sprite_id);
 
-    if (chr->spin)
+    int draw_x = chr->x;
+    if (chr->flip && chr->anim_mode == SonicAnimPunch &&
+        (chr->sonic_anim_frame >= 0 || chr->sonic_anim_frame < 6))
     {
-        jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
-        if (chr->flip)
-            chr->angle -= CHARACTER_SPIN_SPEED;
-        else
-            chr->angle += CHARACTER_SPIN_SPEED;
+        draw_x -= 16;
+    }else{
+        draw_x = chr->x;
     }
-    else
-    {
-        jo_sprite_draw3D2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
-    }
+
+    jo_sprite_draw3D2(sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
 }
 
 void sonic_draw(character_t *chr)
@@ -380,72 +502,67 @@ void display_sonic(void)
     if (character_ref.flip)
         jo_sprite_enable_horizontal_flip();
 
-    // Use the generic draw path so it also works for P2 / bots if needed.
     sonic_draw_for_character(&character_ref);
 
     if (character_ref.flip)
         jo_sprite_disable_horizontal_flip();
+}
 
-    int life_percent = (character_ref.life * 100) / 50;
-    int bar_max_width = 20;
-    int bar_width = (life_percent * bar_max_width) / 100;
-    char bar[bar_max_width + 1];
-    for (int i = 0; i < bar_max_width; ++i)
-        bar[i] = (i < bar_width) ? '#' : '-';
-    bar[bar_max_width] = '\0';
-    // jo_printf(1, 26, "P1 : [%s] %d%%", bar, life_percent); // debug life bar (temporário)
+void sonic_set_current(character_t *chr, jo_sidescroller_physics_params *phy)
+{
+    if (chr != JO_NULL)
+        sonic_ref = chr;
+    if (phy != JO_NULL)
+        sonic_physics = phy;
 }
 
 void load_sonic(void)
 {
     if (!sonic_loaded)
     {
-        // Load the combined sheet into WRAM so we can copy frames on demand.
         if (!sonic_sheet_ready)
-            sonic_sheet_ready = character_load_sheet(&sonic_sheet, "SNC_FUL.TGA", SPRITE_DIR, JO_COLOR_Green);
+        {
+            jo_img sheet = {0};
+            if (character_load_sheet(&sheet, "SNC_FUL.TGA", SPRITE_DIR, JO_COLOR_Green))
+            {
+                sonic_sheet_width = sheet.width;
+                sonic_sheet_height = sheet.height;
+                if (ram_cart_store_sprite("SNC_FUL", sheet.data, (size_t)sheet.width * (size_t)sheet.height * sizeof(unsigned short)))
+                {
+                    sonic_sheet_ready = true;
+                    sonic_use_cart_ram = true;
+                    sonic_sheet_img = sheet; // keep sheet loaded for frame padding operations
+                }
+                else
+                {
+                    sonic_sheet_ready = true;
+                    sonic_use_cart_ram = false;
+                    sonic_sheet_img = sheet;
+                }
+            }
+        }
 
-        // Load defeated sprite sheet into WRAM so it can also be copied on demand.
-        if (!sonic_defeated_sheet_ready)
-            sonic_defeated_sheet_ready = character_load_sheet(&sonic_defeated_sheet, "SNC_DFT.TGA", SPRITE_DIR, JO_COLOR_Green);
-
-        // Create a single VRAM sprite that will be updated each frame.
         if (sonic_sprite_id < 0)
             sonic_sprite_id = character_create_blank_sprite();
 
-        /* Use the global sprite as the base WRAM sprite for this character; P2/bots
-         * will allocate their own WRAM sprite as needed. */
-        character_ref.wram_sprite_id = sonic_sprite_id;
+        if (sonic_punch_sprite_id < 0)
+            sonic_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
-        // Dummy animation objects (used only for timing / combo logic).
-        if (sprite_safe_can_create_anim())
-        {
-            sonic_stand_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicStandTiles)), JO_TILE_COUNT(SonicStandTiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_walking_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicWalkingTiles)), JO_TILE_COUNT(SonicWalkingTiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_running1_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning1Tiles)), JO_TILE_COUNT(SonicRunning1Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_running2_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicRunning2Tiles)), JO_TILE_COUNT(SonicRunning2Tiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_punch_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicPunchTiles)), JO_TILE_COUNT(SonicPunchTiles), DEFAULT_SPRITE_FRAME_DURATION);
-            sonic_kick_anim_id = sprite_safe_create_anim(sonic_create_blank_animation(JO_TILE_COUNT(SonicKickTiles)), JO_TILE_COUNT(SonicKickTiles), DEFAULT_SPRITE_FRAME_DURATION);
-        }
+        if (sonic_damaged_sprite_id < 0)
+            sonic_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
         sonic_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_DFT.TGA", JO_COLOR_Green, SonicDefeatedTile, JO_TILE_COUNT(SonicDefeatedTile));
 
         sonic_loaded = true;
     }
 
-    character_ref.walking_anim_id = sonic_walking_anim_id;
-    character_ref.running1_anim_id = sonic_running1_anim_id;
-    character_ref.running2_anim_id = sonic_running2_anim_id;
-    character_ref.stand_sprite_id = sonic_stand_anim_id;
-    character_ref.spin_sprite_id = sonic_sprite_id;
-    character_ref.jump_sprite_id = sonic_sprite_id;
-    character_ref.damage_sprite_id = sonic_sprite_id;
+    character_ref.wram_sprite_id = sonic_sprite_id;
+    character_ref.damage_sprite_id = sonic_damaged_sprite_id;
     character_ref.defeated_sprite_id = sonic_defeated_sprite_id;
-    character_ref.punch_anim_id = sonic_punch_anim_id;
-    character_ref.kick_anim_id = sonic_kick_anim_id;
+    character_ref.defeated_wram_sprite_id = -1;
+
     character_registry_apply_combat_profile(&character_ref, UiCharacterSonic);
 
-    // Always ensure this module has a valid physics context, even if it was
-    // cleared earlier during a character swap.
     sonic_physics = &physics;
     character_ref.charged_kick_hold_ms = 0;
     character_ref.charged_kick_ready = false;
@@ -457,8 +574,11 @@ void load_sonic(void)
     character_ref.hit_done_kick1 = false;
     character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
-
-    // Inicializa vida
+    character_ref.anim_mode = SonicAnimIdle;
+    character_ref.sonic_anim_frame = 0;
+    character_ref.sonic_anim_ticks = 0;
+    character_ref.sonic_fall_time_ms = 0;
+    character_ref.sonic_land_pending = false;
     character_ref.life = 50;
 }
 
@@ -467,33 +587,25 @@ void unload_sonic(void)
     if (!sonic_loaded)
         return;
 
-    if (sonic_walking_anim_id >= 0) jo_remove_sprite_anim(sonic_walking_anim_id);
-    if (sonic_running1_anim_id >= 0) jo_remove_sprite_anim(sonic_running1_anim_id);
-    if (sonic_running2_anim_id >= 0) jo_remove_sprite_anim(sonic_running2_anim_id);
-    if (sonic_stand_anim_id >= 0) jo_remove_sprite_anim(sonic_stand_anim_id);
-    if (sonic_punch_anim_id >= 0) jo_remove_sprite_anim(sonic_punch_anim_id);
-    if (sonic_kick_anim_id >= 0) jo_remove_sprite_anim(sonic_kick_anim_id);
-
     if (sonic_sheet_ready)
     {
-        character_unload_sheet(&sonic_sheet);
+        if (sonic_use_cart_ram)
+        {
+            ram_cart_delete_sprite("SNC_FUL");
+        }
+        else if (sonic_sheet_img.data != JO_NULL)
+        {
+            jo_free_img(&sonic_sheet_img);
+        }
+
         sonic_sheet_ready = false;
+        sonic_use_cart_ram = false;
+        sonic_sheet_width = 0;
+        sonic_sheet_height = 0;
     }
 
-    if (sonic_defeated_sheet_ready)
-    {
-        character_unload_sheet(&sonic_defeated_sheet);
-        sonic_defeated_sheet_ready = false;
-    }
-
-    sonic_stand_anim_id = -1;
-    sonic_walking_anim_id = -1;
-    sonic_running1_anim_id = -1;
-    sonic_running2_anim_id = -1;
-    sonic_punch_anim_id = -1;
-    sonic_kick_anim_id = -1;
     sonic_defeated_sprite_id = -1;
-
+    sonic_damaged_sprite_id = -1;
     sonic_sprite_id = -1;
     character_ref.wram_sprite_id = -1;
     sonic_loaded = false;

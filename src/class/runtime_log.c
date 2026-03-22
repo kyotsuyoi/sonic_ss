@@ -20,6 +20,9 @@ static char g_runtime_log_lines[RUNTIME_LOG_LINES][RUNTIME_LOG_LINE_SIZE];
 static int g_runtime_log_count = 0;
 static int g_runtime_log_next = 0;
 static int g_runtime_log_sprite_page = 0;
+static char g_cart_ram_log_lines[RUNTIME_LOG_LINES][RUNTIME_LOG_LINE_SIZE];
+static int g_cart_ram_log_count = 0;
+static int g_cart_ram_log_next = 0;
 
 static int runtime_log_compute_sprite_page_count(int pool_count)
 {
@@ -46,11 +49,11 @@ static void runtime_log_draw_sprite_stats(void)
         g_runtime_log_sprite_page = 0;
 
     jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 0, JO_COLOR_INDEX_White, "SPRITE LOGS %d/%d", g_runtime_log_sprite_page + 1, page_count);
-    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 1, JO_COLOR_INDEX_White, "REQUESTS: %u", stats.tile_requests);
-    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 2, JO_COLOR_INDEX_White, "MAPPED: %u", stats.tile_hits);
-    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 3, JO_COLOR_INDEX_White, "MISSES: %u", stats.tile_misses);
-    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 4, JO_COLOR_INDEX_White, "RESIDENTS: %u", stats.residents);
-    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 5, JO_COLOR_INDEX_White, "UPLOADS: %u", stats.tile_uploads);
+    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 1, JO_COLOR_INDEX_White, "REQUESTS: %lu", (unsigned long)stats.tile_requests);
+    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 2, JO_COLOR_INDEX_White, "MAPPED: %lu", (unsigned long)stats.tile_hits);
+    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 3, JO_COLOR_INDEX_White, "MISSES: %lu", (unsigned long)stats.tile_misses);
+    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 4, JO_COLOR_INDEX_White, "RESIDENTS: %lu", (unsigned long)stats.residents);
+    jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 5, JO_COLOR_INDEX_White, "UPLOADS: %lu", (unsigned long)stats.tile_uploads);
     jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 6, JO_COLOR_INDEX_White, "POOL SLOTS: %d/%d", pool_stats.used_slots, pool_stats.total_slots);
     jo_printf_with_color(RUNTIME_LOG_SPRITE_X, RUNTIME_LOG_SPRITE_Y + 7, JO_COLOR_INDEX_White, "POOL VRAM: %u KB", (unsigned)(pool_stats.reserved_bytes / 1024ULL));
 
@@ -97,8 +100,13 @@ void runtime_log_init(void)
 
     g_runtime_log_count = 0;
     g_runtime_log_next = 0;
+    g_cart_ram_log_count = 0;
+    g_cart_ram_log_next = 0;
     for (i = 0; i < RUNTIME_LOG_LINES; ++i)
+    {
         g_runtime_log_lines[i][0] = '\0';
+        g_cart_ram_log_lines[i][0] = '\0';
+    }
 
     if (g_runtime_log_mode == RuntimeLogModeSystem)
         runtime_log("runtime log ready");
@@ -115,7 +123,13 @@ void runtime_log_set_mode(runtime_log_mode_t mode)
         mode = RuntimeLogModeOff;
 
     if (g_runtime_log_mode != mode)
-        runtime_log_clear();
+    {
+        if (mode == RuntimeLogModeOff)
+        {
+            runtime_log_clear();
+            cart_ram_log_clear();
+        }
+    }
 
     g_runtime_log_mode = mode;
     if (g_runtime_log_mode != RuntimeLogModeSprite)
@@ -130,6 +144,10 @@ void runtime_log_set_mode(runtime_log_mode_t mode)
     {
         g_runtime_log_verbose_enabled = true;
         runtime_log("runtime log enabled (verbose)");
+    }
+    else if (g_runtime_log_mode == RuntimeLogModeCartRam)
+    {
+        g_runtime_log_verbose_enabled = false;
     }
 }
 
@@ -169,17 +187,36 @@ void runtime_log_draw(int x, int y)
     int first_index;
     int i;
 
-    if (g_runtime_log_mode == RuntimeLogModeOff)
-        return;
-
     if (y < 2)
         y = 2;
 
-    for (i = 0; i < RUNTIME_LOG_LINES; ++i)
-        jo_printf_with_color(x, y + i, JO_COLOR_INDEX_White, "%s", g_runtime_log_blank_line);
+    if (g_runtime_log_mode == RuntimeLogModeOff)
+        return;
+
+    if (g_runtime_log_mode == RuntimeLogModeCartRam)
+    {
+        int cart_visible_count = g_cart_ram_log_count;
+        int cart_first_index;
+
+        if (cart_visible_count <= 0)
+            return;
+
+        for (i = 0; i < RUNTIME_LOG_LINES; ++i)
+            jo_printf_with_color(x, y + i, JO_COLOR_INDEX_White, "%s", g_runtime_log_blank_line);
+
+        cart_first_index = g_cart_ram_log_count < RUNTIME_LOG_LINES ? 0 : g_cart_ram_log_next;
+        for (i = 0; i < cart_visible_count; ++i)
+        {
+            int line_index = (cart_first_index + i) % RUNTIME_LOG_LINES;
+            jo_printf_with_color(x, y + i, JO_COLOR_INDEX_White, "%s", g_cart_ram_log_lines[line_index]);
+        }
+        return;
+    }
 
     if (g_runtime_log_mode == RuntimeLogModeSprite)
     {
+        for (i = 0; i < RUNTIME_LOG_LINES; ++i)
+            jo_printf_with_color(x, y + i, JO_COLOR_INDEX_White, "%s", g_runtime_log_blank_line);
         runtime_log_draw_sprite_stats();
         return;
     }
@@ -187,6 +224,9 @@ void runtime_log_draw(int x, int y)
     visible_count = g_runtime_log_count;
     if (visible_count <= 0)
         return;
+
+    for (i = 0; i < RUNTIME_LOG_LINES; ++i)
+        jo_printf_with_color(x, y + i, JO_COLOR_INDEX_White, "%s", g_runtime_log_blank_line);
 
     first_index = g_runtime_log_count < RUNTIME_LOG_LINES ? 0 : g_runtime_log_next;
     for (i = 0; i < visible_count; ++i) {
@@ -203,6 +243,16 @@ void runtime_log_clear(void)
     g_runtime_log_next = 0;
     for (i = 0; i < RUNTIME_LOG_LINES; ++i)
         g_runtime_log_lines[i][0] = '\0';
+}
+
+void cart_ram_log_clear(void)
+{
+    int i;
+
+    g_cart_ram_log_count = 0;
+    g_cart_ram_log_next = 0;
+    for (i = 0; i < RUNTIME_LOG_LINES; ++i)
+        g_cart_ram_log_lines[i][0] = '\0';
 }
 
 void runtime_log(const char *fmt, ...)
@@ -239,6 +289,21 @@ void runtime_log_verbose(const char *fmt, ...)
     g_runtime_log_next = (g_runtime_log_next + 1) % RUNTIME_LOG_LINES;
     if (g_runtime_log_count < RUNTIME_LOG_LINES)
         ++g_runtime_log_count;
+}
+
+void cart_ram_log(const char *fmt, ...)
+{
+    int line_index;
+    va_list ap;
+
+    line_index = g_cart_ram_log_next;
+    va_start(ap, fmt);
+    vsnprintf(g_cart_ram_log_lines[line_index], RUNTIME_LOG_LINE_SIZE, fmt, ap);
+    va_end(ap);
+
+    g_cart_ram_log_next = (g_cart_ram_log_next + 1) % RUNTIME_LOG_LINES;
+    if (g_cart_ram_log_count < RUNTIME_LOG_LINES)
+        ++g_cart_ram_log_count;
 }
 
 void runtime_log_close(void)

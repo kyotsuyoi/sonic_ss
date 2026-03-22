@@ -39,6 +39,7 @@ character_action_status_t character_update_cooldowns(character_t *character, int
 #include "character/sonic.h"
 #include "character/amy.h"
 #include "character/knuckles.h"
+#include "character/shadow.h"
 
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_LIGHT 0.60f
 #define DEFAULT_ATTACK_FORWARD_IMPULSE_HEAVY 1.10f
@@ -148,6 +149,11 @@ static void player_instance_reset_runtime(player_instance_t *inst, int *map_pos_
     inst->prev_punch2 = false;
     inst->prev_kick = false;
     inst->prev_kick2 = false;
+    inst->character->landed = false;
+    inst->character->was_in_air = false;
+    inst->character->anim_mode = 0;
+    inst->character->knuckles_anim_frame = 0;
+    inst->character->knuckles_anim_ticks = 0;
     player_reset_tail_state(inst->character);
 
     /* Use the current character screen position (set by reset_fight), not an offset from others. */
@@ -698,6 +704,12 @@ void player_handle_command_inputs(jo_sidescroller_physics_params *physics,
 	// 	debug_input_frames--;
 	// 	jo_printf(1, 19, "INP L=%d R=%d B=%d A=%d C=%d", left_pressed ? 1 : 0, right_pressed ? 1 : 0, b_down ? 1 : 0, a_down ? 1 : 0, c_down ? 1 : 0);
 	// }
+
+	if (left_pressed || right_pressed || spin_pressed || b_pressed || b_down || a_down || c_down || c_hold)
+	{
+		controlled_player->landed = false;
+	}
+
 	if (physics->is_in_air)
 	{
 		if (left_pressed)
@@ -811,21 +823,17 @@ void player_update_punch_state(character_t *controlled_player,
 	anim_frame = jo_get_sprite_anim_frame(controlled_player->punch_anim_id);
 	anim_stopped = jo_is_sprite_anim_stopped(controlled_player->punch_anim_id);
 
-	/* DEBUG: punch state timers */
-	if (g_show_attack_debug)
+	/* DEBUG: punch state timers (Sonic/Knuckles only) */
+	if (g_show_attack_debug &&
+		(controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_KNUCKLES))
 	{
-		if (controlled_player == &player)
-		{
-			jo_printf(1, 9, "P1 PNCH f=%d t1=%d t2=%d", anim_frame,
-				controlled_player->punch_stage1_ticks,
-				controlled_player->punch_stage2_ticks);
-		}
-		else if (controlled_player == &player2)
-		{
-			jo_printf(1, 10, "P2 PNCH f=%d t1=%d t2=%d", anim_frame,
-				controlled_player->punch_stage1_ticks,
-				controlled_player->punch_stage2_ticks);
-		}
+		const char *label = (controlled_player == &player) ? "P1" : "P2";
+		int y = (controlled_player == &player) ? 9 : 10;
+		jo_printf(1, y, "%s ATK mode=%d frame=%d p=%d p2=%d", label,
+			controlled_player->anim_mode,
+			controlled_player->knuckles_anim_frame,
+			controlled_player->punch ? 1 : 0,
+			controlled_player->punch2 ? 1 : 0);
 	}
 
 	/* Punch flow owns the attack slot; clear any stale kick state to avoid
@@ -980,12 +988,19 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 	if (controlled_player == JO_NULL)
 		return;
 
-	// Sonic/Amy/Tails use 8-frame punch sheets (4 frames punch1 + 4 frames punch2)
+	// Sonic/Knuckles use 6-frame punch path (punch row 6 on sheet)
 	if (controlled_player->character_id == CHARACTER_ID_SONIC ||
-		controlled_player->character_id == CHARACTER_ID_AMY ||
+		controlled_player->character_id == CHARACTER_ID_KNUCKLES)
+	{
+		/* punch frames 0-4 (hit on frame 4), last frame 5 = return to idle */
+		player_update_punch_state(controlled_player, 4, 4, 5, 5, false, true, true);
+		return;
+	}
+
+	// Sonic/Amy/Tails legacy 8-frame punch (4+4)
+	if (controlled_player->character_id == CHARACTER_ID_AMY ||
 		controlled_player->character_id == CHARACTER_ID_TAILS)
 	{
-		/* stage1 frames 0-3, stage2 frames 4-7 (combo trigger at frame 3) */
 		player_update_punch_state(controlled_player, 3, 3, 4, 7, true, true, false);
 		return;
 	}
@@ -1014,6 +1029,7 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
     bool is_tails = (controlled_player->character_id == CHARACTER_ID_TAILS);
     bool is_sonic = (controlled_player->character_id == CHARACTER_ID_SONIC);
     bool is_amy = (controlled_player->character_id == CHARACTER_ID_AMY);
+	bool is_knuckles = (controlled_player->character_id == CHARACTER_ID_KNUCKLES);
 
     /* Tails-specific tail animation loop state */
     if (is_tails)
@@ -1042,7 +1058,6 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         sonic_set_current(controlled_player, physics);
         sonic_running_animation_handling();
         sonic_set_current(&player, NULL);
-        return;
     }
 
     if (is_amy)
@@ -1050,7 +1065,6 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         amy_set_current(controlled_player, physics);
         amy_running_animation_handling();
         amy_set_current(&player, NULL);
-        return;
     }
 
     if (is_tails)
@@ -1058,11 +1072,20 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
         tails_set_current(controlled_player, physics);
         tails_running_animation_handling();
         tails_set_current(&player, NULL);
-        return;
     }
 
+	if (is_knuckles)
+	{
+		knuckles_set_current(controlled_player, physics);
+		knuckles_running_animation_handling();
+		knuckles_set_current(&player, NULL);
+	}
+
     /* Generic walk/run/stand animation handling for remaining characters. */
-    if (jo_physics_is_standing(physics))
+	if (is_sonic || is_amy || is_tails || is_knuckles)
+		return;
+
+	if (jo_physics_is_standing(physics))
     {
         jo_reset_sprite_anim(controlled_player->running1_anim_id);
         jo_reset_sprite_anim(controlled_player->running2_anim_id);
@@ -1152,79 +1175,6 @@ void player_update_animation_state(character_t *controlled_player, jo_sidescroll
     /* Knuckles-specific flow removed from gameplay; fallback to common hit state. */
     player_update_punch_state_for_character(controlled_player);
     player_update_kick_state_for_character(controlled_player);
-
-    if (is_tails)
-    {
-        if (controlled_player->kick)
-        {
-            if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 180)
-            {
-                controlled_player->tails_kick_timer = 0;
-                controlled_player->tails_kick_duration = TAILS_KICK1_ROTATION_TIME;
-                controlled_player->tails_kick_total_degrees = 180;
-                controlled_player->tails_kick_rotation_active = true;
-            }
-
-            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
-                ++controlled_player->tails_kick_timer;
-
-            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
-            {
-                if (controlled_player->kick2_requested)
-                {
-                    controlled_player->kick = false;
-                    controlled_player->kick2 = true;
-                    controlled_player->kick2_requested = false;
-                    controlled_player->perform_kick2 = true;
-
-                    controlled_player->tails_kick_timer = 0;
-                    controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
-                    controlled_player->tails_kick_total_degrees = 360;
-                    controlled_player->tails_kick_rotation_active = true;
-                }
-                else
-                {
-                    controlled_player->kick = false;
-                    controlled_player->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-                    controlled_player->tails_kick_rotation_active = false;
-                }
-            }
-        }
-        else if (controlled_player->kick2)
-        {
-            if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 360)
-            {
-                controlled_player->tails_kick_timer = 0;
-                controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
-                controlled_player->tails_kick_total_degrees = 360;
-                controlled_player->tails_kick_rotation_active = true;
-            }
-
-            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
-                ++controlled_player->tails_kick_timer;
-
-            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
-            {
-                controlled_player->kick2 = false;
-                controlled_player->attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
-                controlled_player->tails_kick_rotation_active = false;
-            }
-        }
-        else if (controlled_player->tails_kick_rotation_active)
-        {
-            if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
-                ++controlled_player->tails_kick_timer;
-            if (controlled_player->tails_kick_timer >= controlled_player->tails_kick_duration)
-                controlled_player->tails_kick_rotation_active = false;
-        }
-
-        if (!controlled_player->tails_kick_rotation_active && !controlled_player->kick && !controlled_player->kick2)
-        {
-            controlled_player->tails_kick_timer = 0;
-            controlled_player->tails_kick_duration = 0;
-            controlled_player->tails_kick_total_degrees = 0;
-        }
-    }
 }
 
 bool player_should_draw_tail(const character_t *controlled_player)
@@ -1301,11 +1251,23 @@ void player_draw(character_t *controlled_player, jo_sidescroller_physics_params 
         sonic_draw(controlled_player);
         sonic_set_current(&player, NULL);
     }
-	    else if (controlled_player->character_id == CHARACTER_ID_TAILS)
+    else if (controlled_player->character_id == CHARACTER_ID_TAILS)
     {
         tails_set_current(controlled_player, physics);
         tails_draw(controlled_player);
         tails_set_current(&player, NULL);
+    }
+    else if (controlled_player->character_id == CHARACTER_ID_KNUCKLES)
+    {
+        knuckles_set_current(controlled_player, physics);
+        knuckles_draw(controlled_player);
+        knuckles_set_current(&player, NULL);
+    }
+    else if (controlled_player->character_id == CHARACTER_ID_SHADOW)
+    {
+        shadow_set_current(controlled_player, physics);
+        shadow_draw(controlled_player);
+        shadow_set_current(&player, NULL);
     }
     else
     {
@@ -1427,6 +1389,8 @@ void player_runtime_update(character_t *controlled_player,
         controlled_player->y = (int)*world_y - *map_pos_y;
         controlled_player->flip = false;
         controlled_player->can_jump = true;
+        controlled_player->landed = false;
+        controlled_player->was_in_air = false;
         if (controlled_player->life <= 0)
             controlled_player->life = 50;
 
@@ -1435,8 +1399,19 @@ void player_runtime_update(character_t *controlled_player,
         *initialized = true;
     }
 
-controlled_player->x = (int)*world_x - *map_pos_x;
-        controlled_player->y = (int)*world_y - *map_pos_y;
+    bool was_air = controlled_player->was_in_air;
+    bool now_air = physics->is_in_air;
+
+    if (was_air && !now_air)
+        controlled_player->landed = true;
+
+    if (now_air)
+        controlled_player->landed = false;
+
+    controlled_player->was_in_air = now_air;
+
+    controlled_player->x = (int)*world_x - *map_pos_x;
+    controlled_player->y = (int)*world_y - *map_pos_y;
 
         int world_pos_x = *map_pos_x;
         world_handle_character_collision(physics, controlled_player, &world_pos_x, *map_pos_y);
@@ -1540,6 +1515,75 @@ void player_update_kick_state(character_t *controlled_player,
 	if (controlled_player->kick_stage1_ticks > 0)
 		controlled_player->kick_stage1_ticks--;
 
+	bool is_tails = (controlled_player->character_id == CHARACTER_ID_TAILS);
+
+	if (is_tails && controlled_player->kick)
+	{
+		if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 180)
+		{
+			controlled_player->tails_kick_timer = 0;
+			controlled_player->tails_kick_duration = TAILS_KICK1_ROTATION_TIME;
+			controlled_player->tails_kick_total_degrees = 180;
+			controlled_player->tails_kick_rotation_active = true;
+		}
+
+		if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
+		{
+			++controlled_player->tails_kick_timer;
+			return;
+		}
+
+		if (controlled_player->kick2_requested)
+		{
+			controlled_player->kick = false;
+			controlled_player->kick2 = true;
+			controlled_player->kick2_requested = false;
+			controlled_player->perform_kick2 = true;
+
+			controlled_player->tails_kick_timer = 0;
+			controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
+			controlled_player->tails_kick_total_degrees = 360;
+			controlled_player->tails_kick_rotation_active = true;
+		}
+		else
+		{
+			controlled_player->kick = false;
+			controlled_player->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
+			controlled_player->tails_kick_rotation_active = false;
+		}
+		return;
+	}
+
+	if (is_tails && controlled_player->kick2)
+	{
+		if (!controlled_player->tails_kick_rotation_active || controlled_player->tails_kick_total_degrees != 360)
+		{
+			controlled_player->tails_kick_timer = 0;
+			controlled_player->tails_kick_duration = TAILS_KICK2_ROTATION_TIME;
+			controlled_player->tails_kick_total_degrees = 360;
+			controlled_player->tails_kick_rotation_active = true;
+		}
+
+		if (controlled_player->tails_kick_timer < controlled_player->tails_kick_duration)
+		{
+			++controlled_player->tails_kick_timer;
+			return;
+		}
+
+		controlled_player->kick2 = false;
+		controlled_player->attack_cooldown = ATTACK_COOLDOWN_KICK2_FRAMES;
+		controlled_player->tails_kick_rotation_active = false;
+		return;
+	}
+
+	if (is_tails && controlled_player->tails_kick_rotation_active && !controlled_player->kick && !controlled_player->kick2)
+	{
+		controlled_player->tails_kick_timer = 0;
+		controlled_player->tails_kick_duration = 0;
+		controlled_player->tails_kick_total_degrees = 0;
+		controlled_player->tails_kick_rotation_active = false;
+	}
+
 	if (controlled_player->kick)
 	{
 		/* stage1-specific handling */
@@ -1597,20 +1641,9 @@ void player_update_kick_state(character_t *controlled_player,
 				controlled_player->kick2_requested = false;
 				controlled_player->perform_kick2 = true;
 
-				/* For Sonic/Amy/Tails, stage2 is a full 4-frame animation (frames 4-7). */
-				if (controlled_player->character_id == CHARACTER_ID_SONIC || controlled_player->character_id == CHARACTER_ID_AMY || controlled_player->character_id == CHARACTER_ID_TAILS)
-				{
-					controlled_player->kick_stage2_ticks = 0;
-					jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
-					jo_start_sprite_anim(controlled_player->kick_anim_id);
-				}
-				else
-				{
-					/* set total ticks for stage2: two frames each lasting DEFAULT */
-					controlled_player->kick_stage2_ticks = DEFAULT_SPRITE_FRAME_DURATION * 2;
-					/* explicitly show first frame of stage2; do not start anim */
-					jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
-				}
+				controlled_player->kick_stage2_ticks = 0;
+				jo_set_sprite_anim_frame(controlled_player->kick_anim_id, kick_stage2_start_frame);
+				jo_start_sprite_anim(controlled_player->kick_anim_id);
 			}
 			else if (anim_frame >= kick_stage1_last_frame
 				&& (anim_stopped || finish_stage1_on_last_frame))
@@ -1651,6 +1684,12 @@ void player_update_kick_state(character_t *controlled_player,
 		controlled_player->kick2_requested = false;
 		controlled_player->attack_cooldown = ATTACK_COOLDOWN_PUNCH2_FRAMES;
 		jo_reset_sprite_anim(controlled_player->kick_anim_id);
+		return;
+	}
+
+	if (is_tails)
+	{
+		/* Tails kick2 is handled via tails-specific tail rotation state in player_update_animation_state */
 		return;
 	}
 

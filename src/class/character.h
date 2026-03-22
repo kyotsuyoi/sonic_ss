@@ -43,6 +43,8 @@ typedef struct
     bool spin;
     bool jump;
     bool falling;
+    bool landed;
+    bool was_in_air;
     bool punch;
     bool punch2;
     bool punch2_requested;
@@ -84,6 +86,13 @@ typedef struct
     int angle;
     int speed;
 
+    /* Sonic-specific flow state */
+    int anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
+    int sonic_anim_frame;
+    int sonic_anim_ticks;
+    int sonic_fall_time_ms;
+    bool sonic_land_pending;
+
     /* Tails-specific animation state (spin kick & tail loop). */
     int tails_kick_timer;
     int tails_kick_duration;
@@ -91,6 +100,12 @@ typedef struct
     bool tails_kick_rotation_active;
     int tail_frame;
     int tail_timer;
+
+    /* Knuckles-specific flow state */
+    int knuckles_anim_frame;
+    int knuckles_anim_ticks;
+    int knuckles_fall_time_ms;
+    bool knuckles_land_pending;
 
     int life;
     int group; /* 0 = no group, 1 = group1, 2 = group2 */

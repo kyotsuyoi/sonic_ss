@@ -4,24 +4,17 @@
 #include "character.h"
 #include "game_constants.h"
 
-# define KNUCKLES_WIDTH                    CHARACTER_WIDTH
-# define KNUCKLES_WIDTH_2                  CHARACTER_WIDTH_2
-# define KNUCKLES_HEIGHT                   CHARACTER_HEIGHT
-# define KNUCKLES_SPIN_SPEED               CHARACTER_SPIN_SPEED
-
-/* If knuckles almost touch the ground we allow the user to jump */
-# define KNUCKLES_JUMP_PER_PIXEL_TOLERANCE CHARACTER_JUMP_PER_PIXEL_TOLERANCE
+#define KNUCKLES_WIDTH  CHARACTER_WIDTH
+#define KNUCKLES_HEIGHT CHARACTER_HEIGHT
 
 typedef character_t knuckles_t;
 
+extern knuckles_t player;
+
 void knuckles_running_animation_handling(void);
+void knuckles_draw(character_t *chr);
 void display_knuckles(void);
 void knuckles_set_current(character_t *chr, jo_sidescroller_physics_params *phy);
-
-/* Parameterized variants for Player 2 / multi-character use. */
-void knuckles_update_animation_for(character_t *character, jo_sidescroller_physics_params *physics);
-void knuckles_display_for(character_t *character, jo_sidescroller_physics_params *physics);
-
 void load_knuckles(void);
 void unload_knuckles(void);
 

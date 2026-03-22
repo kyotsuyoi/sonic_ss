@@ -131,6 +131,41 @@ void character_copy_sheet_frame_to_sprite_with_size(int sprite_id, const jo_img 
     jo_free_img(&tmp);
 }
 
+bool character_copy_cart_sheet_frame_to_sprite(int sprite_id, const char *cart_name, int sheet_width, int sheet_height, int frame_x, int frame_y, int width, int height)
+{
+    if (cart_name == JO_NULL || width <= 0 || height <= 0 || sprite_id < 0)
+        return false;
+
+    return ram_cart_draw_frame(cart_name, sheet_width, sheet_height, frame_x, frame_y, width, height, sprite_id);
+}
+
+bool character_draw_cart_frame(character_t *chr, int sprite_id, const char *cart_name, int sheet_width, int sheet_height)
+{
+    if (chr == JO_NULL || sprite_id < 0 || cart_name == JO_NULL)
+        return false;
+
+    int row = 0;
+    int col = 0;
+    if (!character_get_sheet_frame_coords(chr, &row, &col))
+        return false;
+
+    if (!character_copy_cart_sheet_frame_to_sprite(sprite_id, cart_name, sheet_width, sheet_height, col * CHARACTER_WIDTH, row * CHARACTER_HEIGHT, CHARACTER_WIDTH, CHARACTER_HEIGHT))
+        return false;
+
+    if (chr->spin)
+    {
+        jo_sprite_draw3D_and_rotate2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z, chr->angle);
+        if (chr->flip)
+            chr->angle -= CHARACTER_SPIN_SPEED;
+        else
+            chr->angle += CHARACTER_SPIN_SPEED;
+        return true;
+    }
+
+    jo_sprite_draw3D2(sprite_id, chr->x, chr->y, CHARACTER_SPRITE_Z);
+    return true;
+}
+
 void character_copy_defeated_sheet_frame_to_sprite(int sprite_id, const jo_img *sheet, int defeated_width, int defeated_height)
 {
     if (sprite_id < 0 || sheet == JO_NULL || sheet->data == JO_NULL)
@@ -316,7 +351,7 @@ bool character_draw_defeated(character_t *chr, int sprite_id, const jo_img *shee
 
     int draw_x = chr->x - (defeated_width - CHARACTER_WIDTH) / 2;
     jo_sprite_draw3D2(defeated_sprite_id,
-                      draw_x,
+                      chr->x,
                       chr->y + (CHARACTER_HEIGHT - defeated_height),
                       CHARACTER_SPRITE_Z);
     return true;
