@@ -151,7 +151,11 @@ static void player_instance_reset_runtime(player_instance_t *inst, int *map_pos_
     inst->prev_kick2 = false;
     inst->character->landed = false;
     inst->character->was_in_air = false;
-    inst->character->anim_mode = 0;
+    /* leave generic player animation state out of this layer; use character-specific module state */
+    inst->character->sonic_anim_mode = 0;
+    inst->character->sonic_anim_frame = 0;
+    inst->character->sonic_anim_ticks = 0;
+    inst->character->knuckles_anim_mode = 0;
     inst->character->knuckles_anim_frame = 0;
     inst->character->knuckles_anim_ticks = 0;
     player_reset_tail_state(inst->character);
@@ -829,8 +833,14 @@ void player_update_punch_state(character_t *controlled_player,
 	{
 		const char *label = (controlled_player == &player) ? "P1" : "P2";
 		int y = (controlled_player == &player) ? 9 : 10;
+		int attack_mode = 0;
+		if (controlled_player->character_id == CHARACTER_ID_KNUCKLES)
+			attack_mode = controlled_player->knuckles_anim_mode;
+		else if (controlled_player->character_id == CHARACTER_ID_SONIC)
+			attack_mode = controlled_player->sonic_anim_mode;
+
 		jo_printf(1, y, "%s ATK mode=%d frame=%d p=%d p2=%d", label,
-			controlled_player->anim_mode,
+			attack_mode,
 			controlled_player->knuckles_anim_frame,
 			controlled_player->punch ? 1 : 0,
 			controlled_player->punch2 ? 1 : 0);
@@ -993,7 +1003,8 @@ void player_update_punch_state_for_character(character_t *controlled_player)
 		controlled_player->character_id == CHARACTER_ID_KNUCKLES)
 	{
 		/* punch frames 0-4 (hit on frame 4), last frame 5 = return to idle */
-		player_update_punch_state(controlled_player, 4, 4, 5, 5, false, true, true);
+		/* keep punch true through frame 5, so hit logic for frame 4 executes */
+		player_update_punch_state(controlled_player, 4, 5, 5, 5, false, true, true);
 		return;
 	}
 

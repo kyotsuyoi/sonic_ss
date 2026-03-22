@@ -44,7 +44,7 @@ Available features:
 
 - 7 char
 
-Available characters (v0.1.X):
+Available characters (v0.2.X):
 
 - Sonic — NOK
 - Amy — NOK

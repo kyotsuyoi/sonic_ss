@@ -119,6 +119,8 @@ static bool game_loop_attack_reached_hit_frame(const character_t *attacker, int 
         && (attacker->punch || attacker->punch2))
     {
         // hit should happen at frame 4 (0-based) and then fight finishes at frame 5
+        if (attacker->character_id == CHARACTER_ID_SONIC)
+            return attacker->sonic_anim_frame >= 4;
         return attacker->knuckles_anim_frame >= 4;
     }
 

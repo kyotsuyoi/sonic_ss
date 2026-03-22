@@ -87,7 +87,7 @@ typedef struct
     int speed;
 
     /* Sonic-specific flow state */
-    int anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
+    int sonic_anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
     int sonic_anim_frame;
     int sonic_anim_ticks;
     int sonic_fall_time_ms;
@@ -102,6 +102,7 @@ typedef struct
     int tail_timer;
 
     /* Knuckles-specific flow state */
+    int knuckles_anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
     int knuckles_anim_frame;
     int knuckles_anim_ticks;
     int knuckles_fall_time_ms;

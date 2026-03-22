@@ -49,7 +49,7 @@ typedef enum
     KnucklesAnimLand,
     KnucklesAnimPunch,
     KnucklesAnimDamaged
-} anim_mode_t;
+} knuckles_anim_mode_t;
 
 static const jo_tile KnucklesDefeatedTile[] =
 {
@@ -183,9 +183,9 @@ static int knuckles_calc_frame(character_t *chr, int mode)
             break;
     }
 
-    if (chr->anim_mode != mode)
+    if (chr->knuckles_anim_mode != mode)
     {
-        chr->anim_mode = mode;
+        chr->knuckles_anim_mode = mode;
         chr->knuckles_anim_frame = 0;
         chr->knuckles_anim_ticks = 0;
     }
@@ -210,7 +210,7 @@ static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
     if (chr->life <= 0)
         return;
 
-    int mode = chr->anim_mode;
+    int mode = chr->knuckles_anim_mode;
     if (mode < KnucklesAnimIdle || mode > KnucklesAnimDamaged)
         mode = KnucklesAnimIdle;
 
@@ -254,7 +254,7 @@ static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
             if (chr->landed && knuckles_has_movement_input(chr))
             {
                 chr->landed = false;
-                chr->anim_mode = KnucklesAnimIdle;
+                chr->knuckles_anim_mode = KnucklesAnimIdle;
             }
             break;
         case KnucklesAnimPunch:
@@ -294,7 +294,7 @@ static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
             frame_width = CHARACTER_WIDTH;
             if (chr->stun_timer <= 0)
             {
-                chr->anim_mode = KnucklesAnimIdle;
+                chr->knuckles_anim_mode = KnucklesAnimIdle;
                 chr->knuckles_anim_frame = 0;
                 chr->knuckles_anim_ticks = 0;
             }
@@ -340,9 +340,9 @@ void knuckles_running_animation_handling(void)
 
     if (chr->stun_timer > 0)
     {
-        if (chr->anim_mode != KnucklesAnimDamaged)
+        if (chr->knuckles_anim_mode != KnucklesAnimDamaged)
         {
-            chr->anim_mode = KnucklesAnimDamaged;
+            chr->knuckles_anim_mode = KnucklesAnimDamaged;
             chr->knuckles_anim_frame = 0;
             chr->knuckles_anim_ticks = 0;
         }
@@ -351,9 +351,9 @@ void knuckles_running_animation_handling(void)
 
     if (chr->punch || chr->punch2)
     {
-        if (chr->anim_mode != KnucklesAnimPunch)
+        if (chr->knuckles_anim_mode != KnucklesAnimPunch)
         {
-            chr->anim_mode = KnucklesAnimPunch;
+            chr->knuckles_anim_mode = KnucklesAnimPunch;
             chr->knuckles_anim_frame = 0;
             chr->knuckles_anim_ticks = 0;
         }
@@ -365,7 +365,7 @@ void knuckles_running_animation_handling(void)
             chr->punch2_requested = false;
             chr->perform_kick2 = false;
             chr->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-            chr->anim_mode = KnucklesAnimIdle;
+            chr->knuckles_anim_mode = KnucklesAnimIdle;
             chr->knuckles_anim_frame = 0;
             chr->knuckles_anim_ticks = 0;
         }
@@ -378,9 +378,9 @@ void knuckles_running_animation_handling(void)
 
         if (physics.speed_y < 0.0f)
         {
-            if (chr->anim_mode != KnucklesAnimJump)
+            if (chr->knuckles_anim_mode != KnucklesAnimJump)
             {
-                chr->anim_mode = KnucklesAnimJump;
+                chr->knuckles_anim_mode = KnucklesAnimJump;
                 chr->knuckles_anim_frame = 0;
                 chr->knuckles_anim_ticks = 0;
             }
@@ -389,9 +389,9 @@ void knuckles_running_animation_handling(void)
         }
 
         // Furthest downward state: Fall.
-        if (chr->anim_mode != KnucklesAnimFall)
+        if (chr->knuckles_anim_mode != KnucklesAnimFall)
         {
-            chr->anim_mode = KnucklesAnimFall;
+            chr->knuckles_anim_mode = KnucklesAnimFall;
             chr->knuckles_anim_frame = 0;
             chr->knuckles_anim_ticks = 0;
         }
@@ -408,9 +408,9 @@ void knuckles_running_animation_handling(void)
         }
         else
         {
-            if (chr->anim_mode != KnucklesAnimLand)
+            if (chr->knuckles_anim_mode != KnucklesAnimLand)
             {
-                chr->anim_mode = KnucklesAnimLand;
+                chr->knuckles_anim_mode = KnucklesAnimLand;
                 chr->knuckles_anim_frame = 0;
                 chr->knuckles_anim_ticks = 0;
             }
@@ -422,7 +422,7 @@ void knuckles_running_animation_handling(void)
     {
         chr->knuckles_land_pending = true;
         chr->knuckles_fall_time_ms = 0;
-        chr->anim_mode = KnucklesAnimLand;
+        chr->knuckles_anim_mode = KnucklesAnimLand;
         chr->knuckles_anim_frame = 0;
         chr->knuckles_anim_ticks = 0;
         return;
@@ -431,11 +431,11 @@ void knuckles_running_animation_handling(void)
     chr->knuckles_fall_time_ms = 0;
 
     if (chr->walk && chr->run == 2)
-        chr->anim_mode = KnucklesAnimRun;
+        chr->knuckles_anim_mode = KnucklesAnimRun;
     else if (chr->walk)
-        chr->anim_mode = KnucklesAnimWalk;
+        chr->knuckles_anim_mode = KnucklesAnimWalk;
     else
-        chr->anim_mode = KnucklesAnimIdle;
+        chr->knuckles_anim_mode = KnucklesAnimIdle;
 }
 
 static void knuckles_draw_for_character(character_t *chr)
@@ -464,9 +464,9 @@ static void knuckles_draw_for_character(character_t *chr)
     }
 
     int sprite_id;
-    if (chr->anim_mode == KnucklesAnimPunch)
+    if (chr->knuckles_anim_mode == KnucklesAnimPunch)
         sprite_id = knuckles_ensure_punch_wram_sprite(chr);
-    else if (chr->anim_mode == KnucklesAnimDamaged)
+    else if (chr->knuckles_anim_mode == KnucklesAnimDamaged)
         sprite_id = knuckles_ensure_damaged_wram_sprite(chr);
     else
         sprite_id = knuckles_ensure_wram_sprite(chr);
@@ -477,7 +477,7 @@ static void knuckles_draw_for_character(character_t *chr)
     knuckles_render_current_frame_for(chr, sprite_id);
 
     int draw_x = chr->x;
-    if (chr->flip && chr->anim_mode == KnucklesAnimPunch &&
+    if (chr->flip && chr->knuckles_anim_mode == KnucklesAnimPunch &&
         (chr->knuckles_anim_frame >= 0 || chr->knuckles_anim_frame < 6))
     {
         draw_x -= 16;
@@ -577,7 +577,7 @@ void load_knuckles(void)
     character_ref.hit_done_kick1 = false;
     character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
-    character_ref.anim_mode = KnucklesAnimIdle;
+    character_ref.knuckles_anim_mode = KnucklesAnimIdle;
     character_ref.knuckles_anim_frame = 0;
     character_ref.knuckles_anim_ticks = 0;
     character_ref.knuckles_fall_time_ms = 0;

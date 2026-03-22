@@ -48,7 +48,7 @@ typedef enum
     SonicAnimLand,
     SonicAnimPunch,
     SonicAnimDamaged
-} anim_mode_t;
+} sonic_anim_mode_t;
 
 static const jo_tile SonicDefeatedTile[] =
 {
@@ -201,9 +201,9 @@ static int sonic_calc_frame(character_t *chr, int mode)
             break;
     }
 
-    if (chr->anim_mode != mode)
+    if (chr->sonic_anim_mode != mode)
     {
-        chr->anim_mode = mode;
+        chr->sonic_anim_mode = mode;
         chr->sonic_anim_frame = 0;
         chr->sonic_anim_ticks = 0;
     }
@@ -228,7 +228,7 @@ static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
     if (chr->life <= 0)
         return;
 
-    int mode = chr->anim_mode;
+    int mode = chr->sonic_anim_mode;
     if (mode < SonicAnimIdle || mode > SonicAnimDamaged)
         mode = SonicAnimIdle;
 
@@ -272,7 +272,7 @@ static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
             if (chr->landed && sonic_has_movement_input(chr))
             {
                 chr->landed = false;
-                chr->anim_mode = SonicAnimIdle;
+                chr->sonic_anim_mode = SonicAnimIdle;
             }
             break;
         case SonicAnimPunch:
@@ -312,7 +312,7 @@ static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
             frame_width = CHARACTER_WIDTH;
             if (chr->stun_timer <= 0)
             {
-                chr->anim_mode = SonicAnimIdle;
+                chr->sonic_anim_mode = SonicAnimIdle;
                 chr->sonic_anim_frame = 0;
                 chr->sonic_anim_ticks = 0;
             }
@@ -339,9 +339,9 @@ void sonic_running_animation_handling(void)
 
     if (chr->stun_timer > 0)
     {
-        if (chr->anim_mode != SonicAnimDamaged)
+        if (chr->sonic_anim_mode != SonicAnimDamaged)
         {
-            chr->anim_mode = SonicAnimDamaged;
+            chr->sonic_anim_mode = SonicAnimDamaged;
             chr->sonic_anim_frame = 0;
             chr->sonic_anim_ticks = 0;
         }
@@ -350,9 +350,9 @@ void sonic_running_animation_handling(void)
 
     if (chr->punch || chr->punch2)
     {
-        if (chr->anim_mode != SonicAnimPunch)
+        if (chr->sonic_anim_mode != SonicAnimPunch)
         {
-            chr->anim_mode = SonicAnimPunch;
+            chr->sonic_anim_mode = SonicAnimPunch;
             chr->sonic_anim_frame = 0;
             chr->sonic_anim_ticks = 0;
         }
@@ -364,7 +364,7 @@ void sonic_running_animation_handling(void)
             chr->punch2_requested = false;
             chr->perform_punch2 = false;
             chr->attack_cooldown = ATTACK_COOLDOWN_FRAMES;
-            chr->anim_mode = SonicAnimIdle;
+            chr->sonic_anim_mode = SonicAnimIdle;
             chr->sonic_anim_frame = 0;
             chr->sonic_anim_ticks = 0;
         }
@@ -377,9 +377,9 @@ void sonic_running_animation_handling(void)
 
         if (physics.speed_y < 0.0f)
         {
-            if (chr->anim_mode != SonicAnimJump)
+            if (chr->sonic_anim_mode != SonicAnimJump)
             {
-                chr->anim_mode = SonicAnimJump;
+                chr->sonic_anim_mode = SonicAnimJump;
                 chr->sonic_anim_frame = 0;
                 chr->sonic_anim_ticks = 0;
             }
@@ -387,9 +387,9 @@ void sonic_running_animation_handling(void)
             return;
         }
 
-        if (chr->anim_mode != SonicAnimFall)
+        if (chr->sonic_anim_mode != SonicAnimFall)
         {
-            chr->anim_mode = SonicAnimFall;
+            chr->sonic_anim_mode = SonicAnimFall;
             chr->sonic_anim_frame = 0;
             chr->sonic_anim_ticks = 0;
         }
@@ -406,9 +406,9 @@ void sonic_running_animation_handling(void)
         }
         else
         {
-            if (chr->anim_mode != SonicAnimLand)
+            if (chr->sonic_anim_mode != SonicAnimLand)
             {
-                chr->anim_mode = SonicAnimLand;
+                chr->sonic_anim_mode = SonicAnimLand;
                 chr->sonic_anim_frame = 0;
                 chr->sonic_anim_ticks = 0;
             }
@@ -420,7 +420,7 @@ void sonic_running_animation_handling(void)
     {
         chr->sonic_land_pending = true;
         chr->sonic_fall_time_ms = 0;
-        chr->anim_mode = SonicAnimLand;
+        chr->sonic_anim_mode = SonicAnimLand;
         chr->sonic_anim_frame = 0;
         chr->sonic_anim_ticks = 0;
         return;
@@ -429,11 +429,11 @@ void sonic_running_animation_handling(void)
     chr->sonic_fall_time_ms = 0;
 
     if (chr->walk && chr->run == 2)
-        chr->anim_mode = SonicAnimRun;
+        chr->sonic_anim_mode = SonicAnimRun;
     else if (chr->walk)
-        chr->anim_mode = SonicAnimWalk;
+        chr->sonic_anim_mode = SonicAnimWalk;
     else
-        chr->anim_mode = SonicAnimIdle;
+        chr->sonic_anim_mode = SonicAnimIdle;
 }
 
 static void sonic_draw_for_character(character_t *chr)
@@ -461,9 +461,9 @@ static void sonic_draw_for_character(character_t *chr)
     }
 
     int sprite_id;
-    if (chr->anim_mode == SonicAnimPunch)
+    if (chr->sonic_anim_mode == SonicAnimPunch)
         sprite_id = sonic_ensure_punch_wram_sprite(chr);
-    else if (chr->anim_mode == SonicAnimDamaged)
+    else if (chr->sonic_anim_mode == SonicAnimDamaged)
         sprite_id = sonic_ensure_damaged_wram_sprite(chr);
     else
         sprite_id = sonic_ensure_wram_sprite(chr);
@@ -474,7 +474,7 @@ static void sonic_draw_for_character(character_t *chr)
     sonic_render_current_frame_for(chr, sprite_id);
 
     int draw_x = chr->x;
-    if (chr->flip && chr->anim_mode == SonicAnimPunch &&
+    if (chr->flip && chr->sonic_anim_mode == SonicAnimPunch &&
         (chr->sonic_anim_frame >= 0 || chr->sonic_anim_frame < 6))
     {
         draw_x -= 16;
@@ -574,7 +574,7 @@ void load_sonic(void)
     character_ref.hit_done_kick1 = false;
     character_ref.hit_done_kick2 = false;
     character_ref.attack_cooldown = 0;
-    character_ref.anim_mode = SonicAnimIdle;
+    character_ref.sonic_anim_mode = SonicAnimIdle;
     character_ref.sonic_anim_frame = 0;
     character_ref.sonic_anim_ticks = 0;
     character_ref.sonic_fall_time_ms = 0;
