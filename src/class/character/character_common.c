@@ -686,6 +686,10 @@ void character_get_frame_coords(character_t *chr,
                 {
                     chr->amy_anim_mode = CHARACTER_ANIM_IDLE;
                 }
+                else if (chr->character_id == CHARACTER_ID_TAILS)
+                {
+                    chr->tails_anim_mode = CHARACTER_ANIM_IDLE;
+                }
             }
             break;
         case CHARACTER_ANIM_PUNCH:
@@ -746,6 +750,12 @@ void character_get_frame_coords(character_t *chr,
                     chr->amy_anim_mode = CHARACTER_ANIM_IDLE;
                     chr->amy_anim_frame = 0;
                     chr->amy_anim_ticks = 0;
+                }
+                else if (chr->character_id == CHARACTER_ID_TAILS)
+                {
+                    chr->tails_anim_mode = CHARACTER_ANIM_IDLE;
+                    chr->tails_anim_frame = 0;
+                    chr->tails_anim_ticks = 0;
                 }
             }
             return;

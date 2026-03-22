@@ -3,7 +3,7 @@
 
 #include <jo/jo.h>
 
-#define ATTACK_COOLDOWN_FRAMES (15)
+#define ATTACK_COOLDOWN_FRAMES (4)
 #define ATTACK_COOLDOWN_PUNCH2_FRAMES (21)
 #define ATTACK_COOLDOWN_KICK2_FRAMES (23)
 
@@ -102,6 +102,13 @@ typedef struct
     bool tails_kick_rotation_active;
     int tail_frame;
     int tail_timer;
+
+    /* Tails-specific flow state */
+    int tails_anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */
+    int tails_anim_frame;
+    int tails_anim_ticks;
+    int tails_fall_time_ms;
+    bool tails_land_pending;
 
     /* Knuckles-specific flow state */
     int knuckles_anim_mode; /* 0=idle,1=walk,2=run,3=jump,4=fall,5=land */

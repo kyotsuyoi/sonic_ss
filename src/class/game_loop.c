@@ -113,15 +113,23 @@ static int game_loop_last_frame_for_attack(const character_t *attacker, int atta
 
 static bool game_loop_attack_reached_hit_frame(const character_t *attacker, int attack_kind)
 {
-    // Custom Sonic/Knuckles punch timing (new 6-frame punch row path)
-    if ((attacker->character_id == CHARACTER_ID_SONIC || attacker->character_id == CHARACTER_ID_KNUCKLES)
+    // Custom Sonic/Amy/Knuckles/Tails punch timing (new 6-frame punch row path)
+    if ((attacker->character_id == CHARACTER_ID_SONIC || 
+        attacker->character_id == CHARACTER_ID_KNUCKLES || 
+        attacker->character_id == CHARACTER_ID_AMY || 
+        attacker->character_id == CHARACTER_ID_TAILS)
         && (attack_kind == 0 || attack_kind == 1)
         && (attacker->punch || attacker->punch2))
     {
         // hit should happen at frame 4 (0-based) and then fight finishes at frame 5
         if (attacker->character_id == CHARACTER_ID_SONIC)
             return attacker->sonic_anim_frame >= 4;
-        return attacker->knuckles_anim_frame >= 4;
+        if (attacker->character_id == CHARACTER_ID_AMY)
+            return attacker->amy_anim_frame >= 4;
+        if (attacker->character_id == CHARACTER_ID_KNUCKLES)
+            return attacker->knuckles_anim_frame >= 4;
+        if (attacker->character_id == CHARACTER_ID_TAILS)
+            return attacker->tails_anim_frame >= 4;
     }
 
     int anim_id;

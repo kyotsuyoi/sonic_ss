@@ -53,7 +53,7 @@ character_action_status_t character_update_cooldowns(character_t *character, int
 /* Tails specific animation state constants */
 #define TAILS_KICK1_ROTATION_TIME 16
 #define TAILS_KICK2_ROTATION_TIME 32
-#define TAILS_TAIL_FRAME_COUNT 4
+#define TAILS_TAIL_FRAME_COUNT 8
 #define TAILS_TAIL_FRAME_DURATION 5
 
 character_t player;
