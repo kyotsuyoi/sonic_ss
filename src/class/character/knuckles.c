@@ -214,7 +214,7 @@ static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
     if (mode < KnucklesAnimIdle || mode > KnucklesAnimDamaged)
         mode = KnucklesAnimIdle;
 
-    int frame = knuckles_calc_frame(chr, mode);
+    int frame = chr->knuckles_anim_frame;
     int frame_x = 0;
     int frame_y = 0;
 
@@ -306,7 +306,10 @@ static void knuckles_render_current_frame_for(character_t *chr, int sprite_id)
             break;
     }
 
-    int target_width = (mode == KnucklesAnimPunch || mode == KnucklesAnimDamaged) ? 48 : CHARACTER_WIDTH;
+    int target_width = CHARACTER_WIDTH;
+    if (mode == KnucklesAnimPunch && (frame == 2 || frame == 3))
+        target_width = 48;
+
     knuckles_copy_sheet_frame_to_sprite(sprite_id, frame_x, frame_y, frame_width, target_width);
 }
 
@@ -325,7 +328,7 @@ static int knuckles_ensure_punch_wram_sprite(character_t *chr)
 static int knuckles_ensure_damaged_wram_sprite(character_t *chr)
 {
     if (knuckles_damaged_sprite_id < 0)
-        knuckles_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+        knuckles_damaged_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH, CHARACTER_HEIGHT);
     return knuckles_damaged_sprite_id;
 }
 
@@ -463,13 +466,22 @@ static void knuckles_draw_for_character(character_t *chr)
         return;
     }
 
+    int mode = chr->knuckles_anim_mode;
+    if (mode < KnucklesAnimIdle || mode > KnucklesAnimDamaged)
+        mode = KnucklesAnimIdle;
+
+    knuckles_calc_frame(chr, mode);
+
     int sprite_id;
-    if (chr->knuckles_anim_mode == KnucklesAnimPunch)
+    if (mode == KnucklesAnimPunch &&
+        (chr->knuckles_anim_frame == 2 || chr->knuckles_anim_frame == 3))
+    {
         sprite_id = knuckles_ensure_punch_wram_sprite(chr);
-    else if (chr->knuckles_anim_mode == KnucklesAnimDamaged)
-        sprite_id = knuckles_ensure_damaged_wram_sprite(chr);
+    }
     else
+    {
         sprite_id = knuckles_ensure_wram_sprite(chr);
+    }
 
     if (sprite_id < 0)
         return;
@@ -478,11 +490,9 @@ static void knuckles_draw_for_character(character_t *chr)
 
     int draw_x = chr->x;
     if (chr->flip && chr->knuckles_anim_mode == KnucklesAnimPunch &&
-        (chr->knuckles_anim_frame >= 0 || chr->knuckles_anim_frame < 6))
+        (chr->knuckles_anim_frame == 2 || chr->knuckles_anim_frame == 3))
     {
         draw_x -= 16;
-    }else{
-        draw_x = chr->x;
     }
 
     jo_sprite_draw3D2(sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
@@ -552,7 +562,7 @@ void load_knuckles(void)
             knuckles_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
         if (knuckles_damaged_sprite_id < 0)
-            knuckles_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+            knuckles_damaged_sprite_id = character_create_blank_sprite();
 
         knuckles_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "KNK_DFT.TGA", JO_COLOR_Green, KnucklesDefeatedTile, JO_TILE_COUNT(KnucklesDefeatedTile));
 

@@ -134,7 +134,7 @@ static int sonic_ensure_punch_wram_sprite(character_t *chr)
 static int sonic_ensure_damaged_wram_sprite(character_t *chr)
 {
     if (sonic_damaged_sprite_id < 0)
-        sonic_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+        sonic_damaged_sprite_id = character_create_blank_sprite_with_size(CHARACTER_WIDTH, CHARACTER_HEIGHT);
     return sonic_damaged_sprite_id;
 }
 
@@ -232,7 +232,7 @@ static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
     if (mode < SonicAnimIdle || mode > SonicAnimDamaged)
         mode = SonicAnimIdle;
 
-    int frame = sonic_calc_frame(chr, mode);
+    int frame = chr->sonic_anim_frame;
     int frame_x = 0;
     int frame_y = 0;
 
@@ -324,7 +324,10 @@ static void sonic_render_current_frame_for(character_t *chr, int sprite_id)
             break;
     }
 
-    int target_width = (mode == SonicAnimPunch || mode == SonicAnimDamaged) ? 48 : CHARACTER_WIDTH;
+    int target_width = CHARACTER_WIDTH;
+    if (mode == SonicAnimPunch && (frame == 2 || frame == 3))
+        target_width = 48;
+
     sonic_copy_sheet_frame_to_sprite(sprite_id, frame_x, frame_y, frame_width, target_width);
 }
 
@@ -460,13 +463,22 @@ static void sonic_draw_for_character(character_t *chr)
         return;
     }
 
+    int mode = chr->sonic_anim_mode;
+    if (mode < SonicAnimIdle || mode > SonicAnimDamaged)
+        mode = SonicAnimIdle;
+
+    sonic_calc_frame(chr, mode);
+
     int sprite_id;
-    if (chr->sonic_anim_mode == SonicAnimPunch)
+    if (mode == SonicAnimPunch &&
+        (chr->sonic_anim_frame == 2 || chr->sonic_anim_frame == 3))
+    {
         sprite_id = sonic_ensure_punch_wram_sprite(chr);
-    else if (chr->sonic_anim_mode == SonicAnimDamaged)
-        sprite_id = sonic_ensure_damaged_wram_sprite(chr);
+    }
     else
+    {
         sprite_id = sonic_ensure_wram_sprite(chr);
+    }
 
     if (sprite_id < 0)
         return;
@@ -475,11 +487,9 @@ static void sonic_draw_for_character(character_t *chr)
 
     int draw_x = chr->x;
     if (chr->flip && chr->sonic_anim_mode == SonicAnimPunch &&
-        (chr->sonic_anim_frame >= 0 || chr->sonic_anim_frame < 6))
+        (chr->sonic_anim_frame == 2 || chr->sonic_anim_frame == 3))
     {
         draw_x -= 16;
-    }else{
-        draw_x = chr->x;
     }
 
     jo_sprite_draw3D2(sprite_id, draw_x, chr->y, CHARACTER_SPRITE_Z);
@@ -549,7 +559,7 @@ void load_sonic(void)
             sonic_punch_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
 
         if (sonic_damaged_sprite_id < 0)
-            sonic_damaged_sprite_id = character_create_blank_sprite_with_size(48, CHARACTER_HEIGHT);
+            sonic_damaged_sprite_id = character_create_blank_sprite();
 
         sonic_defeated_sprite_id = jo_sprite_add_tga_tileset(SPRITE_DIR, "SNC_DFT.TGA", JO_COLOR_Green, SonicDefeatedTile, JO_TILE_COUNT(SonicDefeatedTile));
 

@@ -20,7 +20,7 @@
 #define CHARACTER_WIDTH_2 (24)
 #define CHARACTER_HEIGHT (36)
 #define CHARACTER_SPIN_SPEED (20)
-#define CHARACTER_JUMP_PER_PIXEL_TOLERANCE (20)
+#define CHARACTER_JUMP_PER_PIXEL_TOLERANCE (14)
 
 /* Airborne visual smoothing shared by player and bots */
 #define AIRBORNE_SPRITE_DELAY_MS (800)

@@ -38,22 +38,89 @@ static bool has_vertical_collision(jo_sidescroller_physics_params *physics,
         return false;
     }
 
-    foot_x = map_pos_x + controlled_character->x + CHARACTER_WIDTH_2;
+    int foot_x_center = map_pos_x + controlled_character->x + CHARACTER_WIDTH_2;
+    int foot_x_left = map_pos_x + controlled_character->x + (CHARACTER_WIDTH - CHARACTER_WIDTH_2) / 2;
+    int foot_x_right = map_pos_x + controlled_character->x + (CHARACTER_WIDTH + CHARACTER_WIDTH_2) / 2 - 1;
     foot_y = map_pos_y + controlled_character->y + CHARACTER_HEIGHT - 1;
 
-    dist = jo_map_per_pixel_vertical_collision_ext(
+    int dist_center = jo_map_per_pixel_vertical_collision_ext(
         WORLD_MAP_ID,
-        foot_x,
+        foot_x_center,
+        map_pos_y + controlled_character->y + CHARACTER_HEIGHT,
+        JO_NULL);
+    int dist_left = jo_map_per_pixel_vertical_collision_ext(
+        WORLD_MAP_ID,
+        foot_x_left,
+        map_pos_y + controlled_character->y + CHARACTER_HEIGHT,
+        JO_NULL);
+    int dist_right = jo_map_per_pixel_vertical_collision_ext(
+        WORLD_MAP_ID,
+        foot_x_right,
         map_pos_y + controlled_character->y + CHARACTER_HEIGHT,
         JO_NULL);
 
-    /* Determine interaction type from the tile directly under character center feet. */
-    attr = jo_map_hitbox_detection_custom_boundaries_ext(
+    bool has_collision = false;
+    int best_dist = JO_MAP_NO_COLLISION;
+
+    if (dist_center != JO_MAP_NO_COLLISION)
+    {
+        has_collision = true;
+        best_dist = dist_center;
+    }
+
+    if (dist_left != JO_MAP_NO_COLLISION)
+    {
+        if (!has_collision || dist_left > best_dist)
+            best_dist = dist_left;
+        has_collision = true;
+    }
+
+    if (dist_right != JO_MAP_NO_COLLISION)
+    {
+        if (!has_collision || dist_right > best_dist)
+            best_dist = dist_right;
+        has_collision = true;
+    }
+
+    if (has_collision)
+        dist = best_dist;
+    else
+        dist = JO_MAP_NO_COLLISION;
+
+    bool has_block = false;
+    bool has_platform = false;
+
+    int a_center = jo_map_hitbox_detection_custom_boundaries_ext(
         WORLD_MAP_ID,
-        foot_x,
+        foot_x_center,
         foot_y,
         1,
         1);
+    int a_left = jo_map_hitbox_detection_custom_boundaries_ext(
+        WORLD_MAP_ID,
+        foot_x_left,
+        foot_y,
+        1,
+        1);
+    int a_right = jo_map_hitbox_detection_custom_boundaries_ext(
+        WORLD_MAP_ID,
+        foot_x_right,
+        foot_y,
+        1,
+        1);
+
+    if (a_center == MAP_TILE_BLOCK_ATTR || a_left == MAP_TILE_BLOCK_ATTR || a_right == MAP_TILE_BLOCK_ATTR)
+        has_block = true;
+
+    if (a_center == MAP_TILE_PLATFORM_ATTR || a_left == MAP_TILE_PLATFORM_ATTR || a_right == MAP_TILE_PLATFORM_ATTR)
+        has_platform = true;
+
+    if (has_block)
+        attr = MAP_TILE_BLOCK_ATTR;
+    else if (has_platform)
+        attr = MAP_TILE_PLATFORM_ATTR;
+    else
+        attr = MAP_TILE_NO_INTERACTION_ATTR;
 
     /* Only block attr and platform attr can be used as ground.
        Attr 0 / omitted attribute are treated as no interaction. */
