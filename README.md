@@ -78,7 +78,7 @@ Available characters (v0.2.X):
 - ⬜ (90%) Tiles DMA on Work RAM: “Direct Memory Access transfer” (copy from ROM → WRAM or WRAM → VRAM).
 - ⬜ (90%) Tiles packing: grouping multiple sprites into the same block to reduce overhead.
 
-- ⬜ New FULL sprite sheet.
+- ⬜ New FULL Sprite Sheet.
 - - ⬜ (80%) Sonic.
 - - ⬜ (40%) Amy.
 - - ⬜ (40%) Tails.
@@ -89,6 +89,8 @@ Available characters (v0.2.X):
 - - ⬜ (50%) Sprites DMA on Cart RAM: copy from Cart → VRAM.
 - - ✅ Tiles packing: grouping multiple sprites into the same block to reduce overhead.
 
+- ✅ Player 1 and Player 2.
+- ⬜ (30%) Bots adjust for New FULL Sprite Sheet.
 - ⬜ (25%) Bot strategy.
 - ✅ Make the bots follow the same sprite control flow as the players.
 - ✅ Check why debug_battle_add_damage doesn’t get called for all IDs.
