@@ -69,31 +69,28 @@ Available characters (v0.2.X):
 - - ✅ The method jo_clear_background is called in a loop and wipes the entire VRAM.
 
 - ✅ Camera control.
-- ⬜ (0%) Auto camera that stays at a midpoint between the players.
+- ❌ (Canceled) Auto camera that stays at a midpoint between the players.
 - ✅ Allow the camera to follow player 1 or player 2.
 
 - ✅ Debug menu to adjust stun, knockback, pulse, and damage in-game.
 - - ✅ Adjust stun, damage and knockback debugging for PvP (currently only works correctly on bots).
 
-- ⬜ (90%) Tiles DMA on Work RAM: “Direct Memory Access transfer” (copy from ROM → WRAM or WRAM → VRAM).
-- ⬜ (90%) Tiles packing: grouping multiple sprites into the same block to reduce overhead.
+- ❌ (Canceled) Tiles DMA on Work RAM: “Direct Memory Access transfer” (copy from ROM → WRAM or WRAM → VRAM).
+- ❌ (Canceled) Tiles packing: grouping multiple sprites into the same block to reduce overhead.
 
-- ⬜ New FULL Sprite Sheet.
-- - ⬜ (80%) Sonic.
-- - ⬜ (40%) Amy.
-- - ⬜ (40%) Tails.
-- - ⬜ (80%) Knuckles.
-- - ⬜ (0%) Shadow.
-- - ⬜ (0%) Cream.
-- - ⬜ (0%) Rouge.
-- - ⬜ (50%) Sprites DMA on Cart RAM: copy from Cart → VRAM.
+- ✅ New FULL Sprite Sheet.
+- - ❌ (Canceled) Sprites DMA on Cart RAM: copy from Cart → VRAM.
 - - ✅ Tiles packing: grouping multiple sprites into the same block to reduce overhead.
 
 - ✅ Player 1 and Player 2.
-- ⬜ (30%) Bots adjust for New FULL Sprite Sheet.
-- ⬜ (25%) Bot strategy.
+- ❌ (Canceled) Bots adjust for New FULL Sprite Sheet.
 - ✅ Make the bots follow the same sprite control flow as the players.
 - ✅ Check why debug_battle_add_damage doesn’t get called for all IDs.
-- ⬜ (0%) Create spectator mode to watch bots fight.
+- ❌ (Canceled) Create spectator mode to watch bots fight.
 
 - ✅ Problem with tiles that suddenly change; this started happening after implementing FREE CAM.
+
+# New repository for v0.2
+
+- This repository will no longer be updated because it required too many code changes for proper 4MB RAM Cart support.
+- New repository: https://github.com/kyotsuyoi/Sonic-SegaSaturn
