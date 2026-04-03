@@ -54,7 +54,7 @@ Available characters (v0.2.X):
 - Cream — NOK
 - Rouge — NOK
 
-### Checklist (Road to v0.2) (60%)
+### Checklist (Road to v0.2) (Canceled)
 
 - ✅ Knuckles bot misses the range of the aerial attack and the super punch.
 - ✅ Knuckles incorrectly allows jumping while holding the super punch.
